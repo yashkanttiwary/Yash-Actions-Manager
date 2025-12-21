@@ -2,11 +2,33 @@
 // This service handles the Google API and Identity Services initialization and authentication.
 // IMPORTANT: For production, you must provide VITE_GOOGLE_API_KEY and VITE_GOOGLE_CLIENT_ID as environment variables.
 
-declare const process: any;
+// SAFE ENV ACCESSOR: Prevents "Cannot read properties of undefined" crash
+const getEnvVar = (key: string): string => {
+    try {
+        // 1. Check Vite's import.meta.env safely
+        if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
+            return (import.meta as any).env[key] || '';
+        }
+    } catch (e) {
+        // Ignore
+    }
 
-// Use process.env, defaulting to empty string to prevent crashes if missing
-let API_KEY = process.env.VITE_GOOGLE_API_KEY || '';
-let CLIENT_ID = process.env.VITE_GOOGLE_CLIENT_ID || '';
+    try {
+        // 2. Check global process.env (legacy/bundler support)
+        // @ts-ignore
+        if (typeof process !== 'undefined' && process.env) {
+            // @ts-ignore
+            return process.env[key] || '';
+        }
+    } catch (e) {
+        // Ignore
+    }
+    return '';
+};
+
+// Use safe accessors
+let API_KEY = getEnvVar('VITE_GOOGLE_API_KEY');
+let CLIENT_ID = getEnvVar('VITE_GOOGLE_CLIENT_ID');
 
 // Added Drive Metadata scope for polling file changes efficienty
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/drive.metadata.readonly';
