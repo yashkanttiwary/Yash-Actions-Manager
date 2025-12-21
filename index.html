@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIiB3aWR0aD0iMjU2IiBoZWlnaHQ9IjI1NiI+CiAgPHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiMxMTE4MjciLz4KICA8ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg1MCA1MCkgcm90YXRlKC00NSkiPgogICAgPCEtLSBSb2NrZXQgQm9keSAtLT4KICAgIDxwYXRoIGQ9Ik0gMCAtMzAgQyAxMCAtMzAsIDE1IC0yMCwgMTUgMCBMIC0xNSAwIEMgLTE1IC0yMCwgLTEwIC0zMCwgMCAzMCBaIiBmaWxsPSIjYzRiNWZkIi8+CiAgICA8IS0tIFJvY2tldCBXaW5kb3cgLS0+CiAgICA8Y2lyY2xlIGN4PSIwIiBjeT0iLTEyIiByPSI1IiBmaWxsPSIjMTExODI3Ii8+CiAgICA8Y2lyY2xlIGN4PSIwIiBjeT0iLTEyIiByPSIzIiBmaWxsPSIjNjM2NmYxIi8+CiAgICA8IS0tIEZpbnMgLS0+CiAgICA8cGF0aCBkPSJNIDE1IDAgTCAyNSAxMCBMIDE1IDUgWiIgZmlsbD0iIzgxOGNmOCIvPgogICAgPHBhdGggZD0iTSAtMTUgMCBMIC0yNSAxMCBMIC0xNSA1IFoiIGZpbGw9IiM4MThjZjgiLz4KICA8L2c+CiAgPCEtLSBUYXNrIFRhZ3MgVHJhaWwgLS0+CiAgPHJlY3QgeD0iMjUiIHk9IjYwIiB3aWR0aD0iMTIiIGhlaWdodD0iNiIgZmlsbD0iIzRhZGU4MCIgcng9IjIiLz4KICA8cmVjdCB4PSIzNSIgeT0iNzAiIHdpZHRoPSIxMiIgaGVpZ2h0PSI2IiBmaWxsPSIjYTc4YmZhIiByeD0iMiIvPgogIDxyZWN0IHg9IjQ1IiB5PSI4MCIgd2lkdGg9IjEyIiBoZWlnaHQ9IjYiIGZpbGw9IiNmNDcyYjYiIHJ4PSIyIi8+Cjwvc3ZnPg==" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Task Manager</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class', // Enable class-based dark mode
+        }
+    </script>
+
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    
+    <!-- Confetti Library -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    
+    <!-- Google API scripts are now loaded dynamically in googleAuthService.ts -->
+
+    <script>
+        // Immediately set the theme on page load to prevent FOUC
+        // Default to light mode unless 'dark' is explicitly stored.
+        if (localStorage.getItem('theme') === 'dark') {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    </script>
+
+    <style>
+      body {
+        font-family: 'Poppins', sans-serif;
+        /* Background is now handled by the theme logic in the app */
+        overflow-x: hidden;
+        transition: background-color 0.3s ease;
+      }
+      .task-card-tilt {
+        transition: transform 0.2s, box-shadow 0.2s;
+        transform-style: preserve-3d;
+      }
+      .task-card-tilt:hover {
+        transform: perspective(1000px) rotateX(5deg) rotateY(-5deg) scale(1.05);
+      }
+      .ghost-card {
+        transform: rotate(5deg);
+        opacity: 0.5;
+        background: #4f46e5; /* indigo-600 */
+      }
+      .column-drop-zone {
+        transition: background-color 0.3s;
+      }
+      .column-drop-zone-active {
+        background-color: rgba(0, 0, 0, 0.1);
+      }
+      .dark .column-drop-zone-active {
+        background-color: rgba(255, 255, 255, 0.05);
+      }
+      /* New styles for dependency lines animation */
+      @keyframes flow-animation {
+        from {
+          stroke-dashoffset: 20;
+        }
+        to {
+          stroke-dashoffset: 0;
+        }
+      }
+      .dependency-line-flow-blocked,
+      .dependency-line-flow-done {
+        stroke-dasharray: 5 5;
+        animation: flow-animation 1s linear infinite;
+      }
+
+      /* Dotted Grid Background */
+      .bg-dots {
+        background-image: radial-gradient(rgba(0, 0, 0, 0.15) 1px, transparent 1px);
+        background-size: 24px 24px;
+      }
+      .dark .bg-dots {
+        background-image: radial-gradient(rgba(255, 255, 255, 0.15) 1px, transparent 1px);
+      }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.1.1/",
+    "react": "https://aistudiocdn.com/react@^19.1.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.20.0",
+    "react-dom": "https://esm.sh/react-dom@^19.2.3"
+  }
+}
+</script>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900">
+    <div id="root"></div>
+    <script type="module" src="./index.tsx"></script>
+</body>
+</html>
