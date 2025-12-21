@@ -1,9 +1,10 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { Task } from '../types';
 
-// FIX: Per the coding guidelines, initialize the Gemini client directly
-// using process.env.API_KEY. The API key is assumed to be available in the
-// execution environment.
+declare const process: any;
+
+// The API key must be obtained exclusively from the environment variable process.env.API_KEY.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const responseSchema = {

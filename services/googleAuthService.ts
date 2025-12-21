@@ -1,8 +1,12 @@
 
 // This service handles the Google API and Identity Services initialization and authentication.
-// IMPORTANT: For production, you must provide GOOGLE_API_KEY and GOOGLE_CLIENT_ID as environment variables.
-let API_KEY = process.env.GOOGLE_API_KEY;
-let CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+// IMPORTANT: For production, you must provide VITE_GOOGLE_API_KEY and VITE_GOOGLE_CLIENT_ID as environment variables.
+
+declare const process: any;
+
+// Use process.env, defaulting to empty string to prevent crashes if missing
+let API_KEY = process.env.VITE_GOOGLE_API_KEY || '';
+let CLIENT_ID = process.env.VITE_GOOGLE_CLIENT_ID || '';
 
 // Added Drive Metadata scope for polling file changes efficienty
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/drive.metadata.readonly';
