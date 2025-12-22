@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useLayoutEffect } from 'react';
 import { KanbanColumn } from './KanbanColumn';
 import { DependencyLines } from './DependencyLines';
@@ -63,6 +62,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
     useLayoutEffect(() => {
         if (!boardRef.current) return;
         mainContainerRef.current = document.querySelector('main');
+        let animationFrameId: number;
         
         const calculateLines = () => {
             // Do not calculate lines if in Focus Mode, as other columns are hidden
@@ -74,49 +74,66 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
             const newLines: LineCoordinate[] = [];
             const boardRect = boardRef.current!.getBoundingClientRect();
             
-            tasks.forEach(task => {
-                if (task.dependencies && task.dependencies.length > 0) {
-                    const endElement = document.querySelector(`[data-task-id="${task.id}"]`) as HTMLElement;
-                    if (!endElement) return;
+            // Optimization: Only process tasks that have dependencies
+            const dependentTasks = tasks.filter(t => t.dependencies && t.dependencies.length > 0);
 
-                    const endRect = endElement.getBoundingClientRect();
-                    const end = {
-                        x: endRect.left - boardRect.left,
-                        y: endRect.top + endRect.height / 2 - boardRect.top
+            if (dependentTasks.length === 0) {
+                 setLineCoordinates([]);
+                 return;
+            }
+
+            // Create a temporary map for faster lookup if list is large
+            const taskMap = new Map<string, Task>(tasks.map(t => [t.id, t]));
+
+            dependentTasks.forEach(task => {
+                const endElement = document.querySelector(`[data-task-id="${task.id}"]`) as HTMLElement;
+                if (!endElement) return;
+
+                const endRect = endElement.getBoundingClientRect();
+                const end = {
+                    x: endRect.left - boardRect.left,
+                    y: endRect.top + endRect.height / 2 - boardRect.top
+                };
+
+                task.dependencies!.forEach(depId => {
+                    const startElement = document.querySelector(`[data-task-id="${depId}"]`) as HTMLElement;
+                    const depTask = taskMap.get(depId);
+                    if (!startElement || !depTask) return;
+
+                    const startRect = startElement.getBoundingClientRect();
+                    const start = {
+                        x: startRect.right - boardRect.left,
+                        y: startRect.top + startRect.height / 2 - boardRect.top
                     };
-
-                    task.dependencies.forEach(depId => {
-                        const startElement = document.querySelector(`[data-task-id="${depId}"]`) as HTMLElement;
-                        const depTask = tasks.find(t => t.id === depId);
-                        if (!startElement || !depTask) return;
-
-                        const startRect = startElement.getBoundingClientRect();
-                        const start = {
-                            x: startRect.right - boardRect.left,
-                            y: startRect.top + startRect.height / 2 - boardRect.top
-                        };
-                        
-                        newLines.push({ start, end, isBlocked: depTask.status !== 'Done' });
-                    });
-                }
+                    
+                    newLines.push({ start, end, isBlocked: depTask.status !== 'Done' });
+                });
             });
             setLineCoordinates(newLines);
         };
         
+        // Use requestAnimationFrame for smoother performance on scroll/resize
+        const onScrollOrResize = () => {
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            animationFrameId = requestAnimationFrame(calculateLines);
+        };
+
+        // Initial Calculation
         calculateLines();
         
         const container = mainContainerRef.current;
-        container?.addEventListener('scroll', calculateLines);
-        window.addEventListener('resize', calculateLines);
+        container?.addEventListener('scroll', onScrollOrResize, { passive: true });
+        window.addEventListener('resize', onScrollOrResize, { passive: true });
         
         // Use MutationObserver to detect when tasks are added/removed/moved
-        const observer = new MutationObserver(calculateLines);
-        observer.observe(boardRef.current, { childList: true, subtree: true });
+        const observer = new MutationObserver(onScrollOrResize);
+        observer.observe(boardRef.current, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
 
         return () => {
-            container?.removeEventListener('scroll', calculateLines);
-            window.removeEventListener('resize', calculateLines);
+            container?.removeEventListener('scroll', onScrollOrResize);
+            window.removeEventListener('resize', onScrollOrResize);
             observer.disconnect();
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
         };
 
     }, [tasks, columnLayouts, collapsedColumns, focusMode]);

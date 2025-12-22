@@ -1,4 +1,6 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { playTimerSound } from '../utils/audio';
 
 interface PomodoroSettings {
     pomodoroFocus: number;
@@ -30,8 +32,6 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ settings }) => {
     const [sessionCount, setSessionCount] = useState(0);
     const [time, setTime] = useState(modeDurations(settings)[mode] * 60);
 
-    const audioRef = useRef<HTMLAudioElement | null>(null);
-
     // Update timer when settings change
     useEffect(() => {
         if (!isActive) {
@@ -39,33 +39,10 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ settings }) => {
         }
     }, [settings, mode, isActive]);
 
-    const playSound = useCallback(() => {
-        try {
-            const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-
-            oscillator.type = 'sine';
-            gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-
-            if (mode === 'focus') { // End of focus session
-                 oscillator.frequency.setValueAtTime(880, audioContext.currentTime); // A5
-            } else { // End of break
-                 oscillator.frequency.setValueAtTime(440, audioContext.currentTime); // A4
-            }
-           
-            gainNode.gain.exponentialRampToValueAtTime(0.00001, audioContext.currentTime + 1);
-            oscillator.start(audioContext.currentTime);
-            oscillator.stop(audioContext.currentTime + 1);
-        } catch (e) {
-            console.error("Could not play sound:", e);
-        }
-    }, [mode]);
-
     const handleNextMode = useCallback(() => {
-        playSound();
+        // Use the safe utility for sound
+        playTimerSound(mode === 'focus' ? 'focus' : 'break');
+
         if (mode === 'focus') {
             const newSessionCount = sessionCount + 1;
             setSessionCount(newSessionCount);
@@ -77,7 +54,7 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ settings }) => {
             setTime(modeDurations(settings).focus * 60);
         }
         setIsActive(true); // Auto-start next session
-    }, [mode, sessionCount, settings, playSound]);
+    }, [mode, sessionCount, settings]);
 
     useEffect(() => {
         if (!isActive) return;
@@ -115,7 +92,7 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ settings }) => {
     const strokeDashoffset = circumference - (progress / 100) * circumference;
 
     return (
-         <div className="fixed bottom-4 right-4 z-40 flex items-center bg-white/50 dark:bg-gray-800/80 backdrop-blur-sm border border-gray-300 dark:border-gray-600 rounded-xl shadow-lg p-3">
+         <div className="fixed bottom-4 right-4 z-40 flex items-center bg-white/50 dark:bg-gray-800/80 backdrop-blur-sm border border-gray-300 dark:border-gray-600 rounded-xl shadow-lg p-3 animate-slideIn">
             <div className="relative w-16 h-16 mr-3">
                  <svg className="w-full h-full" viewBox="0 0 36 36" transform="rotate(-90)">
                     <circle

@@ -2,29 +2,7 @@
 // This service handles the Google API and Identity Services initialization and authentication.
 // IMPORTANT: For production, you must provide VITE_GOOGLE_API_KEY and VITE_GOOGLE_CLIENT_ID as environment variables.
 
-// SAFE ENV ACCESSOR: Prevents "Cannot read properties of undefined" crash
-const getEnvVar = (key: string): string => {
-    try {
-        // 1. Check Vite's import.meta.env safely
-        if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
-            return (import.meta as any).env[key] || '';
-        }
-    } catch (e) {
-        // Ignore
-    }
-
-    try {
-        // 2. Check global process.env (legacy/bundler support)
-        // @ts-ignore
-        if (typeof process !== 'undefined' && process.env) {
-            // @ts-ignore
-            return process.env[key] || '';
-        }
-    } catch (e) {
-        // Ignore
-    }
-    return '';
-};
+import { getEnvVar } from "../utils/env";
 
 // Use safe accessors
 let API_KEY = getEnvVar('VITE_GOOGLE_API_KEY');

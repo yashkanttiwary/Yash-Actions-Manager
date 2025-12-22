@@ -1,32 +1,10 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { Task } from '../types';
-
-// SAFE ENV ACCESSOR: Prevents "Cannot read properties of undefined" crash
-const getEnvVar = (key: string): string => {
-    try {
-        // 1. Check Vite's import.meta.env safely
-        if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
-            return (import.meta as any).env[key] || '';
-        }
-    } catch (e) {
-        // Ignore errors accessing import.meta
-    }
-
-    try {
-        // 2. Check global process.env (legacy/bundler support)
-        // @ts-ignore
-        if (typeof process !== 'undefined' && process.env) {
-            // @ts-ignore
-            return process.env[key] || '';
-        }
-    } catch (e) {
-        // Ignore
-    }
-    return '';
-};
+import { getEnvVar } from '../utils/env';
 
 // Create a local shim for process.env to satisfy the initialization pattern
+// utilizing the centralized safe accessor
 const process = {
     env: {
         API_KEY: getEnvVar('VITE_GEMINI_API_KEY')
