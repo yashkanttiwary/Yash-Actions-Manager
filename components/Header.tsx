@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Task, GamificationData, Settings, Status, ConnectionHealth, SettingsTab } from '../types';
 import { COLUMN_STATUSES } from '../constants';
@@ -42,6 +41,10 @@ interface HeaderProps {
     setZoomLevel: React.Dispatch<React.SetStateAction<number>>;
 }
 
+// Helper functions for rocket animation
+const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+const rand = (min: number, max: number) => Math.random() * (max - min) + min;
+
 export const Header: React.FC<HeaderProps> = ({ 
     tasks, isTodayView, setIsTodayView, onOpenAIAssistant, onToggleTheme, currentTheme, onResetLayout, 
     gamification, settings, onUpdateSettings, currentViewMode, onViewModeChange, 
@@ -50,6 +53,133 @@ export const Header: React.FC<HeaderProps> = ({
     onManualPull, onManualPush, isCompactMode, onToggleCompactMode,
     zoomLevel, setZoomLevel
 }) => {
+    
+    // --- ROCKET LOGIC ---
+    const rocketRef = useRef<HTMLDivElement>(null);
+    const [isFlying, setIsFlying] = useState(false);
+    const animationRef = useRef<Animation | null>(null);
+    const sparkTimerRef = useRef<number | null>(null);
+
+    const spawnSpark = () => {
+        if (!rocketRef.current) return;
+        const r = rocketRef.current.getBoundingClientRect();
+        
+        // Place sparks near flame area (bottom center of the rocket relative to its rotation)
+        const x = r.left + r.width * 0.5 + rand(-4, 4);
+        const y = r.top + r.height * 0.8 + rand(-2, 4);
+
+        const s = document.createElement("div");
+        s.className = "spark";
+        s.style.left = `${x}px`;
+        s.style.top = `${y}px`;
+        document.body.appendChild(s);
+
+        // Shoot backwards & fade
+        const driftX = rand(-20, 20);
+        const driftY = rand(30, 70);
+
+        s.animate([
+            { transform: "translate(0,0) scale(1)", opacity: 0.9 },
+            { transform: `translate(${driftX}px, ${driftY}px) scale(0.2)`, opacity: 0 }
+        ], {
+            duration: rand(300, 520),
+            easing: "cubic-bezier(.2,.7,.2,1)",
+            fill: "forwards"
+        }).onfinish = () => s.remove();
+    };
+
+    const startSparks = () => {
+        if (sparkTimerRef.current) clearInterval(sparkTimerRef.current);
+        sparkTimerRef.current = window.setInterval(spawnSpark, 50); // High frequency
+    };
+
+    const stopSparks = () => {
+        if (sparkTimerRef.current) clearInterval(sparkTimerRef.current);
+        sparkTimerRef.current = null;
+    };
+
+    const flyRocket = () => {
+        if (isFlying || !rocketRef.current) return;
+        setIsFlying(true);
+        startSparks();
+
+        const rocket = rocketRef.current;
+        const r = rocket.getBoundingClientRect();
+        const startX = r.left;
+        const startY = r.top;
+        const w = r.width;
+        const h = r.height;
+
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const margin = 50;
+        
+        // Waypoints
+        const points = [
+            { x: startX, y: startY }, // Start
+            { x: rand(margin, vw - margin), y: rand(margin, vh * 0.4) }, // Fly up somewhere
+            { x: rand(vw * 0.5, vw - margin), y: rand(vh * 0.5, vh - margin) }, // Fly down right
+            { x: rand(margin, vw * 0.4), y: rand(vh * 0.3, vh * 0.8) }, // Fly left mid
+            { x: startX, y: startY }, // Return home
+        ];
+
+        // Build Keyframes
+        const frames: Keyframe[] = [];
+        for (let i = 0; i < points.length; i++) {
+            const p = points[i];
+            const dx = p.x - startX;
+            const dy = p.y - startY;
+
+            let angle = 0;
+            if (i < points.length - 1) {
+                const n = points[i + 1];
+                const ndx = n.x - p.x;
+                const ndy = n.y - p.y;
+                // +90 because icon points UP (0deg) relative to container after our CSS rotation
+                angle = (Math.atan2(ndy, ndx) * 180 / Math.PI) + 90;
+            }
+
+            // Smooth scaling
+            let scale = 1;
+            if (i === 1) scale = 1.2; // Zoom out/in effect
+            if (i === points.length - 1) scale = 1;
+
+            frames.push({
+                transform: `translate(${dx}px, ${dy}px) rotate(${angle}deg) scale(${scale})`,
+                offset: i / (points.length - 1),
+                easing: i === 0 ? "cubic-bezier(.2,.9,.2,1)" : "cubic-bezier(.2,.7,.2,1)"
+            });
+        }
+
+        const totalDist = points.reduce((acc, p, i) => {
+            if (i === 0) return 0;
+            return acc + Math.hypot(p.x - points[i-1].x, p.y - points[i-1].y);
+        }, 0);
+        
+        const duration = clamp(totalDist * 2, 3000, 6000);
+
+        animationRef.current = rocket.animate(frames, {
+            duration: duration,
+            fill: "forwards"
+        });
+
+        animationRef.current.onfinish = () => {
+            stopSparks();
+            setIsFlying(false);
+            animationRef.current = null;
+        };
+    };
+    
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            if (animationRef.current) animationRef.current.cancel();
+            stopSparks();
+        };
+    }, []);
+
+
+    // --- DATA CALCULATIONS ---
     const totalTasks = tasks.length;
     const progress = totalTasks > 0 ? (tasks.filter(t => t.status === 'Done').length / totalTasks) * 100 : 0;
     
@@ -60,30 +190,29 @@ export const Header: React.FC<HeaderProps> = ({
 
     const todaysBudgetedTime = useMemo(() => {
         try {
-            // Use Intl.DateTimeFormat with 'en-CA' locale to get a consistent 'YYYY-MM-DD' format.
             const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: settings.timezone });
             const todayStr = formatter.format(new Date());
 
             return tasks
                 .filter(task => {
-                    // A task must have a scheduled date to be included in the budget.
-                    if (!task.scheduledStartDateTime) {
-                        return false;
+                    if (task.status === 'Done' || task.status === "Won't Complete") return false;
+                    if (task.status === 'In Progress') return true;
+                    if (task.scheduledStartDateTime) {
+                        const taskScheduleStr = formatter.format(new Date(task.scheduledStartDateTime));
+                        return taskScheduleStr === todayStr;
                     }
-                    // Compare the task's scheduled date (in the user's timezone) with today's date.
-                    const taskDateStr = formatter.format(new Date(task.scheduledStartDateTime));
-                    return taskDateStr === todayStr;
+                    if (task.dueDate === todayStr) return true;
+                    return false;
                 })
                 .reduce((sum, task) => sum + (task.timeEstimate || 0), 0);
         } catch (e) {
             console.error("Failed to calculate budget, timezone may be invalid:", settings.timezone);
-            return 0; // Return 0 if there's an error (e.g., invalid timezone)
+            return 0;
         }
     }, [tasks, settings.timezone]);
 
     const budgetProgress = settings.dailyBudget > 0 ? (todaysBudgetedTime / settings.dailyBudget) * 100 : 0;
     
-    // Check if connected and if currently syncing to update button state
     const isSheetConnected = connectionHealth.sheet.status === 'connected';
     const isSyncing = connectionHealth.sheet.message?.toLowerCase().includes('syncing');
 
@@ -96,7 +225,32 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="max-w-screen-2xl mx-auto flex flex-col gap-3">
                 <div className="flex flex-wrap items-center justify-between gap-y-2">
                      <div className="flex items-center">
-                        <i className="fas fa-rocket text-2xl text-indigo-500 dark:text-indigo-400 mr-2"></i>
+                        
+                        {/* ROCKET COMPONENT */}
+                        <div 
+                            ref={rocketRef}
+                            className={`rocket-wrapper mr-2 cursor-pointer relative flex items-center justify-center ${isFlying ? 'rocket-flying' : 'rocket-idle'}`}
+                            onMouseEnter={flyRocket}
+                            onClick={flyRocket}
+                            style={{ width: '40px', height: '40px' }} // Fixed container size
+                        >
+                            {/* 
+                                FontAwesome Rocket defaults to 45deg (pointing North-East).
+                                We rotate it -45deg so it points UP (0deg).
+                                This aligns with the JS flight logic which assumes 0deg is "Forward/Up".
+                            */}
+                            <i 
+                                className="fas fa-rocket text-3xl text-indigo-500 dark:text-indigo-400 relative z-10" 
+                                style={{ transform: 'rotate(-45deg)', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.1))' }}
+                            ></i>
+
+                            {/* Exhaust Fire - Positioned relative to the wrapper */}
+                            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 translate-y-2 z-0">
+                                <div className="flame-element"></div>
+                            </div>
+                        </div>
+                        {/* END ROCKET */}
+
                         <h1 className="text-xl font-bold tracking-wider">Task Manager</h1>
                      </div>
                      <div className="flex items-center space-x-2 sm:space-x-3 flex-wrap gap-y-2">

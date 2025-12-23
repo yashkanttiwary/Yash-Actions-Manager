@@ -583,7 +583,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                         id="dailyBudget"
                                         type="number"
                                         value={settings.dailyBudget}
-                                        onChange={(e) => onUpdateSettings({ dailyBudget: parseInt(e.target.value) || 8 })}
+                                        onChange={(e) => onUpdateSettings({ dailyBudget: parseInt(e.target.value) || 16 })}
                                         className={inputClass}
                                     />
                                     <p className="text-xs text-gray-500 mt-1">Goal for productive hours per day (affects progress bar).</p>

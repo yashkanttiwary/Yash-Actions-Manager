@@ -87,7 +87,7 @@ const App: React.FC = () => {
     const [zoomLevel, setZoomLevel] = useState(1); // Default Zoom Level (1 = 100%)
 
     const [settings, setSettings] = useState<Settings>({
-        dailyBudget: 8,
+        dailyBudget: 16,
         timezone: 'Asia/Kolkata',
         pomodoroFocus: 25,
         pomodoroShortBreak: 5,
