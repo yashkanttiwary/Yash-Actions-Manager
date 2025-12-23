@@ -38,6 +38,8 @@ interface HeaderProps {
     onManualPush: () => Promise<void>;
     isCompactMode: boolean;
     onToggleCompactMode: () => void;
+    zoomLevel: number;
+    setZoomLevel: React.Dispatch<React.SetStateAction<number>>;
 }
 
 export const Header: React.FC<HeaderProps> = ({ 
@@ -45,7 +47,8 @@ export const Header: React.FC<HeaderProps> = ({
     gamification, settings, onUpdateSettings, currentViewMode, onViewModeChange, 
     googleAuthState, onGoogleSignIn, onGoogleSignOut, onOpenShortcutsModal, 
     focusMode, setFocusMode, onOpenSettings, connectionHealth,
-    onManualPull, onManualPush, isCompactMode, onToggleCompactMode
+    onManualPull, onManualPush, isCompactMode, onToggleCompactMode,
+    zoomLevel, setZoomLevel
 }) => {
     const totalTasks = tasks.length;
     const progress = totalTasks > 0 ? (tasks.filter(t => t.status === 'Done').length / totalTasks) * 100 : 0;
@@ -84,6 +87,9 @@ export const Header: React.FC<HeaderProps> = ({
     const isSheetConnected = connectionHealth.sheet.status === 'connected';
     const isSyncing = connectionHealth.sheet.message?.toLowerCase().includes('syncing');
 
+    const handleZoomIn = () => setZoomLevel(prev => Math.min(1.5, prev + 0.1));
+    const handleZoomOut = () => setZoomLevel(prev => Math.max(0.1, prev - 0.1));
+    const handleResetZoom = () => setZoomLevel(1);
 
     return (
         <header className="p-4 sm:p-3 bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm border-b border-gray-300 dark:border-gray-700/50 sticky top-0 z-20">
@@ -156,6 +162,21 @@ export const Header: React.FC<HeaderProps> = ({
                                 <i className="fas fa-calendar-day sm:mr-2"></i><span className="hidden sm:inline">Calendar</span>
                             </button>
                          </div>
+                         
+                         {/* Zoom Controls */}
+                        <div className="bg-gray-200 dark:bg-gray-700 p-0.5 rounded-lg flex items-center gap-0.5">
+                            <button onClick={handleZoomOut} className="w-6 h-6 flex items-center justify-center rounded-md text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-600 transition-all text-xs" title="Zoom Out">
+                                <i className="fas fa-minus"></i>
+                            </button>
+                            <button onClick={handleResetZoom} className="px-2 h-6 flex items-center justify-center rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 transition-all text-[10px] font-bold min-w-[36px]" title="Reset Zoom">
+                                {Math.round(zoomLevel * 100)}%
+                            </button>
+                            <button onClick={handleZoomIn} className="w-6 h-6 flex items-center justify-center rounded-md text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-600 transition-all text-xs" title="Zoom In">
+                                <i className="fas fa-plus"></i>
+                            </button>
+                        </div>
+
+
                          <button
                             onClick={onResetLayout}
                             className="px-3 py-1.5 rounded-md text-xs font-semibold transition-all bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"

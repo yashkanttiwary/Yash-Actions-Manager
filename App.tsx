@@ -84,6 +84,8 @@ const App: React.FC = () => {
     // 1. Load Settings & Theme FIRST
     const [theme, setTheme] = useState('light'); 
     const [isCompactMode, setIsCompactMode] = useState(false); // Default to FALSE (Full View)
+    const [zoomLevel, setZoomLevel] = useState(1); // Default Zoom Level (1 = 100%)
+
     const [settings, setSettings] = useState<Settings>({
         dailyBudget: 8,
         timezone: 'Asia/Kolkata',
@@ -427,6 +429,21 @@ const App: React.FC = () => {
                     e.preventDefault();
                     setShowShortcutsModal(true);
                     break;
+                case '-':
+                    if (e.ctrlKey || e.metaKey) return; // Allow browser zoom
+                    e.preventDefault();
+                    setZoomLevel(prev => Math.max(0.1, prev - 0.1));
+                    break;
+                case '=':
+                case '+':
+                    if (e.ctrlKey || e.metaKey) return; // Allow browser zoom
+                    e.preventDefault();
+                    setZoomLevel(prev => Math.min(1.5, prev + 0.1));
+                    break;
+                case '0':
+                     if (e.ctrlKey || e.metaKey) return;
+                     setZoomLevel(1);
+                     break;
                 default:
                     break;
             }
@@ -696,9 +713,11 @@ const App: React.FC = () => {
                 onManualPush={manualPush}
                 isCompactMode={isCompactMode}
                 onToggleCompactMode={() => setIsCompactMode(prev => !prev)}
+                zoomLevel={zoomLevel}
+                setZoomLevel={setZoomLevel}
             />
 
-            <main className="pl-6 pt-6 pr-2 pb-2 h-[calc(100vh-200px)] overflow-auto">
+            <main className="pl-6 pt-6 pr-2 pb-2 h-[calc(100vh-200px)] overflow-auto relative">
                 {/* CONDITIONAL RENDERING: Strict Sheet Connection Gate */}
                 {!isSheetConfigured ? (
                     <ConnectSheetPlaceholder onConnect={() => handleOpenSettings('sheets')} />
@@ -729,6 +748,7 @@ const App: React.FC = () => {
                                     focusMode={focusMode}
                                     onDeleteTask={deleteTask}
                                     isCompactMode={isCompactMode}
+                                    zoomLevel={zoomLevel}
                                 />
                             )}
                             {viewMode === 'calendar' && (

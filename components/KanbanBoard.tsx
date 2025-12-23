@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useLayoutEffect, useCallback } from 'react';
+import React, { useState, useRef, useLayoutEffect, useCallback, useMemo } from 'react';
 import { KanbanColumn } from './KanbanColumn';
 import { DependencyLines } from './DependencyLines';
 import { Task, Status, SortOption, Priority, ColumnLayout } from '../types';
@@ -19,6 +19,7 @@ interface KanbanBoardProps {
     focusMode: Status | 'None';
     onDeleteTask: (taskId: string) => void;
     isCompactMode: boolean;
+    zoomLevel: number; // New Prop
 }
 
 interface LineCoordinate {
@@ -49,7 +50,7 @@ const sortTasks = (tasks: Task[], option: SortOption): Task[] => {
     }
 };
 
-export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, columnLayouts, getTasksByStatus, onTaskMove, onEditTask, onAddTask, onUpdateColumnLayout, activeTaskTimer, onToggleTimer, onOpenContextMenu, focusMode, onDeleteTask, isCompactMode }) => {
+export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, columnLayouts, getTasksByStatus, onTaskMove, onEditTask, onAddTask, onUpdateColumnLayout, activeTaskTimer, onToggleTimer, onOpenContextMenu, focusMode, onDeleteTask, isCompactMode, zoomLevel }) => {
     const [collapsedColumns, setCollapsedColumns] = useState<Set<Status>>(new Set());
     const [sortOptions, setSortOptions] = useState<Record<Status, SortOption>>(
         columns.reduce((acc, status) => ({...acc, [status]: 'Default'}), {}) as Record<Status, SortOption>
@@ -99,9 +100,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                 if (!endElement) return;
 
                 const endRect = endElement.getBoundingClientRect();
+                
+                // CRITICAL: Adjust for Zoom Level
+                // getBoundingClientRect returns the Visual size.
+                // We need the internal coordinate space size for the SVG which is inside the scaled container.
+                // So we divide the visual delta by the zoomLevel.
                 const end = {
-                    x: endRect.left - boardRect.left,
-                    y: endRect.top + endRect.height / 2 - boardRect.top
+                    x: (endRect.left - boardRect.left) / zoomLevel,
+                    y: (endRect.top + endRect.height / 2 - boardRect.top) / zoomLevel
                 };
 
                 task.dependencies!.forEach(depId => {
@@ -111,8 +117,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
 
                     const startRect = startElement.getBoundingClientRect();
                     const start = {
-                        x: startRect.right - boardRect.left,
-                        y: startRect.top + startRect.height / 2 - boardRect.top
+                        x: (startRect.right - boardRect.left) / zoomLevel,
+                        y: (startRect.top + startRect.height / 2 - boardRect.top) / zoomLevel
                     };
                     
                     newLines.push({ start, end, isBlocked: depTask.status !== 'Done' });
@@ -157,7 +163,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
             if (animationFrameId) cancelAnimationFrame(animationFrameId);
         };
 
-    }, [tasks, columnLayouts, collapsedColumns, focusMode, isCompactMode, layoutTick]); // Dependency on layoutTick for ARCH-001
+    }, [tasks, columnLayouts, collapsedColumns, focusMode, isCompactMode, layoutTick, zoomLevel]); // Dependency on layoutTick for ARCH-001
 
 
     const handleSortChange = (status: Status, option: SortOption) => {
@@ -192,11 +198,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
         
         onUpdateColumnLayout(columnId, { ...layout, zIndex: 50 }); // Bring to front
 
+        // Adjust mouse offset by Zoom Level
         setDraggedColumn({
             id: columnId,
             offset: {
-                x: e.clientX - layout.x,
-                y: e.clientY - layout.y,
+                x: e.clientX - (layout.x * zoomLevel),
+                y: e.clientY - (layout.y * zoomLevel),
             }
         });
     };
@@ -208,8 +215,9 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
         const layout = columnLayouts.find(c => c.id === draggedColumn.id);
         if (!layout) return;
 
-        const newX = e.clientX - draggedColumn.offset.x;
-        const newY = e.clientY - draggedColumn.offset.y;
+        // Apply Zoom Math
+        const newX = (e.clientX - draggedColumn.offset.x) / zoomLevel;
+        const newY = (e.clientY - draggedColumn.offset.y) / zoomLevel;
         
         onUpdateColumnLayout(draggedColumn.id, { ...layout, x: newX, y: newY });
     };
@@ -224,6 +232,19 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
         setDraggedColumn(null);
     };
     
+    // Calculated total width of the board content
+    const boardContentWidth = useMemo(() => {
+        let maxRight = 0;
+        columnLayouts.forEach(layout => {
+            // Widths match those in KanbanColumn: w-80 (320px) or w-20 (80px)
+            const width = collapsedColumns.has(layout.id) ? 80 : 320; 
+            const right = layout.x + width;
+            if (right > maxRight) maxRight = right;
+        });
+        // Add right margin (100px)
+        return maxRight + 100;
+    }, [columnLayouts, collapsedColumns]);
+
     // Focus Mode Render
     if (focusMode !== 'None') {
         const tasksForColumn = getTasksByStatus(focusMode);
@@ -233,6 +254,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
             <div 
                 className="w-full h-full flex justify-center items-start pt-8"
                 ref={boardRef}
+                style={{ 
+                    transform: `scale(${zoomLevel})`, 
+                    transformOrigin: 'top center' 
+                }}
             >
                  {/* No dependency lines in focus mode */}
                  <div className="h-full">
@@ -263,49 +288,67 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
     // Default Render
     return (
         <div 
-            ref={boardRef}
+            className="w-full h-full relative"
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
-            className="w-full h-full relative"
+            // Ensure wrapper has dimensions for scrolling
+            style={{ 
+                minWidth: '100%', 
+                minHeight: '100%' 
+            }}
         >
-            <DependencyLines lines={lineCoordinates} />
-            {columnLayouts.map(layout => {
-                const status = layout.id;
-                const tasksForColumn = getTasksByStatus(status);
-                const sortedTasks = sortTasks(tasksForColumn, sortOptions[status] || 'Default');
-                
-                return (
-                    <div
-                        key={status}
-                        className="absolute transition-transform duration-75 ease-linear"
-                        style={{
-                            transform: `translate(${layout.x}px, ${layout.y}px)`,
-                            zIndex: layout.zIndex
-                        }}
-                    >
-                        <KanbanColumn
-                            status={status}
-                            tasks={sortedTasks}
-                            allTasks={tasks}
-                            onTaskMove={handleTaskMoveWithSortReset}
-                            onEditTask={onEditTask}
-                            onAddTask={onAddTask}
-                            isCollapsed={collapsedColumns.has(status)}
-                            onToggleCollapse={() => toggleColumnCollapse(status)}
-                            sortOption={sortOptions[status] || 'Default'}
-                            onSortChange={handleSortChange}
-                            onMouseDown={(e) => handleColumnMouseDown(e, status)}
-                            activeTaskTimer={activeTaskTimer}
-                            onToggleTimer={onToggleTimer}
-                            onOpenContextMenu={onOpenContextMenu}
-                            onDeleteTask={onDeleteTask}
-                            isCompactMode={isCompactMode}
-                            onTaskSizeChange={triggerLayoutUpdate}
-                        />
-                    </div>
-                );
-            })}
+            <div
+                ref={boardRef}
+                className="relative"
+                style={{
+                    transform: `scale(${zoomLevel})`,
+                    transformOrigin: '0 0',
+                    // Explicitly set width to content size to enable proper scrolling
+                    width: `${boardContentWidth}px`, 
+                    // Ensure it fills screen if content is small (relative to zoom)
+                    minWidth: zoomLevel < 1 ? `${100 / zoomLevel}%` : '100%',
+                    height: zoomLevel < 1 ? `${100 / zoomLevel}%` : '100%',
+                }}
+            >
+                <DependencyLines lines={lineCoordinates} />
+                {columnLayouts.map(layout => {
+                    const status = layout.id;
+                    const tasksForColumn = getTasksByStatus(status);
+                    const sortedTasks = sortTasks(tasksForColumn, sortOptions[status] || 'Default');
+                    
+                    return (
+                        <div
+                            key={status}
+                            className="absolute transition-transform duration-75 ease-linear"
+                            style={{
+                                transform: `translate(${layout.x}px, ${layout.y}px)`,
+                                zIndex: layout.zIndex
+                            }}
+                        >
+                            <KanbanColumn
+                                status={status}
+                                tasks={sortedTasks}
+                                allTasks={tasks}
+                                onTaskMove={handleTaskMoveWithSortReset}
+                                onEditTask={onEditTask}
+                                onAddTask={onAddTask}
+                                isCollapsed={collapsedColumns.has(status)}
+                                onToggleCollapse={() => toggleColumnCollapse(status)}
+                                sortOption={sortOptions[status] || 'Default'}
+                                onSortChange={handleSortChange}
+                                onMouseDown={(e) => handleColumnMouseDown(e, status)}
+                                activeTaskTimer={activeTaskTimer}
+                                onToggleTimer={onToggleTimer}
+                                onOpenContextMenu={onOpenContextMenu}
+                                onDeleteTask={onDeleteTask}
+                                isCompactMode={isCompactMode}
+                                onTaskSizeChange={triggerLayoutUpdate}
+                            />
+                        </div>
+                    );
+                })}
+            </div>
         </div>
     );
 };
