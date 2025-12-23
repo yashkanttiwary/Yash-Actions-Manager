@@ -192,6 +192,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
     const handleColumnMouseDown = (e: React.MouseEvent, columnId: Status) => {
         // Disable column dragging in focus mode
         if (focusMode !== 'None') return;
+        // Don't drag if clicking resize handle (though preventDefault in column should handle this)
+        if ((e.target as HTMLElement).closest('.resize-handle')) return;
 
         const layout = columnLayouts.find(c => c.id === columnId);
         if (!layout || !boardRef.current) return;
@@ -231,13 +233,20 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
         }
         setDraggedColumn(null);
     };
+
+    const handleColumnResize = (id: Status, newW: number, newH: number) => {
+        const layout = columnLayouts.find(c => c.id === id);
+        if (layout) {
+            onUpdateColumnLayout(id, { ...layout, w: newW, h: newH });
+        }
+    };
     
     // Calculated total width of the board content
     const boardContentWidth = useMemo(() => {
         let maxRight = 0;
         columnLayouts.forEach(layout => {
-            // Widths match those in KanbanColumn: w-80 (320px) or w-20 (80px)
-            const width = collapsedColumns.has(layout.id) ? 80 : 320; 
+            // Widths match those in KanbanColumn: w-80 (320px) or w-20 (80px), OR custom width
+            const width = collapsedColumns.has(layout.id) ? 80 : (layout.w || 320); 
             const right = layout.x + width;
             if (right > maxRight) maxRight = right;
         });
@@ -279,6 +288,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                         onDeleteTask={onDeleteTask}
                         isCompactMode={isCompactMode}
                         onTaskSizeChange={triggerLayoutUpdate}
+                        // Focus mode doesn't need dragging/resizing usually, but we keep props consistent
+                        width={undefined} 
+                        height={undefined}
+                        onResize={() => {}}
                     />
                  </div>
             </div>
@@ -344,6 +357,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                                 onDeleteTask={onDeleteTask}
                                 isCompactMode={isCompactMode}
                                 onTaskSizeChange={triggerLayoutUpdate}
+                                width={layout.w}
+                                height={layout.h}
+                                onResize={(w, h) => handleColumnResize(status, w, h)}
+                                zoomLevel={zoomLevel}
                             />
                         </div>
                     );

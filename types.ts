@@ -50,6 +50,8 @@ export interface ColumnLayout {
   id: Status;
   x: number;
   y: number;
+  w?: number; // Custom width
+  h?: number; // Custom height
   zIndex: number;
 }
 
