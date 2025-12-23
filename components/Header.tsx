@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Task, GamificationData, Settings, Status, ConnectionHealth, SettingsTab } from '../types';
 import { COLUMN_STATUSES } from '../constants';
 import { ConnectionHealthIndicator } from './ConnectionHealthIndicator';
 import { exportTasksToCSV } from '../utils/exportUtils';
-import { RocketGameModal } from './RocketGameModal';
+import { TetrisGameModal } from './TetrisGameModal';
 
 interface GoogleAuthState {
     gapiLoaded: boolean;
@@ -11,6 +12,13 @@ interface GoogleAuthState {
     isSignedIn: boolean;
     error?: Error;
     disabled?: boolean;
+}
+
+interface AudioControls {
+    currentTrackName: string;
+    isPlaying: boolean;
+    skipNext: () => void;
+    skipPrev: () => void;
 }
 
 interface HeaderProps {
@@ -40,6 +48,7 @@ interface HeaderProps {
     onToggleCompactMode: () => void;
     zoomLevel: number;
     setZoomLevel: React.Dispatch<React.SetStateAction<number>>;
+    audioControls: AudioControls;
 }
 
 // Helper functions for rocket animation
@@ -52,7 +61,7 @@ export const Header: React.FC<HeaderProps> = ({
     googleAuthState, onGoogleSignIn, onGoogleSignOut, onOpenShortcutsModal, 
     focusMode, setFocusMode, onOpenSettings, connectionHealth,
     onManualPull, onManualPush, isCompactMode, onToggleCompactMode,
-    zoomLevel, setZoomLevel
+    zoomLevel, setZoomLevel, audioControls
 }) => {
     
     // --- ROCKET LOGIC ---
@@ -239,7 +248,7 @@ export const Header: React.FC<HeaderProps> = ({
                             className={`rocket-wrapper mr-2 cursor-pointer relative flex items-center justify-center ${isFlying ? 'rocket-flying' : 'rocket-idle'}`}
                             onMouseEnter={flyRocket} // Keep flying on hover
                             onClick={handleRocketClick} // Launch game on click
-                            title="Click to play Flappy Rocket!"
+                            title="Click to play Tetris!"
                             style={{ width: '40px', height: '40px' }} // Fixed container size
                         >
                             {/* 
@@ -391,6 +400,20 @@ export const Header: React.FC<HeaderProps> = ({
                         <button onClick={onToggleTheme} className="w-8 h-8 rounded-lg flex items-center justify-center bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors" aria-label="Toggle theme">
                             <i className={`fas ${currentTheme === 'dark' ? 'fa-sun text-yellow-400' : 'fa-moon text-indigo-500'}`}></i>
                         </button>
+                        
+                        {/* Audio Toggle / Settings Button */}
+                        <button
+                            onClick={() => onOpenSettings('sounds')}
+                            className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all shadow-sm border border-transparent ${
+                                audioControls.isPlaying
+                                    ? 'bg-indigo-100 text-indigo-600 border-indigo-200 dark:bg-indigo-900/50 dark:text-indigo-400 dark:border-indigo-800'
+                                    : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-400'
+                            }`}
+                            title={audioControls.isPlaying ? `Playing: ${audioControls.currentTrackName}` : "Audio Settings"}
+                        >
+                            <i className={`fas ${audioControls.isPlaying ? 'fa-volume-up' : 'fa-music'}`}></i>
+                        </button>
+
                         <button onClick={onOpenShortcutsModal} className="w-8 h-8 rounded-lg flex items-center justify-center bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors" aria-label="View keyboard shortcuts">
                             <i className="fas fa-keyboard"></i>
                         </button>
@@ -436,7 +459,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
             
             {/* Game Modal */}
-            {showGame && <RocketGameModal onClose={() => setShowGame(false)} />}
+            {showGame && <TetrisGameModal onClose={() => setShowGame(false)} />}
         </header>
     );
 };

@@ -17,8 +17,9 @@ import { ShortcutsModal } from './components/ShortcutsModal';
 import { IntegrationsModal } from './components/IntegrationsModal';
 import { useGoogleSheetSync } from './hooks/useGoogleSheetSync';
 import { checkCalendarConnection } from './services/googleCalendarService'; 
-import { playCompletionSound } from './utils/audio'; // Import Audio Utility
+import { playCompletionSound, resumeAudioContext } from './utils/audio'; // Import Audio Utility
 import { storage } from './utils/storage'; // Import Centralized Storage
+import { useBackgroundAudio } from './hooks/useBackgroundAudio'; // New Audio Hook
 
 // This is a global declaration for the confetti library loaded from CDN
 declare const confetti: any;
@@ -90,6 +91,14 @@ const App: React.FC = () => {
         googleSheetId: '',
         googleAppsScriptUrl: '',
         googleCalendarId: 'primary',
+        // Default Audio Settings
+        audio: {
+            enabled: true, // Default ON
+            mode: 'brown_noise',
+            volume: 0.5,
+            loopMode: 'all',
+            playlist: []
+        }
     });
     const [settingsLoaded, setSettingsLoaded] = useState(false);
 
@@ -115,6 +124,10 @@ const App: React.FC = () => {
         isLoading,
         error
     } = useTaskManager(settingsLoaded && isSheetConfigured);
+
+    // --- BACKGROUND AUDIO HOOK ---
+    // Manages the actual playback logic based on settings
+    const audioControls = useBackgroundAudio(settings.audio);
 
     const [editingTask, setEditingTask] = useState<Task | null>(null);
     const [blockingTask, setBlockingTask] = useState<Task | null>(null);
@@ -218,9 +231,13 @@ const App: React.FC = () => {
 
                 if (savedSettings) {
                      const parsedSettings = JSON.parse(savedSettings);
+                     // Helper to merge nested audio settings safely
+                     const mergedAudio = { ...settings.audio, ...(parsedSettings.audio || {}) };
+                     
                      setSettings(prev => ({
                          ...prev, 
                          ...parsedSettings,
+                         audio: mergedAudio,
                          // If storage URL is empty but cookie has one, prefer cookie (restore logic)
                          googleAppsScriptUrl: parsedSettings.googleAppsScriptUrl || cookieUrl || prev.googleAppsScriptUrl
                      }));
@@ -349,9 +366,22 @@ const App: React.FC = () => {
 
 
     useEffect(() => {
+        // Global listener to unlock audio context on first user interaction
+        const unlockAudio = () => {
+            resumeAudioContext();
+            window.removeEventListener('click', unlockAudio);
+            window.removeEventListener('keydown', unlockAudio);
+        };
+        window.addEventListener('click', unlockAudio);
+        window.addEventListener('keydown', unlockAudio);
+        
         const handleClick = () => setContextMenu(null);
         window.addEventListener("click", handleClick);
-        return () => window.removeEventListener("click", handleClick);
+        return () => {
+            window.removeEventListener("click", handleClick);
+            window.removeEventListener('click', unlockAudio);
+            window.removeEventListener('keydown', unlockAudio);
+        };
     }, []);
 
     const handleOpenAddTaskModal = useCallback((status: Status, scheduledDateTime?: string) => {
@@ -709,6 +739,8 @@ const App: React.FC = () => {
                 onToggleCompactMode={() => setIsCompactMode(prev => !prev)}
                 zoomLevel={zoomLevel}
                 setZoomLevel={setZoomLevel}
+                // Pass Audio Data
+                audioControls={audioControls}
             />
 
             <main className="pl-6 pt-6 pr-2 pb-2 h-[calc(100vh-200px)] overflow-auto relative">

@@ -2,7 +2,7 @@
 export type Status = 'To Do' | 'In Progress' | 'Review' | 'Blocker' | 'Hold' | "Won't Complete" | 'Done';
 export type Priority = 'Critical' | 'High' | 'Medium' | 'Low';
 export type SortOption = 'Default' | 'Priority' | 'Due Date' | 'Created Date';
-export type SettingsTab = 'general' | 'api' | 'sheets' | 'calendar';
+export type SettingsTab = 'general' | 'api' | 'sheets' | 'calendar' | 'sounds';
 
 export interface Subtask {
   id: string;
@@ -65,6 +65,14 @@ export interface GamificationData {
   };
 }
 
+export interface AudioSettings {
+    enabled: boolean;
+    mode: 'brown_noise' | 'playlist';
+    volume: number;
+    loopMode: 'all' | 'one';
+    playlist: string[]; // Array of File IDs
+}
+
 export interface Settings {
     dailyBudget: number;
     timezone: string;
@@ -79,6 +87,8 @@ export interface Settings {
     // Custom API Configuration (for manual setup)
     googleApiKey?: string;
     googleClientId?: string;
+    // Audio
+    audio: AudioSettings;
 }
 
 // New Interface for Connection Health

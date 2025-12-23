@@ -175,3 +175,72 @@ export const playRetroSound = (type: 'thrust' | 'shoot' | 'explosion' | 'score')
         // Silent fail for game audio
     }
 };
+
+// --- BROWN NOISE GENERATOR ---
+export class BrownNoiseGenerator {
+    private ctx: AudioContext;
+    private node: ScriptProcessorNode | null = null;
+    private gainNode: GainNode | null = null;
+    private isPlaying: boolean = false;
+
+    constructor() {
+        this.ctx = getAudioContext();
+    }
+
+    play(volume: number = 0.5) {
+        if (this.isPlaying) {
+            if (this.gainNode) this.gainNode.gain.value = volume;
+            return;
+        }
+
+        try {
+            // Resume context if browser suspended it (autoplay policy)
+            if (this.ctx.state === 'suspended') {
+                this.ctx.resume();
+            }
+
+            const bufferSize = 4096;
+            this.node = this.ctx.createScriptProcessor(bufferSize, 1, 1);
+            this.gainNode = this.ctx.createGain();
+            
+            this.gainNode.gain.value = volume;
+            
+            let lastOut = 0;
+            this.node.onaudioprocess = (e) => {
+                const output = e.outputBuffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    const white = Math.random() * 2 - 1;
+                    // Integrate white noise to get brown noise
+                    // Standard Brown noise formula: output[i] = (lastOut + (0.02 * white)) / 1.02;
+                    // Adjusted for smoother rolloff
+                    output[i] = (lastOut + (0.02 * white)) / 1.02;
+                    lastOut = output[i];
+                    // Normalize to prevent clipping (roughly)
+                    output[i] *= 3.5; 
+                }
+            };
+
+            this.node.connect(this.gainNode);
+            this.gainNode.connect(this.ctx.destination);
+            this.isPlaying = true;
+        } catch (e) {
+            console.error("Brown Noise Generator Error:", e);
+        }
+    }
+
+    stop() {
+        if (this.node && this.gainNode) {
+            this.node.disconnect();
+            this.gainNode.disconnect();
+            this.node = null;
+            this.gainNode = null;
+            this.isPlaying = false;
+        }
+    }
+
+    setVolume(volume: number) {
+        if (this.gainNode) {
+            this.gainNode.gain.setValueAtTime(volume, this.ctx.currentTime);
+        }
+    }
+}

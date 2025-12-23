@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { Settings, SettingsTab } from '../types';
 import { initGoogleClient } from '../services/googleAuthService';
 import { initializeSheetHeaders, testAppsScriptConnection } from '../services/googleSheetService';
+import { saveAudioTrack, getAllAudioTracks, deleteAudioTrack, AudioTrack } from '../utils/indexedDB';
 
 const timezones = [
     'UTC', 'GMT',
@@ -455,6 +456,10 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
     const [sheetStatus, setSheetStatus] = useState<ConnectionStatus>('idle');
     const [sheetErrorDetail, setSheetErrorDetail] = useState('');
 
+    // Audio Local State
+    const [localTracks, setLocalTracks] = useState<AudioTrack[]>([]);
+    const [uploading, setUploading] = useState(false);
+
     const labelClass = "block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1";
     const inputClass = "w-full p-2.5 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-gray-800 dark:text-white";
     const sectionClass = "bg-white dark:bg-gray-900/50 rounded-xl p-4 md:p-6 border border-gray-200 dark:border-gray-700 shadow-sm";
@@ -465,6 +470,13 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
             setActiveTab(initialTab);
         }
     }, [initialTab]);
+
+    // Fetch local tracks when Sound tab opens
+    useEffect(() => {
+        if (activeTab === 'sounds') {
+            getAllAudioTracks().then(setLocalTracks).catch(console.error);
+        }
+    }, [activeTab]);
 
     // Update local state if settings change externally
     useEffect(() => {
@@ -567,6 +579,54 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
         }
     };
 
+    // Audio handlers
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+
+        setUploading(true);
+        try {
+            const newIds: string[] = [];
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                if (file.type.startsWith('audio/')) {
+                    const track = await saveAudioTrack(file);
+                    newIds.push(track.id);
+                }
+            }
+            
+            // Refresh list
+            const tracks = await getAllAudioTracks();
+            setLocalTracks(tracks);
+            
+            // Update playlist setting
+            onUpdateSettings({
+                audio: {
+                    ...settings.audio,
+                    playlist: [...(settings.audio.playlist || []), ...newIds]
+                }
+            });
+        } catch (e) {
+            console.error("Upload failed", e);
+            alert("Failed to save audio file.");
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    const handleDeleteTrack = async (id: string) => {
+        await deleteAudioTrack(id);
+        const tracks = await getAllAudioTracks();
+        setLocalTracks(tracks);
+        
+        onUpdateSettings({
+            audio: {
+                ...settings.audio,
+                playlist: settings.audio.playlist.filter(pid => pid !== id)
+            }
+        });
+    };
+
     const renderTabContent = () => {
         switch (activeTab) {
             case 'general':
@@ -600,6 +660,115 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                     </select>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                );
+
+            case 'sounds':
+                return (
+                    <div className="space-y-6 animate-fadeIn">
+                        <div className={sectionClass}>
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-lg font-bold flex items-center gap-2 text-gray-900 dark:text-white">
+                                    <i className="fas fa-music text-pink-500"></i> Focus Sounds
+                                </h3>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Enable</span>
+                                    <button 
+                                        onClick={() => onUpdateSettings({ audio: { ...settings.audio, enabled: !settings.audio.enabled } })}
+                                        className={`w-12 h-6 rounded-full p-1 transition-colors ${settings.audio.enabled ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}
+                                    >
+                                        <div className={`w-4 h-4 rounded-full bg-white transition-transform ${settings.audio.enabled ? 'translate-x-6' : ''}`}></div>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="mb-6">
+                                <label className={labelClass}>Sound Source</label>
+                                <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+                                    <button
+                                        onClick={() => onUpdateSettings({ audio: { ...settings.audio, mode: 'brown_noise' } })}
+                                        className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${settings.audio.mode === 'brown_noise' ? 'bg-white dark:bg-gray-700 shadow text-indigo-600 dark:text-indigo-400' : 'text-gray-500'}`}
+                                    >
+                                        <i className="fas fa-wave-square mr-2"></i> Brown Noise (Focus)
+                                    </button>
+                                    <button
+                                        onClick={() => onUpdateSettings({ audio: { ...settings.audio, mode: 'playlist' } })}
+                                        className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${settings.audio.mode === 'playlist' ? 'bg-white dark:bg-gray-700 shadow text-indigo-600 dark:text-indigo-400' : 'text-gray-500'}`}
+                                    >
+                                        <i className="fas fa-list-music mr-2"></i> Custom Playlist
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="mb-6">
+                                <label className={labelClass}>Master Volume ({Math.round(settings.audio.volume * 100)}%)</label>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="1"
+                                    step="0.05"
+                                    value={settings.audio.volume}
+                                    onChange={(e) => onUpdateSettings({ audio: { ...settings.audio, volume: parseFloat(e.target.value) } })}
+                                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
+                                />
+                            </div>
+
+                            {settings.audio.mode === 'playlist' && (
+                                <div className="space-y-4 border-t border-gray-200 dark:border-gray-700 pt-4">
+                                    <div>
+                                        <label className={labelClass}>Playback Mode</label>
+                                        <select 
+                                            value={settings.audio.loopMode}
+                                            onChange={(e) => onUpdateSettings({ audio: { ...settings.audio, loopMode: e.target.value as 'all' | 'one' } })}
+                                            className={inputClass}
+                                        >
+                                            <option value="all">Loop Playlist</option>
+                                            <option value="one">Loop Single Track</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <div className="flex justify-between items-center mb-2">
+                                            <label className={labelClass}>Your Tracks</label>
+                                            <label className="cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
+                                                <i className={`fas ${uploading ? 'fa-spinner fa-spin' : 'fa-upload'} mr-1`}></i> Upload Music
+                                                <input type="file" accept="audio/*" multiple onChange={handleFileUpload} className="hidden" disabled={uploading} />
+                                            </label>
+                                        </div>
+                                        
+                                        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 max-h-48 overflow-y-auto">
+                                            {localTracks.length === 0 ? (
+                                                <div className="p-8 text-center text-gray-500 dark:text-gray-400 text-sm">
+                                                    No tracks uploaded. Add MP3/WAV files to create a playlist.
+                                                </div>
+                                            ) : (
+                                                <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+                                                    {localTracks.map(track => (
+                                                        <li key={track.id} className="p-3 flex justify-between items-center hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors">
+                                                            <div className="flex items-center gap-3 overflow-hidden">
+                                                                <i className="fas fa-music text-gray-400"></i>
+                                                                <span className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">{track.name}</span>
+                                                                <span className="text-xs text-gray-400">{(track.size / 1024 / 1024).toFixed(1)} MB</span>
+                                                            </div>
+                                                            <button 
+                                                                onClick={() => handleDeleteTrack(track.id)}
+                                                                className="text-red-400 hover:text-red-600 transition-colors px-2"
+                                                                title="Delete track"
+                                                            >
+                                                                <i className="fas fa-trash"></i>
+                                                            </button>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            )}
+                                        </div>
+                                        <p className="text-xs text-gray-500 mt-2">
+                                            * Tracks are saved locally in your browser. They are not uploaded to any server.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 );
@@ -940,6 +1109,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                     <nav className="flex md:flex-col p-2 md:p-4 gap-1 md:gap-2 overflow-x-auto md:overflow-visible no-scrollbar">
                         {[
                             { id: 'general', icon: 'fas fa-sliders-h', label: 'General' },
+                            { id: 'sounds', icon: 'fas fa-music', label: 'Sounds' },
                             { id: 'sheets', icon: 'fas fa-table', label: 'Sheets' },
                             { id: 'calendar', icon: 'far fa-calendar-alt', label: 'Calendar' },
                             { id: 'api', icon: 'fas fa-code', label: 'API & Keys' },
