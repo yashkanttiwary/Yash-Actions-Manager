@@ -20,9 +20,11 @@ interface KanbanColumnProps {
     onToggleTimer: (taskId: string) => void;
     onOpenContextMenu: (e: React.MouseEvent, task: Task) => void;
     onDeleteTask: (taskId: string) => void;
+    isCompactMode: boolean;
+    onTaskSizeChange?: () => void; // New prop for robust line recalculation
 }
 
-export const KanbanColumn: React.FC<KanbanColumnProps> = ({ status, tasks, allTasks, onTaskMove, onEditTask, onAddTask, isCollapsed, onToggleCollapse, sortOption, onSortChange, onMouseDown, activeTaskTimer, onToggleTimer, onOpenContextMenu, onDeleteTask }) => {
+export const KanbanColumn: React.FC<KanbanColumnProps> = ({ status, tasks, allTasks, onTaskMove, onEditTask, onAddTask, isCollapsed, onToggleCollapse, sortOption, onSortChange, onMouseDown, activeTaskTimer, onToggleTimer, onOpenContextMenu, onDeleteTask, isCompactMode, onTaskSizeChange }) => {
     const [isDraggingOver, setIsDraggingOver] = useState(false);
     const statusStyle = STATUS_STYLES[status] || STATUS_STYLES['To Do'];
 
@@ -110,6 +112,8 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({ status, tasks, allTa
                                 onToggleTimer={onToggleTimer}
                                 onOpenContextMenu={onOpenContextMenu}
                                 onDeleteTask={onDeleteTask}
+                                isCompactMode={isCompactMode}
+                                onTaskSizeChange={onTaskSizeChange}
                             />
                         ))}
                     </div>

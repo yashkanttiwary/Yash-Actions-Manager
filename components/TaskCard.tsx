@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback } from 'react';
 import { Task, Status } from '../types';
 import { PRIORITY_COLORS, TAG_COLORS, STATUS_STYLES } from '../constants';
 
@@ -11,6 +11,8 @@ interface TaskCardProps {
     onToggleTimer: (taskId:string) => void;
     onOpenContextMenu: (e: React.MouseEvent, task: Task) => void;
     onDeleteTask: (taskId: string) => void;
+    isCompactMode: boolean;
+    onTaskSizeChange?: () => void; // New prop from KanbanColumn
 }
 
 const getTagColor = (tagName: string) => {
@@ -73,10 +75,32 @@ const formatTimeSince = (dateStr: string): string => {
 };
 
 
-export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, onToggleTimer, onOpenContextMenu, onDeleteTask }) => {
+export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, onToggleTimer, onOpenContextMenu, onDeleteTask, isCompactMode, onTaskSizeChange }) => {
     const priorityClasses = PRIORITY_COLORS[task.priority];
     const statusStyle = STATUS_STYLES[task.status] || STATUS_STYLES['To Do'];
     const [currentSessionTime, setCurrentSessionTime] = useState(0);
+    
+    // Local state to handle individual expansion
+    const [isExpanded, setIsExpanded] = useState(false);
+
+    // Reset expansion when global mode changes to ensure clean state
+    useEffect(() => {
+        setIsExpanded(false);
+    }, [isCompactMode]);
+
+    // ARCH-001: Trigger layout recalculation when expanded state changes
+    // This makes dependency lines snap to the new height instantly
+    useLayoutEffect(() => {
+        if (onTaskSizeChange) {
+            onTaskSizeChange();
+        }
+    }, [isExpanded, isCompactMode, onTaskSizeChange]);
+
+    const handleExpandToggle = useCallback((e: React.MouseEvent, expanded: boolean) => {
+        e.preventDefault();
+        e.stopPropagation(); // CRITICAL: Stop propagation to prevent opening edit modal
+        setIsExpanded(expanded);
+    }, []);
 
     const isOverdue = new Date(task.dueDate) < new Date() && task.status !== 'Done';
     const { style: agingStyle, message: agingMessage } = getAgingInfo(task.statusChangeDate, task.status);
@@ -136,7 +160,88 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
     };
 
     const cardCursorClass = isBlockedByDep ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing';
+    
+    // Common Logic for Timer Button
+    const renderTimerButton = (compact = false) => {
+        if (task.status !== 'In Progress') return null;
+        
+        return (
+            <button
+                type="button"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleTimer(task.id); }}
+                onMouseDown={(e) => e.stopPropagation()}
+                className={`timer-button flex items-center gap-2 rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${compact ? 'p-1' : 'px-2 py-1'}`}
+                aria-label={isActiveTimer ? 'Pause timer' : 'Start timer'}
+                disabled={isBlockedByDep}
+            >
+                <i className={`fas fa-fw ${isActiveTimer ? 'fa-pause text-red-500' : 'fa-play text-green-500'} ${compact ? 'text-xs' : ''}`}></i>
+                {isActiveTimer && <span className="text-xs font-mono animate-pulse">{new Date(currentSessionTime).toISOString().substr(14, 5)}</span>}
+            </button>
+        );
+    };
 
+    // --- COMPACT MODE RENDER ---
+    // Only render compact if global mode is on AND individual card is not expanded
+    if (isCompactMode && !isExpanded) {
+        return (
+            <div
+                draggable={!isBlockedByDep}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+                data-task-id={task.id}
+                className={`group task-card relative bg-white dark:bg-gray-800 rounded-md p-2 border border-gray-200 dark:border-gray-700 shadow-sm ${cardCursorClass} hover:shadow-md ${statusStyle.cardBorder} ${isBlockedByDep ? 'opacity-60 saturate-50' : ''}`}
+                onClick={handleCardClick}
+                onContextMenu={handleContextMenu}
+                title={agingMessage || `${task.title} (Priority: ${task.priority})`}
+            >
+                <div style={agingStyle} className="absolute inset-0 bg-amber-400 dark:bg-amber-500 rounded-md pointer-events-none transition-opacity duration-500 z-0"></div>
+                <div className="relative flex items-center justify-between gap-2 z-10">
+                    
+                    {/* Left: Priority Indicator & Title */}
+                    <div className="flex items-center gap-2 flex-grow min-w-0">
+                         {isBlockedByDep ? (
+                             <i className="fas fa-lock text-xs text-amber-500 flex-shrink-0" title={blockerTooltip}></i>
+                         ) : (
+                             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${priorityClasses.bg} border ${priorityClasses.text.replace('text-', 'border-')}`} title={`Priority: ${task.priority}`}></div>
+                         )}
+                         <span className={`text-sm font-medium text-gray-800 dark:text-gray-100 truncate ${isOverdue ? 'text-red-600 dark:text-red-400' : ''}`}>
+                             {task.title}
+                         </span>
+                    </div>
+
+                    {/* Right: Indicators, Timer & Expand Button */}
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                        {activeBlocker && (
+                            <i className="fas fa-exclamation-triangle text-red-500 text-xs" title={`Blocked: ${activeBlocker.reason}`}></i>
+                        )}
+                        
+                        {totalSubtasks > 0 && (
+                            <span className="text-xs text-gray-500 dark:text-gray-400 font-mono flex items-center gap-1" title={`${completedSubtasks}/${totalSubtasks} subtasks completed`}>
+                                <i className="fas fa-check-square text-[10px]"></i>
+                                {completedSubtasks}/{totalSubtasks}
+                            </span>
+                        )}
+
+                        {renderTimerButton(true)}
+
+                        {/* Expand Button */}
+                        <button
+                            type="button"
+                            onClick={(e) => handleExpandToggle(e, true)}
+                            onMouseDown={(e) => e.stopPropagation()} // Prevent Drag Start
+                            className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            title="Expand task details"
+                            aria-label="Expand task details"
+                        >
+                            <i className="fas fa-chevron-down text-xs"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // --- FULL MODE RENDER ---
     return (
         <div
             draggable={!isBlockedByDep}
@@ -148,14 +253,39 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
             onContextMenu={handleContextMenu}
             title={agingMessage || `Priority: ${task.priority} | Due: ${new Date(task.dueDate).toLocaleDateString()}`}
         >
-            <div style={agingStyle} className="absolute inset-0 bg-amber-400 dark:bg-amber-500 rounded-lg pointer-events-none transition-opacity duration-500"></div>
-            <div className="relative">
-                <div className="flex justify-between items-start">
-                    <h3 className="font-bold text-gray-800 dark:text-gray-100 pr-2 flex-1 flex items-center gap-2">
-                         {isBlockedByDep && <i className="fas fa-lock text-xs text-amber-500" title={blockerTooltip}></i>}
-                        <span>{task.title}</span>
+            {/* Background Layer: z-0 */}
+            <div style={agingStyle} className="absolute inset-0 bg-amber-400 dark:bg-amber-500 rounded-lg pointer-events-none transition-opacity duration-500 z-0"></div>
+            
+            {/* Content Layer: z-10 (Crucial to sit above background) */}
+            <div className="relative z-10">
+                {/* UX-001: Revised Header Layout to prevent overlap */}
+                <div className="flex justify-between items-start gap-2">
+                    <h3 className="font-bold text-gray-800 dark:text-gray-100 flex-1 flex items-center gap-2 min-w-0">
+                         {isBlockedByDep && <i className="fas fa-lock text-xs text-amber-500 flex-shrink-0" title={blockerTooltip}></i>}
+                        <span className="truncate">{task.title}</span>
                     </h3>
-                    <span className={`text-xs font-semibold px-2 py-1 rounded-full ${priorityClasses.bg} ${priorityClasses.text}`}>{task.priority}</span>
+                    
+                    {/* Header Controls: Priority & Collapse Button */}
+                    {/* z-20 Ensure controls are clickable above content */}
+                    <div className="flex items-center gap-1 flex-shrink-0 relative z-20">
+                        <span className={`text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap ${priorityClasses.bg} ${priorityClasses.text}`}>
+                            {task.priority}
+                        </span>
+                        
+                        {/* Collapse Button (Only visible if expanded from compact mode) */}
+                        {isCompactMode && isExpanded && (
+                            <button
+                                type="button"
+                                onClick={(e) => handleExpandToggle(e, false)}
+                                onMouseDown={(e) => e.stopPropagation()} // Prevent Drag Start
+                                className="w-8 h-8 flex items-center justify-center bg-gray-100 dark:bg-gray-700 rounded-full text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 shadow-sm transition-all hover:bg-gray-200 dark:hover:bg-gray-600 ml-1 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 relative z-30 pointer-events-auto"
+                                title="Collapse to compact view"
+                                aria-label="Collapse to compact view"
+                            >
+                                <i className="fas fa-chevron-up text-xs"></i>
+                            </button>
+                        )}
+                    </div>
                 </div>
                 
                 {task.description && (
@@ -206,18 +336,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
                     
                     {/* ACTION BUTTONS */}
                     <div className="flex items-center gap-2 relative z-50 isolate">
-                        {task.status === 'In Progress' && (
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onToggleTimer(task.id); }}
-                                onMouseDown={(e) => e.stopPropagation()}
-                                className="timer-button flex items-center gap-2 px-2 py-1 rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                aria-label={isActiveTimer ? 'Pause timer' : 'Start timer'}
-                                disabled={isBlockedByDep}
-                            >
-                                <i className={`fas fa-fw ${isActiveTimer ? 'fa-pause text-red-500' : 'fa-play text-green-500'}`}></i>
-                                {isActiveTimer && <span className="text-xs font-mono animate-pulse">{new Date(currentSessionTime).toISOString().substr(14, 5)}</span>}
-                            </button>
-                        )}
+                        {renderTimerButton()}
                         {/* DELETE BUTTON REMOVED */}
                     </div>
                 </div>

@@ -1,4 +1,5 @@
-import React, { useState, useRef, useLayoutEffect } from 'react';
+
+import React, { useState, useRef, useLayoutEffect, useCallback } from 'react';
 import { KanbanColumn } from './KanbanColumn';
 import { DependencyLines } from './DependencyLines';
 import { Task, Status, SortOption, Priority, ColumnLayout } from '../types';
@@ -17,6 +18,7 @@ interface KanbanBoardProps {
     onOpenContextMenu: (e: React.MouseEvent, task: Task) => void;
     focusMode: Status | 'None';
     onDeleteTask: (taskId: string) => void;
+    isCompactMode: boolean;
 }
 
 interface LineCoordinate {
@@ -47,7 +49,7 @@ const sortTasks = (tasks: Task[], option: SortOption): Task[] => {
     }
 };
 
-export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, columnLayouts, getTasksByStatus, onTaskMove, onEditTask, onAddTask, onUpdateColumnLayout, activeTaskTimer, onToggleTimer, onOpenContextMenu, focusMode, onDeleteTask }) => {
+export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, columnLayouts, getTasksByStatus, onTaskMove, onEditTask, onAddTask, onUpdateColumnLayout, activeTaskTimer, onToggleTimer, onOpenContextMenu, focusMode, onDeleteTask, isCompactMode }) => {
     const [collapsedColumns, setCollapsedColumns] = useState<Set<Status>>(new Set());
     const [sortOptions, setSortOptions] = useState<Record<Status, SortOption>>(
         columns.reduce((acc, status) => ({...acc, [status]: 'Default'}), {}) as Record<Status, SortOption>
@@ -55,6 +57,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
 
     const [draggedColumn, setDraggedColumn] = useState<{id: Status, offset: {x: number, y: number}} | null>(null);
     const [lineCoordinates, setLineCoordinates] = useState<LineCoordinate[]>([]);
+    
+    // ARCH-001: Explicit tick to force line recalculation from child events
+    const [layoutTick, setLayoutTick] = useState(0); 
+    
+    // Fix for Error #185: Wrap in useCallback to ensure stable reference and prevent infinite loops in TaskCard's useLayoutEffect
+    const triggerLayoutUpdate = useCallback(() => setLayoutTick(t => t + 1), []);
+    
     const boardRef = useRef<HTMLDivElement>(null);
     const mainContainerRef = useRef<HTMLElement | null>(null);
 
@@ -78,7 +87,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
             const dependentTasks = tasks.filter(t => t.dependencies && t.dependencies.length > 0);
 
             if (dependentTasks.length === 0) {
-                 setLineCoordinates([]);
+                 setLineCoordinates(prev => prev.length === 0 ? prev : []);
                  return;
             }
 
@@ -109,7 +118,19 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                     newLines.push({ start, end, isBlocked: depTask.status !== 'Done' });
                 });
             });
-            setLineCoordinates(newLines);
+            
+            // Optimization: Deep compare to prevent unnecessary state updates (and subsequent MutationObserver loops)
+            setLineCoordinates(prevLines => {
+                if (prevLines.length !== newLines.length) return newLines;
+                const isSame = prevLines.every((l, i) => 
+                    l.start.x === newLines[i].start.x && 
+                    l.start.y === newLines[i].start.y &&
+                    l.end.x === newLines[i].end.x &&
+                    l.end.y === newLines[i].end.y &&
+                    l.isBlocked === newLines[i].isBlocked
+                );
+                return isSame ? prevLines : newLines;
+            });
         };
         
         // Use requestAnimationFrame for smoother performance on scroll/resize
@@ -136,7 +157,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
             if (animationFrameId) cancelAnimationFrame(animationFrameId);
         };
 
-    }, [tasks, columnLayouts, collapsedColumns, focusMode]);
+    }, [tasks, columnLayouts, collapsedColumns, focusMode, isCompactMode, layoutTick]); // Dependency on layoutTick for ARCH-001
 
 
     const handleSortChange = (status: Status, option: SortOption) => {
@@ -231,6 +252,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                         onToggleTimer={onToggleTimer}
                         onOpenContextMenu={onOpenContextMenu}
                         onDeleteTask={onDeleteTask}
+                        isCompactMode={isCompactMode}
+                        onTaskSizeChange={triggerLayoutUpdate}
                     />
                  </div>
             </div>
@@ -277,6 +300,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                             onToggleTimer={onToggleTimer}
                             onOpenContextMenu={onOpenContextMenu}
                             onDeleteTask={onDeleteTask}
+                            isCompactMode={isCompactMode}
+                            onTaskSizeChange={triggerLayoutUpdate}
                         />
                     </div>
                 );

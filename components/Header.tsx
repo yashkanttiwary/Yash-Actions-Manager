@@ -36,6 +36,8 @@ interface HeaderProps {
     connectionHealth: ConnectionHealth;
     onManualPull: () => Promise<void>;
     onManualPush: () => Promise<void>;
+    isCompactMode: boolean;
+    onToggleCompactMode: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({ 
@@ -43,7 +45,7 @@ export const Header: React.FC<HeaderProps> = ({
     gamification, settings, onUpdateSettings, currentViewMode, onViewModeChange, 
     googleAuthState, onGoogleSignIn, onGoogleSignOut, onOpenShortcutsModal, 
     focusMode, setFocusMode, onOpenSettings, connectionHealth,
-    onManualPull, onManualPush
+    onManualPull, onManualPush, isCompactMode, onToggleCompactMode
 }) => {
     const totalTasks = tasks.length;
     const progress = totalTasks > 0 ? (tasks.filter(t => t.status === 'Done').length / totalTasks) * 100 : 0;
@@ -157,9 +159,22 @@ export const Header: React.FC<HeaderProps> = ({
                          <button
                             onClick={onResetLayout}
                             className="px-3 py-1.5 rounded-md text-xs font-semibold transition-all bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
+                            title="Reset column positions"
                         >
                             <i className="fas fa-th-large sm:mr-2"></i>
-                            <span className="hidden sm:inline">Reset Layout</span>
+                            <span className="hidden sm:inline">Reset</span>
+                        </button>
+                        <button
+                            onClick={onToggleCompactMode}
+                            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                                isCompactMode 
+                                    ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 shadow-inner' 
+                                    : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600'
+                            }`}
+                            title={isCompactMode ? "Switch to Full View" : "Switch to Compact View"}
+                        >
+                             <i className={`fas ${isCompactMode ? 'fa-expand' : 'fa-compress'} sm:mr-2`}></i>
+                             <span className="hidden sm:inline">{isCompactMode ? 'Full' : 'Compact'}</span>
                         </button>
                         <button
                             onClick={() => exportTasksToCSV(tasks)}
@@ -167,7 +182,7 @@ export const Header: React.FC<HeaderProps> = ({
                             title="Download tasks as CSV"
                         >
                             <i className="fas fa-file-csv sm:mr-2"></i>
-                            <span className="hidden sm:inline">Export CSV</span>
+                            <span className="hidden sm:inline">Export</span>
                         </button>
                          <button
                             onClick={() => setIsTodayView(!isTodayView)}
@@ -183,7 +198,7 @@ export const Header: React.FC<HeaderProps> = ({
                             className="px-3 py-1.5 rounded-md text-xs font-semibold transition-all bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg flex items-center"
                         >
                             <i className="fas fa-magic-sparkles sm:mr-2"></i>
-                            <span className="hidden sm:inline">AI Assistant</span>
+                            <span className="hidden sm:inline">AI</span>
                         </button>
                         <div className="relative">
                             <button onClick={() => onOpenSettings('general')} className="w-8 h-8 rounded-lg flex items-center justify-center bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors" aria-label="Open settings">

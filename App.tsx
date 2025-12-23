@@ -83,6 +83,7 @@ const ConnectSheetPlaceholder: React.FC<{ onConnect: () => void }> = ({ onConnec
 const App: React.FC = () => {
     // 1. Load Settings & Theme FIRST
     const [theme, setTheme] = useState('light'); 
+    const [isCompactMode, setIsCompactMode] = useState(false); // Default to FALSE (Full View)
     const [settings, setSettings] = useState<Settings>({
         dailyBudget: 8,
         timezone: 'Asia/Kolkata',
@@ -209,6 +210,9 @@ const App: React.FC = () => {
                 const savedTheme = await storage.get('theme');
                 if (savedTheme) setTheme(savedTheme);
                 else setTheme('light');
+
+                // Note: We deliberately do NOT load isCompactMode here to ensure it defaults to false (Full View)
+                // per user request.
 
                 // Try to load settings from storage
                 const savedSettings = await storage.get('taskMasterSettings_v2'); // Use v2 key to reset any corrupted state
@@ -690,6 +694,8 @@ const App: React.FC = () => {
                 connectionHealth={connectionHealth}
                 onManualPull={manualPull}
                 onManualPush={manualPush}
+                isCompactMode={isCompactMode}
+                onToggleCompactMode={() => setIsCompactMode(prev => !prev)}
             />
 
             <main className="pl-6 pt-6 pr-2 pb-2 h-[calc(100vh-200px)] overflow-auto">
@@ -722,6 +728,7 @@ const App: React.FC = () => {
                                     onOpenContextMenu={handleOpenContextMenu}
                                     focusMode={focusMode}
                                     onDeleteTask={deleteTask}
+                                    isCompactMode={isCompactMode}
                                 />
                             )}
                             {viewMode === 'calendar' && (
