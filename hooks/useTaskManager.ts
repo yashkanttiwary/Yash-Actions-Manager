@@ -4,7 +4,7 @@ import { Task, Status, ColumnLayout } from '../types';
 import { COLUMN_STATUSES } from '../constants';
 
 const COLUMN_WIDTH = 320; // Corresponds to w-80
-const COLUMN_GAP = 4; // Reduced to 4px for ultra-compact layout
+const COLUMN_GAP = 24; // Increased gap for better visual separation
 
 // Fallback if window.storage is missing (e.g. standard browser env during dev)
 const storage = window.storage || {
@@ -100,7 +100,7 @@ export const useTaskManager = (enableLoading: boolean = true) => {
                 setTasks(loadedTasks);
 
                 // FIX CRIT-001: Load Column Layouts from window.storage
-                const savedLayouts = await storage.get('columnLayouts_v4');
+                const savedLayouts = await storage.get('columnLayouts_v5');
                 let finalLayouts: ColumnLayout[] = [];
                 
                 if (savedLayouts) {
@@ -139,7 +139,7 @@ export const useTaskManager = (enableLoading: boolean = true) => {
         // This prevents overwriting storage with empty arrays during initialization phases.
         if (!isLoading && enableLoading) {
             storage.set('tasks', JSON.stringify(tasks));
-            storage.set('columnLayouts_v4', JSON.stringify(columnLayouts));
+            storage.set('columnLayouts_v5', JSON.stringify(columnLayouts));
         }
     }, [tasks, columnLayouts, isLoading, enableLoading]);
 
