@@ -18,16 +18,10 @@ import { IntegrationsModal } from './components/IntegrationsModal';
 import { useGoogleSheetSync } from './hooks/useGoogleSheetSync';
 import { checkCalendarConnection } from './services/googleCalendarService'; 
 import { playCompletionSound } from './utils/audio'; // Import Audio Utility
+import { storage } from './utils/storage'; // Import Centralized Storage
 
 // This is a global declaration for the confetti library loaded from CDN
 declare const confetti: any;
-
-// Fallback if window.storage is missing
-const storage = window.storage || {
-    get: async (key: string) => localStorage.getItem(key),
-    set: async (key: string, value: string) => localStorage.setItem(key, value),
-    remove: async (key: string) => localStorage.removeItem(key)
-};
 
 // --- COOKIE HELPERS ---
 const setCookie = (name: string, value: string, days: number) => {

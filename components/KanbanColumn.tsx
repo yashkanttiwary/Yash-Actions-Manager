@@ -172,20 +172,28 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                             // Removed max-height constraint to allow auto-grow "algorithm"
                         }}
                     >
-                        {tasks.map((task) => (
-                            <TaskCard
-                                key={task.id}
-                                task={task}
-                                allTasks={allTasks}
-                                onEditTask={onEditTask}
-                                activeTaskTimer={activeTaskTimer}
-                                onToggleTimer={onToggleTimer}
-                                onOpenContextMenu={onOpenContextMenu}
-                                onDeleteTask={onDeleteTask}
-                                isCompactMode={isCompactMode}
-                                onTaskSizeChange={onTaskSizeChange}
-                            />
-                        ))}
+                        {tasks.length === 0 ? (
+                            // Fix LOW-001: Empty State
+                            <div className="h-full flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 opacity-50 p-4 select-none min-h-[150px]">
+                                <i className="far fa-folder-open text-3xl mb-2"></i>
+                                <span className="text-sm font-medium">No Tasks</span>
+                            </div>
+                        ) : (
+                            tasks.map((task) => (
+                                <TaskCard
+                                    key={task.id}
+                                    task={task}
+                                    allTasks={allTasks}
+                                    onEditTask={onEditTask}
+                                    activeTaskTimer={activeTaskTimer}
+                                    onToggleTimer={onToggleTimer}
+                                    onOpenContextMenu={onOpenContextMenu}
+                                    onDeleteTask={onDeleteTask}
+                                    isCompactMode={isCompactMode}
+                                    onTaskSizeChange={onTaskSizeChange}
+                                />
+                            ))
+                        )}
                     </div>
                     <div className="p-1 mt-auto border-t border-gray-300 dark:border-gray-700">
                         <button

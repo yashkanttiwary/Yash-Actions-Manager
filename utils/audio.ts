@@ -15,9 +15,21 @@ const getAudioContext = () => {
     return audioCtx;
 };
 
+// New Helper to explicitly resume, can be bound to document click in App.tsx if needed
+export const resumeAudioContext = async () => {
+    const ctx = getAudioContext();
+    if (ctx.state === 'suspended') {
+        await ctx.resume();
+    }
+};
+
 export const playCompletionSound = () => {
     try {
         const ctx = getAudioContext();
+        
+        // Safety check for resume
+        if(ctx.state === 'suspended') ctx.resume();
+
         const oscillator = ctx.createOscillator();
         const gainNode = ctx.createGain();
         
@@ -41,6 +53,10 @@ export const playCompletionSound = () => {
 export const playTimerSound = (type: 'focus' | 'break') => {
     try {
         const ctx = getAudioContext();
+        
+        // Safety check for resume
+        if(ctx.state === 'suspended') ctx.resume();
+
         const oscillator = ctx.createOscillator();
         const gainNode = ctx.createGain();
         
@@ -61,5 +77,101 @@ export const playTimerSound = (type: 'focus' | 'break') => {
         oscillator.stop(ctx.currentTime + 1);
     } catch (e) {
         console.error("Audio playback error:", e);
+    }
+};
+
+// --- GAME AUDIO SYNTHESIZER ---
+
+// Create a reusable noise buffer (perf optimization)
+let noiseBuffer: AudioBuffer | null = null;
+
+const getNoiseBuffer = (ctx: AudioContext) => {
+    if (!noiseBuffer) {
+        const bufferSize = ctx.sampleRate * 2; // 2 seconds of noise
+        noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = noiseBuffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+    }
+    return noiseBuffer;
+};
+
+export const playRetroSound = (type: 'thrust' | 'shoot' | 'explosion' | 'score') => {
+    try {
+        const ctx = getAudioContext();
+        const t = ctx.currentTime;
+        const masterGain = ctx.createGain();
+        masterGain.connect(ctx.destination);
+
+        if (type === 'thrust') {
+            // Filtered white noise for rocket rumble
+            const noise = ctx.createBufferSource();
+            noise.buffer = getNoiseBuffer(ctx);
+            const filter = ctx.createBiquadFilter();
+            
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(200, t);
+            filter.frequency.linearRampToValueAtTime(100, t + 0.1);
+            
+            masterGain.gain.setValueAtTime(0.1, t);
+            masterGain.gain.linearRampToValueAtTime(0, t + 0.1); // Short burst per frame
+
+            noise.connect(filter);
+            filter.connect(masterGain);
+            noise.start(t);
+            noise.stop(t + 0.1);
+
+        } else if (type === 'shoot') {
+            // Square wave frequency sweep
+            const osc = ctx.createOscillator();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(800, t);
+            osc.frequency.exponentialRampToValueAtTime(200, t + 0.15);
+            
+            masterGain.gain.setValueAtTime(0.05, t);
+            masterGain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+            
+            osc.connect(masterGain);
+            osc.start(t);
+            osc.stop(t + 0.15);
+
+        } else if (type === 'explosion') {
+            // Heavy noise with decay
+            const noise = ctx.createBufferSource();
+            noise.buffer = getNoiseBuffer(ctx);
+            const filter = ctx.createBiquadFilter();
+            filter.type = 'lowpass';
+            
+            filter.frequency.setValueAtTime(1000, t);
+            filter.frequency.exponentialRampToValueAtTime(100, t + 0.4);
+            
+            masterGain.gain.setValueAtTime(0.2, t);
+            masterGain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+            
+            noise.connect(filter);
+            filter.connect(masterGain);
+            noise.start(t);
+            noise.stop(t + 0.4);
+
+        } else if (type === 'score') {
+            // High ping (coin sound)
+            const osc = ctx.createOscillator();
+            osc.type = 'sine';
+            
+            // Double beep effect
+            osc.frequency.setValueAtTime(1200, t);
+            osc.frequency.setValueAtTime(1800, t + 0.05);
+            
+            masterGain.gain.setValueAtTime(0.05, t);
+            masterGain.gain.linearRampToValueAtTime(0, t + 0.3);
+            
+            osc.connect(masterGain);
+            osc.start(t);
+            osc.stop(t + 0.3);
+        }
+
+    } catch (e) {
+        // Silent fail for game audio
     }
 };

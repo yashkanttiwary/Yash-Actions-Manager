@@ -62,7 +62,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
     // ARCH-001: Explicit tick to force line recalculation from child events
     const [layoutTick, setLayoutTick] = useState(0); 
     
-    // Fix for Error #185: Wrap in useCallback to ensure stable reference and prevent infinite loops in TaskCard's useLayoutEffect
+    // Fix for Error #185: Wrap in useCallback to ensure stable reference
     const triggerLayoutUpdate = useCallback(() => setLayoutTick(t => t + 1), []);
     
     const boardRef = useRef<HTMLDivElement>(null);
@@ -73,8 +73,18 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
         if (!boardRef.current) return;
         mainContainerRef.current = document.querySelector('main');
         let animationFrameId: number;
+        let lastCalcTime = 0;
+        const THROTTLE_MS = 32; // ~30fps cap for expensive calculations
         
         const calculateLines = () => {
+            const now = performance.now();
+            if (now - lastCalcTime < THROTTLE_MS) {
+                // Skip frame if too soon, but ensure we run eventually
+                animationFrameId = requestAnimationFrame(calculateLines);
+                return;
+            }
+            lastCalcTime = now;
+
             // Do not calculate lines if in Focus Mode, as other columns are hidden
             if (focusMode !== 'None') {
                 setLineCoordinates([]);
@@ -102,9 +112,6 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                 const endRect = endElement.getBoundingClientRect();
                 
                 // CRITICAL: Adjust for Zoom Level
-                // getBoundingClientRect returns the Visual size.
-                // We need the internal coordinate space size for the SVG which is inside the scaled container.
-                // So we divide the visual delta by the zoomLevel.
                 const end = {
                     x: (endRect.left - boardRect.left) / zoomLevel,
                     y: (endRect.top + endRect.height / 2 - boardRect.top) / zoomLevel
@@ -125,7 +132,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                 });
             });
             
-            // Optimization: Deep compare to prevent unnecessary state updates (and subsequent MutationObserver loops)
+            // Optimization: Deep compare to prevent unnecessary state updates
             setLineCoordinates(prevLines => {
                 if (prevLines.length !== newLines.length) return newLines;
                 const isSame = prevLines.every((l, i) => 
@@ -141,8 +148,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
         
         // Use requestAnimationFrame for smoother performance on scroll/resize
         const onScrollOrResize = () => {
-            if (animationFrameId) cancelAnimationFrame(animationFrameId);
-            animationFrameId = requestAnimationFrame(calculateLines);
+             if (animationFrameId) cancelAnimationFrame(animationFrameId);
+             animationFrameId = requestAnimationFrame(calculateLines);
         };
 
         // Initial Calculation
@@ -163,7 +170,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
             if (animationFrameId) cancelAnimationFrame(animationFrameId);
         };
 
-    }, [tasks, columnLayouts, collapsedColumns, focusMode, isCompactMode, layoutTick, zoomLevel]); // Dependency on layoutTick for ARCH-001
+    }, [tasks, columnLayouts, collapsedColumns, focusMode, isCompactMode, layoutTick, zoomLevel]);
 
 
     const handleSortChange = (status: Status, option: SortOption) => {

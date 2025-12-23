@@ -202,8 +202,13 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
                          {isBlockedByDep ? (
                              <i className="fas fa-lock text-xs text-amber-500 flex-shrink-0" title={blockerTooltip}></i>
                          ) : (
-                             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${priorityClasses.bg} border ${priorityClasses.text.replace('text-', 'border-')}`} title={`Priority: ${task.priority}`}></div>
+                             // Mobile Drag Handle (Dots)
+                             <div className="md:hidden text-gray-400 cursor-move">
+                                 <i className="fas fa-grip-vertical text-xs"></i>
+                             </div>
                          )}
+                         <div className={`hidden md:block w-2 h-2 rounded-full flex-shrink-0 ${priorityClasses.bg} border ${priorityClasses.text.replace('text-', 'border-')}`} title={`Priority: ${task.priority}`}></div>
+                         
                          <span className={`text-sm font-medium text-gray-800 dark:text-gray-100 truncate ${isOverdue ? 'text-red-600 dark:text-red-400' : ''}`}>
                              {task.title}
                          </span>
@@ -261,7 +266,14 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
                 {/* UX-001: Revised Header Layout to prevent overlap */}
                 <div className="flex justify-between items-start gap-2">
                     <h3 className="font-bold text-gray-800 dark:text-gray-100 flex-1 flex items-center gap-2 min-w-0">
-                         {isBlockedByDep && <i className="fas fa-lock text-xs text-amber-500 flex-shrink-0" title={blockerTooltip}></i>}
+                         {isBlockedByDep ? (
+                             <i className="fas fa-lock text-xs text-amber-500 flex-shrink-0" title={blockerTooltip}></i>
+                         ) : (
+                             // Mobile Drag Handle
+                            <div className="md:hidden text-gray-300 dark:text-gray-600 cursor-move mr-1">
+                                <i className="fas fa-grip-vertical"></i>
+                            </div>
+                         )}
                         <span className="truncate">{task.title}</span>
                     </h3>
                     

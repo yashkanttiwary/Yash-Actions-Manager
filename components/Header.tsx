@@ -3,6 +3,7 @@ import { Task, GamificationData, Settings, Status, ConnectionHealth, SettingsTab
 import { COLUMN_STATUSES } from '../constants';
 import { ConnectionHealthIndicator } from './ConnectionHealthIndicator';
 import { exportTasksToCSV } from '../utils/exportUtils';
+import { RocketGameModal } from './RocketGameModal';
 
 interface GoogleAuthState {
     gapiLoaded: boolean;
@@ -57,6 +58,7 @@ export const Header: React.FC<HeaderProps> = ({
     // --- ROCKET LOGIC ---
     const rocketRef = useRef<HTMLDivElement>(null);
     const [isFlying, setIsFlying] = useState(false);
+    const [showGame, setShowGame] = useState(false); // State for the Game Modal
     const animationRef = useRef<Animation | null>(null);
     const sparkTimerRef = useRef<number | null>(null);
 
@@ -220,6 +222,11 @@ export const Header: React.FC<HeaderProps> = ({
     const handleZoomOut = () => setZoomLevel(prev => Math.max(0.1, prev - 0.1));
     const handleResetZoom = () => setZoomLevel(1);
 
+    const handleRocketClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setShowGame(true);
+    };
+
     return (
         <header className="p-4 sm:p-3 bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm border-b border-gray-300 dark:border-gray-700/50 sticky top-0 z-20">
             <div className="max-w-screen-2xl mx-auto flex flex-col gap-3">
@@ -230,8 +237,9 @@ export const Header: React.FC<HeaderProps> = ({
                         <div 
                             ref={rocketRef}
                             className={`rocket-wrapper mr-2 cursor-pointer relative flex items-center justify-center ${isFlying ? 'rocket-flying' : 'rocket-idle'}`}
-                            onMouseEnter={flyRocket}
-                            onClick={flyRocket}
+                            onMouseEnter={flyRocket} // Keep flying on hover
+                            onClick={handleRocketClick} // Launch game on click
+                            title="Click to play Flappy Rocket!"
                             style={{ width: '40px', height: '40px' }} // Fixed container size
                         >
                             {/* 
@@ -426,6 +434,9 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
 
             </div>
+            
+            {/* Game Modal */}
+            {showGame && <RocketGameModal onClose={() => setShowGame(false)} />}
         </header>
     );
 };

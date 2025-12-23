@@ -4,7 +4,7 @@ import { Task } from '../types';
 import * as sheetService from '../services/googleSheetService';
 
 const POLL_INTERVAL = 5000; // Check for remote changes every 5s
-const DEBOUNCE_DELAY = 3000; // Auto-save local changes after 3s
+const DEBOUNCE_DELAY = 5000; // Fix HIGH-001: Increase to 5s to reduce API hits
 
 export const useGoogleSheetSync = (
     sheetId: string | undefined, 

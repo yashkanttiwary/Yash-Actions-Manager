@@ -2,16 +2,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Task, Status, ColumnLayout } from '../types';
 import { COLUMN_STATUSES } from '../constants';
+import { storage } from '../utils/storage';
 
 const COLUMN_WIDTH = 320; // Corresponds to w-80
 const COLUMN_GAP = 24; // Increased gap for better visual separation
-
-// Fallback if window.storage is missing (e.g. standard browser env during dev)
-const storage = window.storage || {
-    get: async (key: string) => localStorage.getItem(key),
-    set: async (key: string, value: string) => localStorage.setItem(key, value),
-    remove: async (key: string) => localStorage.removeItem(key)
-};
 
 export const useTaskManager = (enableLoading: boolean = true) => {
     const [tasks, setTasks] = useState<Task[]>([]);
@@ -61,7 +55,7 @@ export const useTaskManager = (enableLoading: boolean = true) => {
             setIsLoading(true);
             setError(null);
             try {
-                // FIX CRIT-001: Load Tasks from window.storage
+                // FIX CRIT-001: Load Tasks from centralized storage
                 const savedTasks = await storage.get('tasks');
                 let loadedTasks: Task[] = [];
                 if (savedTasks && savedTasks !== '[]') {
@@ -99,7 +93,7 @@ export const useTaskManager = (enableLoading: boolean = true) => {
                 }
                 setTasks(loadedTasks);
 
-                // FIX CRIT-001: Load Column Layouts from window.storage
+                // FIX CRIT-001: Load Column Layouts from centralized storage
                 const savedLayouts = await storage.get('columnLayouts_v5');
                 let finalLayouts: ColumnLayout[] = [];
                 
@@ -133,7 +127,7 @@ export const useTaskManager = (enableLoading: boolean = true) => {
         loadData();
     }, [getDefaultLayout, enableLoading]);
 
-    // FIX CRIT-001: Save to window.storage
+    // FIX CRIT-001: Save to centralized storage
     useEffect(() => {
         // Only save if we are enabled and not loading.
         // This prevents overwriting storage with empty arrays during initialization phases.

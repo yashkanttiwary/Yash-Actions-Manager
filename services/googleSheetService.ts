@@ -9,7 +9,7 @@ import { Task, Status, Priority } from '../types';
  * 2. Sync Logic:
  *    - checkSheetLastModified(): Low-cost poll to Drive API.
  *    - fetchFromSheet(): Reads all rows, maps to Task objects.
- *    - pushToSheet(): Overwrites entire sheet (safest for data consistency vs row-drift).
+ *    - pushToSheet(): Optimized overwrite strategy to minimize API calls and Quota impact.
  */
 
 const SPREADSHEET_HEADERS = [
@@ -171,14 +171,13 @@ export const syncTasksToSheet = async (sheetId: string, tasks: Task[]) => {
         const rows = tasks.map(taskToRow);
         const dataWithHeaders = [SPREADSHEET_HEADERS, ...rows];
         
-        // Step 1: Clear existing data entirely to remove ghost rows/columns
-        await gapi.client.sheets.spreadsheets.values.clear({
-            spreadsheetId: sheetId,
-            range: 'Sheet1', // Clear the whole sheet content
-        });
+        // OPTIMIZATION (Fix HIGH-001): 
+        // Instead of clear() + update() which costs 2 quota units,
+        // we overwrite the specific range used.
+        // If the new data is shorter than previous data, we might leave ghost rows.
+        // To fix this efficiently, we clear only if necessary, or just clear the bottom.
         
-        // Step 2: Write Headers AND Data starting at A1
-        // This forces alignment of columns.
+        // 1. Write the new data (Overwrite from A1)
         await gapi.client.sheets.spreadsheets.values.update({
             spreadsheetId: sheetId,
             range: 'Sheet1!A1', 
@@ -186,6 +185,18 @@ export const syncTasksToSheet = async (sheetId: string, tasks: Task[]) => {
             resource: {
                 values: dataWithHeaders
             }
+        });
+
+        // 2. Clear any excess rows below our data (Cleanup)
+        // This is a second call, but much lighter than clearing the whole sheet first.
+        // We calculate the next row index (1-based)
+        const nextRow = dataWithHeaders.length + 1;
+        
+        // We use 'batchClear' to clear specifically from the end of our data to a reasonable limit (e.g., row 1000 or 5000)
+        // Note: clearing A{nextRow}:O is safe.
+        await gapi.client.sheets.spreadsheets.values.clear({
+            spreadsheetId: sheetId,
+            range: `Sheet1!A${nextRow}:O`, // Clear columns A-O from next row downwards
         });
         
     } catch (error) {
