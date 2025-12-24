@@ -333,6 +333,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                      const tasksForColumn = getTasksByStatus(status);
                      const sortedTasks = sortTasks(tasksForColumn, sortOptions[status] || 'Default');
                      
+                     // Find layout for this column to get persisted dimensions
+                     const layout = columnLayouts.find(c => c.id === status);
+                     const width = layout?.w || 320;
+                     const height = layout?.h || 350;
+
                      return (
                          <div key={status} className="flex-shrink-0 mb-4">
                              <KanbanColumn
@@ -354,11 +359,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                                 onDeleteTask={onDeleteTask}
                                 isCompactMode={isCompactMode}
                                 onTaskSizeChange={triggerLayoutUpdate}
-                                // Enforce fixed dimensions for Bento Box grid layout
-                                width={320} 
-                                height={350}
-                                onResize={() => {}}
-                                zoomLevel={1} // Pass 1 because the container itself is scaled, inner elements don't need double scaling logic
+                                // Enable resizing in Fit mode by connecting handlers and persisted dimensions
+                                width={width} 
+                                height={height}
+                                onResize={(w, h) => handleColumnResize(status, w, h)}
+                                zoomLevel={zoomLevel} // Pass actual zoom level for correct mouse delta math
                             />
                          </div>
                      )

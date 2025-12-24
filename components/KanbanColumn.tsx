@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { TaskCard } from './TaskCard';
 import { Task, Status, SortOption } from '../types';
 import { STATUS_STYLES } from '../constants';
@@ -38,8 +38,11 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
     const [isDraggingOver, setIsDraggingOver] = useState(false);
     const [isResizing, setIsResizing] = useState(false);
     const [quickAddTitle, setQuickAddTitle] = useState('');
+    const [showScrollIndicator, setShowScrollIndicator] = useState(false);
+    
     const statusStyle = STATUS_STYLES[status] || STATUS_STYLES['To Do'];
     const colRef = useRef<HTMLDivElement>(null);
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
     const resizeStartRef = useRef<{ x: number, y: number, w: number, h: number } | null>(null);
 
     const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -115,6 +118,26 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
             setQuickAddTitle('');
         }
     };
+
+    const checkScrollIndicator = useCallback(() => {
+        const el = scrollContainerRef.current;
+        if (!el) return;
+        
+        // Show if there is overflow and we haven't scrolled to the very bottom
+        const hasOverflow = el.scrollHeight > el.clientHeight;
+        const isAtBottom = Math.abs(el.scrollHeight - el.clientHeight - el.scrollTop) < 5;
+        
+        setShowScrollIndicator(hasOverflow && !isAtBottom);
+    }, []);
+
+    useEffect(() => {
+        checkScrollIndicator();
+        // Re-check when task list changes or layout changes
+    }, [tasks, height, isCollapsed, checkScrollIndicator, isCompactMode]);
+
+    const handleScroll = () => {
+        checkScrollIndicator();
+    };
     
     // Determine dimensions
     // Default width: 80 (collapsed) or 320 (expanded)
@@ -123,8 +146,6 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
     const currentHeight = height ? height : 'auto';
     const isCustomHeight = !!height;
     
-    // Auto-height behavior: remove h-full class if auto, otherwise apply fixed height style
-    
     return (
         <div 
             ref={colRef}
@@ -132,8 +153,6 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
             style={{ 
                 width: `${currentWidth}px`, 
                 height: typeof currentHeight === 'number' ? `${currentHeight}px` : undefined,
-                // If height is auto, we let it grow. If fixed, we set it.
-                // We removed 'h-full' class from original code to allow auto-height.
             }}
         >
             <div 
@@ -195,9 +214,11 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                         </select>
                     </div>
                     <div
+                        ref={scrollContainerRef}
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
                         onDrop={handleDrop}
+                        onScroll={handleScroll}
                         className={`flex-grow p-1 space-y-1 min-h-[200px] column-drop-zone ${isDraggingOver ? 'column-drop-zone-active' : ''} ${isCustomHeight ? 'overflow-y-auto' : ''}`}
                     >
                         {tasks.length === 0 ? (
@@ -222,12 +243,19 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                             ))
                         )}
                     </div>
-                    {/* Bottom Add Task Button Removed */}
+                    
+                    {/* Scroll Indicator Gradient */}
+                    <div 
+                        className={`absolute bottom-0 left-0 right-0 h-12 pointer-events-none transition-opacity duration-300 rounded-b-xl z-20 ${showScrollIndicator ? 'opacity-100' : 'opacity-0'}`}
+                        style={{
+                            background: 'linear-gradient(to top, rgba(0,0,0,0.25) 0%, transparent 100%)'
+                        }}
+                    ></div>
 
                     {/* Resize Handle */}
                     {onResize && (
                         <div 
-                            className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize flex items-center justify-center resize-handle opacity-50 hover:opacity-100 z-20"
+                            className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize flex items-center justify-center resize-handle opacity-50 hover:opacity-100 z-30"
                             onMouseDown={handleResizeStart}
                             title="Drag to resize"
                         >
