@@ -29,6 +29,11 @@ export const useGoogleSheetSync = (
     const isDirtyRef = useRef(false);
     const debounceTimerRef = useRef<number | null>(null);
     
+    // SAFETY: This flag ensures we NEVER push to the sheet until we have successfully
+    // pulled from it at least once in this session. This prevents wiping the sheet
+    // if the local app initializes with empty data (e.g. after clearing cookies).
+    const initialPullComplete = useRef(false);
+    
     const isRemoteUpdate = useRef(false);
 
     useEffect(() => {
@@ -37,11 +42,16 @@ export const useGoogleSheetSync = (
         settingsRef.current = settings;
     }, [localTasks, gamification, settings]);
 
+    // Reset safety lock when connection details change
     useEffect(() => {
         if (appsScriptUrl) {
             setSyncMethod('script');
+            // New connection? Reset lock. Pull must happen first.
+            initialPullComplete.current = false;
         } else if (sheetId && isSignedIn) {
             setSyncMethod('api');
+            // New connection? Reset lock. Pull must happen first.
+            initialPullComplete.current = false;
         } else {
             setSyncMethod(null);
             setStatus('idle');
@@ -75,12 +85,15 @@ export const useGoogleSheetSync = (
                 setGamification(remoteMetadata.gamification);
             }
             if (remoteMetadata.settings && setSettings) {
-                // Merge settings to preserve local-only keys if any (like audio volume maybe? no, sync that too)
                 setSettings(remoteMetadata.settings);
             }
         }
         
         setLastSyncTime(new Date().toISOString());
+        
+        // SAFETY: Only NOW do we allow pushes. We know the current state of the sheet.
+        initialPullComplete.current = true;
+        
         setStatus('success');
     }, [setLocalTasks, setGamification, setSettings]);
 
@@ -99,6 +112,13 @@ export const useGoogleSheetSync = (
 
     const manualPush = useCallback(async () => {
         if (!syncMethod) return;
+        
+        // SAFETY GUARD: Block push if we haven't pulled yet
+        if (!initialPullComplete.current) {
+            console.warn("[Sync] Safety Guard: Push blocked because initial pull is not complete.");
+            return;
+        }
+
         setStatus('syncing');
         try {
             console.log("[Sync] Manual Push: Sending data...");
@@ -140,7 +160,8 @@ export const useGoogleSheetSync = (
                 setErrorMsg(e.message || "Failed to initialize sync");
             }
         };
-        // Run init if configured
+        // Run init if configured.
+        // This will run executeStrictPull, which eventually sets initialPullComplete.current = true
         if ((syncMethod === 'script' && appsScriptUrl) || (syncMethod === 'api' && sheetId)) {
             init();
         }
@@ -152,6 +173,11 @@ export const useGoogleSheetSync = (
 
         if (isRemoteUpdate.current) {
             isRemoteUpdate.current = false;
+            return;
+        }
+        
+        // SAFETY GUARD: If we haven't pulled yet, do NOT even queue a push.
+        if (!initialPullComplete.current) {
             return;
         }
 
@@ -173,7 +199,8 @@ export const useGoogleSheetSync = (
         if (!syncMethod) return;
 
         const pollInterval = setInterval(async () => {
-            if (status === 'syncing' || isDirtyRef.current) return;
+            // Block polling if syncing, dirty, OR if we haven't even finished the first pull yet
+            if (status === 'syncing' || isDirtyRef.current || !initialPullComplete.current) return;
 
             try {
                 let shouldSync = false;
@@ -202,7 +229,6 @@ export const useGoogleSheetSync = (
 
                     const mergedTasks = mergeTasks(localTasksRef.current, remoteTasks, lastSyncTime);
                     
-                    // Simple check for metadata diff (can be improved)
                     const metadataChanged = JSON.stringify(remoteMetadata) !== JSON.stringify({gamification: gamificationRef.current, settings: settingsRef.current});
                     const tasksChanged = JSON.stringify(mergedTasks) !== JSON.stringify(localTasksRef.current);
 
@@ -211,7 +237,6 @@ export const useGoogleSheetSync = (
                         isRemoteUpdate.current = true;
                         if(tasksChanged) setLocalTasks(mergedTasks);
                         
-                        // Update metadata if it exists remotely
                         if (remoteMetadata) {
                             if(setGamification) setGamification(remoteMetadata.gamification);
                             if(setSettings) setSettings(remoteMetadata.settings);
@@ -242,10 +267,12 @@ const mergeTasks = (local: Task[], remote: Task[], lastSyncTime: string | null):
         const remoteMod = new Date(r.lastModified).getTime();
 
         if (!l) {
+            // If remote task is newer than last sync, add it
             if (remoteMod > lastSyncMs - 5000) {
                 taskMap.set(r.id, r);
             }
         } else {
+            // Conflict resolution: Remote wins if significantly newer
             const localMod = new Date(l.lastModified).getTime();
             if (remoteMod > localMod + 2000) {
                 taskMap.set(r.id, r);
