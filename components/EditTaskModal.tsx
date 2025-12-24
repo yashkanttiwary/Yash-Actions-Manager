@@ -100,7 +100,9 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
         onSave(finalTask);
     }, [editedTask, tagsInput, activeBlockerReason, onSave, task.blockers]);
     
-    const handleDelete = useCallback(() => {
+    const handleDelete = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
         if (window.confirm(`Are you sure you want to delete "${task.title}" permanently?`)) {
             onDelete(task.id);
             onClose();
@@ -337,6 +339,7 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
                     <div>
                         {!isNewTask && (
                             <button 
+                                type="button"
                                 onClick={handleDelete} 
                                 className="px-4 py-2 rounded-lg text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors font-medium flex items-center gap-2"
                                 title="Delete Task Permanently"

@@ -150,6 +150,8 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
     };
 
     const handleCardClick = (e: React.MouseEvent) => {
+        // Prevent edit modal if text is selected
+        if (window.getSelection()?.toString()) return;
         onEditTask(task);
     };
 
@@ -157,6 +159,22 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
         e.preventDefault();
         e.stopPropagation();
         onOpenContextMenu(e, task);
+    };
+
+    const handleDeleteClick = (e: React.MouseEvent) => {
+        // Stop everything to prevent parent handlers (drag/edit)
+        e.preventDefault();
+        e.stopPropagation();
+        e.nativeEvent.stopImmediatePropagation(); // Extra layer of safety
+        
+        if (window.confirm(`Are you sure you want to delete "${task.title}"?`)) {
+            onDeleteTask(task.id);
+        }
+    };
+
+    const handleButtonMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
+        // Essential: Prevents the draggable parent from stealing the event
+        e.stopPropagation();
     };
 
     const cardCursorClass = isBlockedByDep ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing';
@@ -169,7 +187,8 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
             <button
                 type="button"
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleTimer(task.id); }}
-                onMouseDown={(e) => e.stopPropagation()}
+                onMouseDown={handleButtonMouseDown}
+                onTouchStart={handleButtonMouseDown}
                 className={`timer-button flex items-center gap-2 rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${compact ? 'p-1' : 'px-2 py-1'}`}
                 aria-label={isActiveTimer ? 'Pause timer' : 'Start timer'}
                 disabled={isBlockedByDep}
@@ -233,7 +252,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
                         <button
                             type="button"
                             onClick={(e) => handleExpandToggle(e, true)}
-                            onMouseDown={(e) => e.stopPropagation()} // Prevent Drag Start
+                            onMouseDown={handleButtonMouseDown} // Prevent Drag Start
                             className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                             title="Expand task details"
                             aria-label="Expand task details"
@@ -289,7 +308,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
                             <button
                                 type="button"
                                 onClick={(e) => handleExpandToggle(e, false)}
-                                onMouseDown={(e) => e.stopPropagation()} // Prevent Drag Start
+                                onMouseDown={handleButtonMouseDown} // Prevent Drag Start
                                 className="w-8 h-8 flex items-center justify-center bg-gray-100 dark:bg-gray-700 rounded-full text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 shadow-sm transition-all hover:bg-gray-200 dark:hover:bg-gray-600 ml-1 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 relative z-30 pointer-events-auto"
                                 title="Collapse to compact view"
                                 aria-label="Collapse to compact view"
@@ -349,7 +368,16 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
                     {/* ACTION BUTTONS */}
                     <div className="flex items-center gap-2 relative z-50 isolate">
                         {renderTimerButton()}
-                        {/* DELETE BUTTON REMOVED */}
+                        <button
+                            type="button"
+                            onClick={handleDeleteClick}
+                            onMouseDown={handleButtonMouseDown} 
+                            onTouchStart={handleButtonMouseDown} // Robustness for touch devices
+                            className="w-7 h-7 flex items-center justify-center rounded-md text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                            title="Delete Task"
+                        >
+                            <i className="fas fa-trash-alt pointer-events-none"></i>
+                        </button>
                     </div>
                 </div>
             </div>

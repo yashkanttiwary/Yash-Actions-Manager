@@ -95,7 +95,7 @@ const App: React.FC = () => {
         audio: {
             enabled: true, // Default ON
             mode: 'brown_noise',
-            volume: 0.5,
+            volume: 0.1,
             loopMode: 'all',
             playlist: []
         }
@@ -559,7 +559,7 @@ const App: React.FC = () => {
     const performActualTaskMove = useCallback((task: Task, newStatus: Status, newIndex: number) => {
         if (task.status === 'In Progress' && newStatus !== 'In Progress' && task.currentSessionStartTime) {
              const duration = Date.now() - task.currentSessionStartTime;
-             task.actualTimeSpent = (task.actualTimeSpent || 0) + Math.round(duration / 1000);
+             task.actualTimeSpent = (task.actualTimeSpent || 0) + Math.round(duration / 1000),
              task.currentSessionStartTime = null;
         }
 

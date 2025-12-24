@@ -26,51 +26,15 @@ const COLORS = [
     '#f0a000'  // L - Orange
 ];
 
-// FIXED: Shapes must be SQUARE matrices (NxN) for the rotation algorithm to work correctly.
 const SHAPES = [
     [], 
-    // I (4x4)
-    [
-        [0, 0, 0, 0],
-        [1, 1, 1, 1],
-        [0, 0, 0, 0],
-        [0, 0, 0, 0]
-    ], 
-    // O (2x2)
-    [
-        [2, 2], 
-        [2, 2]
-    ], 
-    // T (3x3)
-    [
-        [0, 3, 0], 
-        [3, 3, 3], 
-        [0, 0, 0]
-    ], 
-    // S (3x3)
-    [
-        [0, 4, 4], 
-        [4, 4, 0], 
-        [0, 0, 0]
-    ], 
-    // Z (3x3)
-    [
-        [5, 5, 0], 
-        [0, 5, 5], 
-        [0, 0, 0]
-    ], 
-    // J (3x3)
-    [
-        [6, 0, 0], 
-        [6, 6, 6], 
-        [0, 0, 0]
-    ], 
-    // L (3x3)
-    [
-        [0, 0, 7], 
-        [7, 7, 7], 
-        [0, 0, 0]
-    ]  
+    [[1, 1, 1, 1]], // I
+    [[2, 2], [2, 2]], // O
+    [[0, 3, 0], [3, 3, 3]], // T
+    [[0, 4, 4], [4, 4, 0]], // S
+    [[5, 5, 0], [0, 5, 5]], // Z
+    [[6, 0, 0], [6, 6, 6]], // J
+    [[0, 0, 7], [7, 7, 7]]  // L
 ];
 
 // 7-Bag Randomizer Shuffle
@@ -129,7 +93,7 @@ export const TetrisGameModal: React.FC<TetrisGameModalProps> = ({ onClose }) => 
         if (bag.current.length === 0) refillBag();
         const typeId = bag.current.pop()!;
         return {
-            shape: SHAPES[typeId], // Clone not needed here as we don't mutate base shapes
+            shape: SHAPES[typeId],
             colorIdx: typeId
         };
     };
@@ -143,13 +107,10 @@ export const TetrisGameModal: React.FC<TetrisGameModalProps> = ({ onClose }) => 
 
         // Promote next to current
         const p = nextPiece.current!;
-        // Deep copy the shape to avoid mutating the Next Piece preview if we rotate the current one
-        const shapeCopy = p.shape.map(row => [...row]);
-        
         piece.current = {
-            shape: shapeCopy,
+            shape: p.shape,
             colorIdx: p.colorIdx,
-            x: Math.floor(COLS / 2) - Math.floor(shapeCopy[0].length / 2),
+            x: Math.floor(COLS / 2) - Math.floor(p.shape[0].length / 2),
             y: 0
         };
 
@@ -184,14 +145,11 @@ export const TetrisGameModal: React.FC<TetrisGameModalProps> = ({ onClose }) => 
         return false;
     };
 
-    // Matrix Rotation (Clockwise)
     const rotate = (matrix: number[][]) => {
         const N = matrix.length;
-        // Transpose + Reverse Rows
-        const result = matrix.map((row, i) =>
+        return matrix.map((row, i) =>
             row.map((val, j) => matrix[N - 1 - j][i])
         );
-        return result;
     };
 
     const merge = (arena: number[][], p: { shape: number[][], x: number, y: number, colorIdx: number }) => {
@@ -266,19 +224,13 @@ export const TetrisGameModal: React.FC<TetrisGameModalProps> = ({ onClose }) => 
         const pos = piece.current.x;
         let offset = 1;
         const originalShape = piece.current.shape;
+        piece.current.shape = rotate(piece.current.shape);
         
-        // Apply rotation
-        const rotatedShape = rotate(piece.current.shape);
-        piece.current.shape = rotatedShape;
-        
-        // Wall Kick (Basic)
-        // If collision, try moving left/right to fit
+        // Basic Wall Kick
         while (collide(board.current, piece.current)) {
             piece.current.x += offset;
             offset = -(offset + (offset > 0 ? 1 : -1));
-            // Limit kick distance based on piece size
-            if (offset > piece.current.shape[0].length + 2) {
-                // Failed to fit, revert
+            if (offset > piece.current.shape[0].length + 5) {
                 piece.current.shape = originalShape;
                 piece.current.x = pos;
                 return;

@@ -4,7 +4,7 @@ import { Task } from '../types';
 import * as sheetService from '../services/googleSheetService';
 
 const POLL_INTERVAL = 5000; // Check for remote changes every 5s
-const DEBOUNCE_DELAY = 5000; // Fix HIGH-001: Increase to 5s to reduce API hits
+const DEBOUNCE_DELAY = 1500; // 1.5s to ensure edits save quickly but don't spam API
 
 export const useGoogleSheetSync = (
     sheetId: string | undefined, 
@@ -123,7 +123,6 @@ export const useGoogleSheetSync = (
                 }
 
                 // STRICT PULL: Always overwrite local on connect.
-                // We do NOT check if remote is empty. If it's empty, we want the app to be empty.
                 await executeStrictPull(syncMethod, target);
 
             } catch (e: any) {
@@ -157,13 +156,7 @@ export const useGoogleSheetSync = (
 
         debounceTimerRef.current = window.setTimeout(async () => {
             if (!isDirtyRef.current) return;
-            
-            // If status is currently syncing (e.g. initial pull is still finishing), wait/retry?
-            // For now, we proceed to ensure user edits are saved.
-            
-            // Reuse manualPush logic for consistency
             manualPush();
-            
         }, DEBOUNCE_DELAY);
 
         return () => {
@@ -172,11 +165,6 @@ export const useGoogleSheetSync = (
     }, [localTasks, syncMethod, manualPush]);
 
     // 3. Polling for Remote Changes (Background Pull)
-    // NOTE: User requested "Manual button to pull data". 
-    // However, keeping background polling for *metadata* (detecting changes) is often good UX.
-    // Given the strict "Source of Truth" requirement, auto-merging might be risky if it conflicts with local work.
-    // DECISION: We will KEEP polling, but we will use the MERGE strategy purely to keep the UI fresh
-    // without destroying active work. The Strict Init handles the "Blank Sheet" safety.
     useEffect(() => {
         if (!syncMethod) return;
 
@@ -204,7 +192,8 @@ export const useGoogleSheetSync = (
                     }
 
                     // For polling, we use a smart merge to avoid disrupting the user
-                    const merged = mergeTasks(localTasksRef.current, remoteTasks);
+                    // We pass lastSyncTime to help identify deleted tasks
+                    const merged = mergeTasks(localTasksRef.current, remoteTasks, lastSyncTime);
                     
                     if (JSON.stringify(merged) !== JSON.stringify(localTasksRef.current)) {
                         console.log("[Sync] Background poll found changes. Merging...");
@@ -227,18 +216,32 @@ export const useGoogleSheetSync = (
 
 // --- UTILS ---
 
-const mergeTasks = (local: Task[], remote: Task[]): Task[] => {
+const mergeTasks = (local: Task[], remote: Task[], lastSyncTime: string | null): Task[] => {
     const taskMap = new Map<string, Task>();
     local.forEach(t => taskMap.set(t.id, t));
+    
+    // Fix RESURRECTION BUG:
+    // If a task is in Remote but NOT in Local, it could be a deleted task.
+    // If remote.lastModified is OLDER than our last sync, we assume we deleted it locally.
+    // Only accept it if it's NEWER than last sync.
+    const lastSyncMs = lastSyncTime ? new Date(lastSyncTime).getTime() : 0;
+
     remote.forEach(r => {
         const l = taskMap.get(r.id);
+        const remoteMod = new Date(r.lastModified).getTime();
+
         if (!l) {
-            taskMap.set(r.id, r);
+            // New Task from Remote? Or Old Deleted Task?
+            // If remote mod is > last sync, it's a new update from elsewhere.
+            // Buffer of 5000ms for safety/clock drift.
+            if (remoteMod > lastSyncMs - 5000) {
+                taskMap.set(r.id, r);
+            } else {
+                // Remote task is old. We don't have it. Assume local delete. Ignore.
+            }
         } else {
+            // Both have it. Update if remote is newer.
             const localMod = new Date(l.lastModified).getTime();
-            const remoteMod = new Date(r.lastModified).getTime();
-            // If remote is newer, update. 
-            // Note: This matches the "Sheet is Truth" philosophy for external edits.
             if (remoteMod > localMod + 2000) {
                 taskMap.set(r.id, r);
             }
