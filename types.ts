@@ -76,6 +76,8 @@ export interface AudioSettings {
 export interface Settings {
     dailyBudget: number;
     timezone: string;
+    // New: User manual clock adjustment
+    userTimeOffset: number; // in minutes (positive or negative)
     pomodoroFocus: number;
     pomodoroShortBreak: number;
     pomodoroLongBreak: number;

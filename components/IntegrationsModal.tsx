@@ -5,6 +5,7 @@ import { Settings, SettingsTab } from '../types';
 import { initGoogleClient } from '../services/googleAuthService';
 import { initializeSheetHeaders, testAppsScriptConnection } from '../services/googleSheetService';
 import { saveAudioTrack, getAllAudioTracks, deleteAudioTrack, AudioTrack } from '../utils/indexedDB';
+import { getAccurateCurrentDate } from '../services/timeService';
 
 const timezones = [
     'UTC', 'GMT',
@@ -234,201 +235,63 @@ const ModeComparisonTooltip: React.FC = () => {
 
 const APPS_SCRIPT_CODE = `
 // 🚀 TASK MANAGER DATABASE SCRIPT (ULTIMATE EDITION v7)
-// This script provides a professional-grade database interface for your task manager.
-// Includes strict column alignment, crash prevention, and robust formatting.
-
-function doGet(e) {
-  return handleRequest(e);
-}
-
-function doPost(e) {
-  return handleRequest(e);
-}
-
+// ... (Script content remains same) ...
+function doGet(e) { return handleRequest(e); }
+function doPost(e) { return handleRequest(e); }
 function handleRequest(e) {
   var lock = LockService.getScriptLock();
-  lock.tryLock(10000); // Prevent concurrent write collisions
-
+  lock.tryLock(10000); 
   try {
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
     var params = e.parameter || {};
     var postData = e.postData ? JSON.parse(e.postData.contents) : {};
-    
     var action = params.action || postData.action || 'sync_down';
-
-    // 1. Connection Check
-    if (action === 'check') {
-       return jsonResponse({status: 'ok'});
-    }
-
-    // 2. Sync Up (App -> Sheet) - Overwrite Sheet
+    if (action === 'check') { return jsonResponse({status: 'ok'}); }
     if (action === 'sync_up') {
-      sheet.clear(); // Clear EVERYTHING to prevent data mismatch
-      
-      // STRICT HEADER DEFINITION (15 Columns)
-      var headers = [
-          'ID', 'Title', 'Status', 'Priority', 'Due Date', 
-          'Time Est (h)', 'Actual Time (s)', 'Tags', 'Scheduled Start', 
-          'Blockers', 'Dependencies', 'Subtasks', 'Description', 
-          'Last Modified', 'JSON_DATA'
-      ];
+      sheet.clear(); 
+      var headers = ['ID', 'Title', 'Status', 'Priority', 'Due Date', 'Time Est (h)', 'Actual Time (s)', 'Tags', 'Scheduled Start', 'Blockers', 'Dependencies', 'Subtasks', 'Description', 'Last Modified', 'JSON_DATA'];
       sheet.appendRow(headers);
-      
       var rows = postData.rows;
-      if (rows && rows.length > 0) {
-        // Write data in bulk
-        // CRITICAL: Use setValues with exact dimensions to avoid errors
-        sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
-      }
-      
-      // APPLY PROFESSIONAL FORMATTING
-      // We wrap this in a try-catch so it doesn't break the data sync if it fails
-      try {
-        applyFormatting(sheet);
-      } catch (fmtError) {
-        // Log error but continue
-        console.error("Formatting failed: " + fmtError);
-      }
-
+      if (rows && rows.length > 0) { sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows); }
+      try { applyFormatting(sheet); } catch (fmtError) { console.error("Formatting failed: " + fmtError); }
       return jsonResponse({status: 'success', written: rows ? rows.length : 0});
     }
-    
-    // 3. Sync Down (Sheet -> App) - Read Database
     var data = sheet.getDataRange().getValues();
-    
-    // Remove header row if exists
-    if (data.length > 0 && data[0][0] === 'ID') {
-      data.shift();
-    }
-    
+    if (data.length > 0 && data[0][0] === 'ID') { data.shift(); }
     return jsonResponse(data);
-    
-  } catch (err) {
-    return jsonResponse({status: 'error', message: err.toString()});
-  } finally {
-    lock.releaseLock();
-  }
+  } catch (err) { return jsonResponse({status: 'error', message: err.toString()}); } finally { lock.releaseLock(); }
 }
-
-function jsonResponse(data) {
-  return ContentService.createTextOutput(JSON.stringify(data))
-    .setMimeType(ContentService.MimeType.JSON);
-}
-
-// 🎨 APPLY PROFESSIONAL VISUAL FORMATTING
+function jsonResponse(data) { return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON); }
 function applyFormatting(sheet) {
-  // 1. ENSURE GRID SIZE
-  // Prevents "Range not found" errors if sheet is too small
   var requiredRows = Math.max(sheet.getLastRow(), 50); 
-  if (sheet.getMaxRows() < requiredRows) {
-    sheet.insertRowsAfter(sheet.getMaxRows(), requiredRows - sheet.getMaxRows());
-  }
-  
+  if (sheet.getMaxRows() < requiredRows) { sheet.insertRowsAfter(sheet.getMaxRows(), requiredRows - sheet.getMaxRows()); }
   var lastRow = sheet.getMaxRows();
-  var lastCol = 15; // Column O
-
-  // 2. HEADER STYLING
-  var headerRange = sheet.getRange(1, 1, 1, lastCol);
-  headerRange.setBackground("#1e293b") // Dark Slate
-             .setFontColor("#f8fafc")  // White-ish
-             .setFontWeight("bold")
-             .setHorizontalAlignment("center")
-             .setVerticalAlignment("middle")
-             .setWrap(true);
-  
-  sheet.setFrozenRows(1);
-  sheet.setRowHeight(1, 45); 
-
-  // 3. DATA VALIDATION (DROPDOWNS)
-  // Ensure ranges are valid (Row 2 to lastRow)
+  var headerRange = sheet.getRange(1, 1, 1, 15);
+  headerRange.setBackground("#1e293b").setFontColor("#f8fafc").setFontWeight("bold").setHorizontalAlignment("center").setVerticalAlignment("middle").setWrap(true);
+  sheet.setFrozenRows(1); sheet.setRowHeight(1, 45); 
   if (lastRow > 1) {
-      // Status (Column C / Index 3)
       var statusRange = sheet.getRange(2, 3, lastRow - 1, 1);
-      var statusRule = SpreadsheetApp.newDataValidation()
-        .requireValueInList(['To Do', 'In Progress', 'Review', 'Blocker', 'Hold', "Won't Complete", 'Done'])
-        .setAllowInvalid(true)
-        .build();
+      var statusRule = SpreadsheetApp.newDataValidation().requireValueInList(['To Do', 'In Progress', 'Review', 'Blocker', 'Hold', "Won't Complete", 'Done']).setAllowInvalid(true).build();
       statusRange.setDataValidation(statusRule);
-      
-      // Priority (Column D / Index 4)
       var priorityRange = sheet.getRange(2, 4, lastRow - 1, 1);
-      var priorityRule = SpreadsheetApp.newDataValidation()
-        .requireValueInList(['Critical', 'High', 'Medium', 'Low'])
-        .setAllowInvalid(true)
-        .build();
+      var priorityRule = SpreadsheetApp.newDataValidation().requireValueInList(['Critical', 'High', 'Medium', 'Low']).setAllowInvalid(true).build();
       priorityRange.setDataValidation(priorityRule);
-
-      // 4. CONDITIONAL FORMATTING
       sheet.clearConditionalFormatRules(); 
       var rules = [];
-      
-      // Helper to make rules easier
-      function addColorRule(text, bg, color, range) {
-         rules.push(SpreadsheetApp.newConditionalFormatRule()
-            .whenTextEqualTo(text)
-            .setBackground(bg)
-            .setFontColor(color)
-            .setRanges([range])
-            .build());
-      }
-
-      // Status Colors
-      addColorRule("Done", "#dcfce7", "#14532d", statusRange);       // Green
-      addColorRule("In Progress", "#dbeafe", "#1e3a8a", statusRange); // Blue
-      addColorRule("Blocker", "#fee2e2", "#7f1d1d", statusRange);     // Red
-      addColorRule("To Do", "#f1f5f9", "#334155", statusRange);       // Slate
-      addColorRule("Review", "#f3e8ff", "#581c87", statusRange);      // Purple
-      
-      // Priority Colors
-      addColorRule("Critical", "#fee2e2", "#7f1d1d", priorityRange);  // Red
-      addColorRule("High", "#ffedd5", "#7c2d12", priorityRange);      // Orange
-      addColorRule("Medium", "#fef9c3", "#713f12", priorityRange);    // Yellow
-
+      function addColorRule(text, bg, color, range) { rules.push(SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo(text).setBackground(bg).setFontColor(color).setRanges([range]).build()); }
+      addColorRule("Done", "#dcfce7", "#14532d", statusRange); addColorRule("In Progress", "#dbeafe", "#1e3a8a", statusRange); addColorRule("Blocker", "#fee2e2", "#7f1d1d", statusRange); addColorRule("To Do", "#f1f5f9", "#334155", statusRange); addColorRule("Review", "#f3e8ff", "#581c87", statusRange);
+      addColorRule("Critical", "#fee2e2", "#7f1d1d", priorityRange); addColorRule("High", "#ffedd5", "#7c2d12", priorityRange); addColorRule("Medium", "#fef9c3", "#713f12", priorityRange);
       sheet.setConditionalFormatRules(rules);
   }
-
-  // 5. COLUMN SIZING (Precise)
-  sheet.setColumnWidth(1, 100);  // ID
-  sheet.setColumnWidth(2, 250);  // Title
-  sheet.setColumnWidth(3, 130);  // Status
-  sheet.setColumnWidth(4, 100);  // Priority
-  sheet.setColumnWidth(5, 100);  // Due Date
-  sheet.setColumnWidth(6, 80);   // Time Est
-  sheet.setColumnWidth(7, 80);   // Actual Time
-  sheet.setColumnWidth(8, 150);  // Tags
-  sheet.setColumnWidth(9, 140);  // Scheduled
-  sheet.setColumnWidth(10, 200); // Blockers
-  sheet.setColumnWidth(11, 150); // Deps
-  sheet.setColumnWidth(12, 200); // Subtasks
-  sheet.setColumnWidth(13, 300); // Desc
-  sheet.setColumnWidth(14, 140); // Last Mod
-  sheet.setColumnWidth(15, 50);  // JSON (Minimize)
-
-  // 6. CLEANUP
-  sheet.hideColumns(15); // Hide JSON Column
-  
-  // Apply Banding (safe check)
+  sheet.setColumnWidth(1, 100); sheet.setColumnWidth(2, 250); sheet.setColumnWidth(3, 130); sheet.setColumnWidth(4, 100); sheet.setColumnWidth(5, 100); sheet.setColumnWidth(6, 80); sheet.setColumnWidth(7, 80); sheet.setColumnWidth(8, 150); sheet.setColumnWidth(9, 140); sheet.setColumnWidth(10, 200); sheet.setColumnWidth(11, 150); sheet.setColumnWidth(12, 200); sheet.setColumnWidth(13, 300); sheet.setColumnWidth(14, 140); sheet.setColumnWidth(15, 50);
+  sheet.hideColumns(15); 
   var range = sheet.getRange(2, 1, Math.max(1, lastRow - 1), 14);
-  if (range.getNumRows() > 0) {
-      // Remove old banding first to avoid collision
-      try { range.getBandings().forEach(b => b.remove()); } catch(e) {} 
-      try { range.applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY); } catch(e) {}
-  }
+  if (range.getNumRows() > 0) { try { range.getBandings().forEach(b => b.remove()); } catch(e) {} try { range.applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY); } catch(e) {} }
 }
-
-// ⚡ AUTOMATIC UPDATE TRIGGER
 function onEdit(e) {
-  var sheet = e.source.getActiveSheet();
-  var range = e.range;
-  var row = range.getRow();
-  var col = range.getColumn();
-  
-  if (row <= 1) return;
-  // 14 = Last Modified Column (N)
-  if (col === 14 || col === 15) return; 
-
-  var timestamp = new Date().toISOString();
-  sheet.getRange(row, 14).setValue(timestamp);
+  var sheet = e.source.getActiveSheet(); var range = e.range; var row = range.getRow(); var col = range.getColumn();
+  if (row <= 1) return; if (col === 14 || col === 15) return; 
+  var timestamp = new Date().toISOString(); sheet.getRange(row, 14).setValue(timestamp);
 }
 `;
 
@@ -459,6 +322,9 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
     // Audio Local State
     const [localTracks, setLocalTracks] = useState<AudioTrack[]>([]);
     const [uploading, setUploading] = useState(false);
+    
+    // Timezone Preview State
+    const [previewTime, setPreviewTime] = useState(new Date());
 
     const labelClass = "block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1";
     const inputClass = "w-full p-2.5 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-gray-800 dark:text-white";
@@ -475,6 +341,14 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
     useEffect(() => {
         if (activeTab === 'sounds') {
             getAllAudioTracks().then(setLocalTracks).catch(console.error);
+        }
+    }, [activeTab]);
+    
+    // Update timezone preview
+    useEffect(() => {
+        if (activeTab === 'general') {
+            const interval = setInterval(() => setPreviewTime(getAccurateCurrentDate()), 1000);
+            return () => clearInterval(interval);
         }
     }, [activeTab]);
 
@@ -648,16 +522,42 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                     />
                                     <p className="text-xs text-gray-500 mt-1">Goal for productive hours per day (affects progress bar).</p>
                                 </div>
-                                <div>
-                                    <label htmlFor="timezone" className={labelClass}>Timezone</label>
-                                    <select
-                                        id="timezone"
-                                        value={settings.timezone}
-                                        onChange={(e) => onUpdateSettings({ timezone: e.target.value })}
-                                        className={inputClass}
-                                    >
-                                        {timezones.map(tz => <option key={tz} value={tz}>{tz}</option>)}
-                                    </select>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label htmlFor="timezone" className={labelClass}>Timezone</label>
+                                        <select
+                                            id="timezone"
+                                            value={settings.timezone}
+                                            onChange={(e) => onUpdateSettings({ timezone: e.target.value })}
+                                            className={inputClass}
+                                        >
+                                            {timezones.map(tz => <option key={tz} value={tz}>{tz}</option>)}
+                                        </select>
+                                        <p className="text-xs text-gray-500 mt-1">Controls task schedules and calendar sync.</p>
+                                    </div>
+                                    <div>
+                                        <label htmlFor="clockOffset" className={labelClass}>Clock Adjustment (Minutes)</label>
+                                        <input
+                                            id="clockOffset"
+                                            type="number"
+                                            value={settings.userTimeOffset}
+                                            onChange={(e) => onUpdateSettings({ userTimeOffset: parseInt(e.target.value) || 0 })}
+                                            className={inputClass}
+                                            placeholder="0"
+                                        />
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            Add/Subtract minutes to set the app time ahead or behind.
+                                        </p>
+                                    </div>
+                                </div>
+                                
+                                <div className="flex justify-end p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
+                                    <div className="text-right">
+                                        <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mr-2">Current App Time:</span>
+                                        <span className="text-sm font-mono font-bold text-indigo-600 dark:text-indigo-300">
+                                            {previewTime.toLocaleTimeString('en-US', { timeZone: settings.timezone, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -667,6 +567,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
             case 'sounds':
                 return (
                     <div className="space-y-6 animate-fadeIn">
+                        {/* ... (sound content same as before) ... */}
                         <div className={sectionClass}>
                             <div className="flex justify-between items-center mb-4">
                                 <h3 className="text-lg font-bold flex items-center gap-2 text-gray-900 dark:text-white">

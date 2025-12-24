@@ -5,6 +5,7 @@ import { COLUMN_STATUSES } from '../constants';
 import { ConnectionHealthIndicator } from './ConnectionHealthIndicator';
 import { exportTasksToCSV } from '../utils/exportUtils';
 import { TetrisGameModal } from './TetrisGameModal';
+import { getAccurateCurrentDate, initializeTimeSync } from '../services/timeService';
 
 interface GoogleAuthState {
     gapiLoaded: boolean;
@@ -46,11 +47,13 @@ interface HeaderProps {
     onManualPush: () => Promise<void>;
     isCompactMode: boolean;
     onToggleCompactMode: () => void;
-    isFitToScreen: boolean; // New Prop
-    onToggleFitToScreen: () => void; // New Prop
+    isFitToScreen: boolean; 
+    onToggleFitToScreen: () => void;
     zoomLevel: number;
     setZoomLevel: React.Dispatch<React.SetStateAction<number>>;
     audioControls: AudioControls;
+    isTimelineVisible: boolean; // New Prop
+    onToggleTimeline: () => void; // New Prop
 }
 
 // Helper functions for rocket animation
@@ -63,9 +66,36 @@ export const Header: React.FC<HeaderProps> = ({
     googleAuthState, onGoogleSignIn, onGoogleSignOut, onOpenShortcutsModal, 
     focusMode, setFocusMode, onOpenSettings, connectionHealth,
     onManualPull, onManualPush, isCompactMode, onToggleCompactMode, isFitToScreen, onToggleFitToScreen,
-    zoomLevel, setZoomLevel, audioControls
+    zoomLevel, setZoomLevel, audioControls, isTimelineVisible, onToggleTimeline
 }) => {
     
+    // --- CLOCK LOGIC ---
+    const [currentTime, setCurrentTime] = useState(new Date());
+
+    useEffect(() => {
+        initializeTimeSync(); // Ensure reliable time service is running
+        const interval = setInterval(() => {
+            setCurrentTime(getAccurateCurrentDate());
+        }, 1000);
+        return () => clearInterval(interval);
+    }, []);
+
+    const headerDateStr = currentTime.toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        day: 'numeric', 
+        month: 'long', 
+        year: 'numeric',
+        timeZone: settings.timezone 
+    });
+    
+    const headerTimeStr = currentTime.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit', 
+        hour12: true,
+        timeZone: settings.timezone 
+    });
+
     // --- ROCKET LOGIC ---
     const rocketRef = useRef<HTMLDivElement>(null);
     const [isFlying, setIsFlying] = useState(false);
@@ -239,7 +269,7 @@ export const Header: React.FC<HeaderProps> = ({
     };
 
     return (
-        <header className="p-4 sm:p-3 bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm border-b border-gray-300 dark:border-gray-700/50 sticky top-0 z-20">
+        <header className="p-4 sm:p-3 bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm border-b border-gray-300 dark:border-gray-700/50 relative z-30 flex-shrink-0 transition-all">
             <div className="max-w-screen-2xl mx-auto flex flex-col gap-3">
                 <div className="flex flex-wrap items-center justify-between gap-y-2">
                      <div className="flex items-center">
@@ -248,22 +278,15 @@ export const Header: React.FC<HeaderProps> = ({
                         <div 
                             ref={rocketRef}
                             className={`rocket-wrapper mr-2 cursor-pointer relative flex items-center justify-center ${isFlying ? 'rocket-flying' : 'rocket-idle'}`}
-                            onMouseEnter={flyRocket} // Keep flying on hover
-                            onClick={handleRocketClick} // Launch game on click
+                            onMouseEnter={flyRocket} 
+                            onClick={handleRocketClick} 
                             title="Click to play Tetris!"
-                            style={{ width: '40px', height: '40px' }} // Fixed container size
+                            style={{ width: '40px', height: '40px' }} 
                         >
-                            {/* 
-                                FontAwesome Rocket defaults to 45deg (pointing North-East).
-                                We rotate it -45deg so it points UP (0deg).
-                                This aligns with the JS flight logic which assumes 0deg is "Forward/Up".
-                            */}
                             <i 
                                 className="fas fa-rocket text-3xl text-indigo-500 dark:text-indigo-400 relative z-10" 
                                 style={{ transform: 'rotate(-45deg)', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.1))' }}
                             ></i>
-
-                            {/* Exhaust Fire - Positioned relative to the wrapper */}
                             <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 translate-y-2 z-0">
                                 <div className="flame-element"></div>
                             </div>
@@ -271,9 +294,22 @@ export const Header: React.FC<HeaderProps> = ({
                         {/* END ROCKET */}
 
                         <h1 className="text-xl font-bold tracking-wider">Task Manager</h1>
+
+                        {/* --- MOVED CLOCK (TITLE SECTION) --- */}
+                        <span className="hidden lg:block text-gray-300 dark:text-gray-600 text-2xl mx-3 font-thin">|</span>
+                        <div className="hidden lg:flex flex-col justify-center">
+                             <div className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider leading-tight">
+                                 {headerDateStr}
+                             </div>
+                             <div className="text-lg font-black text-indigo-600 dark:text-indigo-400 font-mono leading-none">
+                                 {headerTimeStr}
+                             </div>
+                        </div>
                      </div>
                      <div className="flex items-center space-x-2 sm:space-x-3 flex-wrap gap-y-2">
                          
+                         {/* Old Clock Removed Here */}
+
                          {/* System Health Indicator & Sync Button */}
                          <div className="mr-2 flex items-center gap-2">
                             <ConnectionHealthIndicator 
@@ -283,7 +319,6 @@ export const Header: React.FC<HeaderProps> = ({
                                 onManualPush={onManualPush}
                             />
                             
-                            {/* NEW: Explicit Sync Button */}
                             {isSheetConnected && (
                                 <button
                                     onClick={onManualPull}
@@ -301,7 +336,7 @@ export const Header: React.FC<HeaderProps> = ({
                             )}
                          </div>
 
-                         {/* Focus Mode Selector - Standard Button Style */}
+                         {/* Focus Mode Selector */}
                          <div className="flex items-center mr-2">
                              <div className="flex items-center bg-gray-200 dark:bg-gray-700 rounded-md px-3 py-1.5 transition-all hover:bg-gray-300 dark:hover:bg-gray-600">
                                 <label htmlFor="focus-mode" className="text-xs font-semibold text-gray-600 dark:text-gray-400 mr-2 cursor-pointer whitespace-nowrap">
@@ -387,6 +422,18 @@ export const Header: React.FC<HeaderProps> = ({
                             </button>
                         </div>
 
+                        {/* NEW: Timeline Toggle */}
+                        <button
+                            onClick={onToggleTimeline}
+                            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                                isTimelineVisible ? 'bg-indigo-600 text-white shadow-lg' : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600'
+                            }`}
+                            title="Toggle Timeline View"
+                        >
+                            <i className={`fas fa-stream sm:mr-2`}></i>
+                            <span className="hidden sm:inline">Timeline</span>
+                        </button>
+
                         <button
                             onClick={() => exportTasksToCSV(tasks)}
                             className="px-3 py-1.5 rounded-md text-xs font-semibold transition-all bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
@@ -420,7 +467,6 @@ export const Header: React.FC<HeaderProps> = ({
                             <i className={`fas ${currentTheme === 'dark' ? 'fa-sun text-yellow-400' : 'fa-moon text-indigo-500'}`}></i>
                         </button>
                         
-                        {/* Audio Toggle / Settings Button */}
                         <button
                             onClick={() => onOpenSettings('sounds')}
                             className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all shadow-sm border border-transparent ${
@@ -437,7 +483,6 @@ export const Header: React.FC<HeaderProps> = ({
                             <i className="fas fa-keyboard"></i>
                         </button>
 
-                         {/* Moved Level and Streak Info Here */}
                         <div className="flex-grow flex items-center gap-2 sm:gap-4 ml-2 border-l border-gray-300 dark:border-gray-600 pl-2">
                             <div className="flex items-center gap-2" title={`Level ${level}`}>
                                 <span className="font-bold text-indigo-500 dark:text-indigo-400 text-sm">Lvl {level}</span>
@@ -477,7 +522,6 @@ export const Header: React.FC<HeaderProps> = ({
 
             </div>
             
-            {/* Game Modal */}
             {showGame && <TetrisGameModal onClose={() => setShowGame(false)} />}
         </header>
     );

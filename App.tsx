@@ -9,10 +9,11 @@ import { BlockerModal } from './components/BlockerModal';
 import { ResolveBlockerModal } from './components/ResolveBlockerModal';
 import { AIAssistantModal } from './components/AIAssistantModal';
 import { CalendarView } from './components/CalendarView';
+import { TimelineGantt } from './components/TimelineGantt';
 import { manageTasksWithAI, generateTaskSummary } from './services/geminiService';
 import { PomodoroTimer } from './components/PomodoroTimer';
 import { initGoogleClient, signIn, signOut } from './services/googleAuthService';
-import { COLUMN_STATUSES } from './constants';
+import { COLUMN_STATUSES } from '../constants';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { IntegrationsModal } from './components/IntegrationsModal';
 import { useGoogleSheetSync } from './hooks/useGoogleSheetSync';
@@ -20,6 +21,7 @@ import { checkCalendarConnection } from './services/googleCalendarService';
 import { playCompletionSound, resumeAudioContext } from './utils/audio'; // Import Audio Utility
 import { storage } from './utils/storage'; // Import Centralized Storage
 import { useBackgroundAudio } from './hooks/useBackgroundAudio'; // New Audio Hook
+import { setUserTimeOffset } from './services/timeService';
 
 // This is a global declaration for the confetti library loaded from CDN
 declare const confetti: any;
@@ -81,10 +83,12 @@ const App: React.FC = () => {
     const [isCompactMode, setIsCompactMode] = useState(true); // Default to TRUE (Compact View)
     const [isFitToScreen, setIsFitToScreen] = useState(true); // Default: Fit to Screen ON
     const [zoomLevel, setZoomLevel] = useState(0.8); // Default: 80% Zoom
+    const [showTimeline, setShowTimeline] = useState(false); // Default: Timeline hidden
 
     const [settings, setSettings] = useState<Settings>({
         dailyBudget: 16,
-        timezone: 'Asia/Kolkata',
+        timezone: 'Asia/Kolkata', // Updated Default per user request
+        userTimeOffset: 0, // Default 0 minutes offset
         pomodoroFocus: 25,
         pomodoroShortBreak: 5,
         pomodoroLongBreak: 15,
@@ -224,41 +228,40 @@ const App: React.FC = () => {
                 // Load view preference
                 const savedFit = await storage.get('isFitToScreen');
                 if (savedFit !== null) {
-                    // If preference is saved, respect it
                     const shouldFit = savedFit === 'true';
                     setIsFitToScreen(shouldFit);
-                    // If fitting is true from storage, sync to our new default of 0.8
-                    // If false, normal 1.0
                     if (shouldFit) {
                         setZoomLevel(0.8);
                     } else {
                         setZoomLevel(1);
                     }
                 }
-
-                // Note: We deliberately do NOT load isCompactMode here to ensure it defaults to TRUE (Compact View)
-                // per user request.
+                
+                // Load Timeline preference
+                const savedTimeline = await storage.get('showTimeline');
+                if (savedTimeline !== null) setShowTimeline(savedTimeline === 'true');
 
                 // Try to load settings from storage
-                const savedSettings = await storage.get('taskMasterSettings_v2'); // Use v2 key to reset any corrupted state
-                
-                // Try to load backup URL from cookie
+                const savedSettings = await storage.get('taskMasterSettings_v2'); 
                 const cookieUrl = getCookie('tm_script_url');
 
                 if (savedSettings) {
                      const parsedSettings = JSON.parse(savedSettings);
-                     // Helper to merge nested audio settings safely
                      const mergedAudio = { ...settings.audio, ...(parsedSettings.audio || {}) };
                      
                      setSettings(prev => ({
                          ...prev, 
                          ...parsedSettings,
                          audio: mergedAudio,
-                         // If storage URL is empty but cookie has one, prefer cookie (restore logic)
-                         googleAppsScriptUrl: parsedSettings.googleAppsScriptUrl || cookieUrl || prev.googleAppsScriptUrl
+                         googleAppsScriptUrl: parsedSettings.googleAppsScriptUrl || cookieUrl || prev.googleAppsScriptUrl,
+                         timezone: parsedSettings.timezone || 'Asia/Kolkata', // Fallback to user pref
+                         userTimeOffset: parsedSettings.userTimeOffset || 0
                      }));
+                     
+                     // Sync Time Service immediately
+                     setUserTimeOffset(parsedSettings.userTimeOffset || 0);
+
                 } else if (cookieUrl) {
-                    // Fallback: If no storage settings but we have a cookie, restore connection
                     console.log("Restoring connection from Cookie...");
                     setSettings(prev => ({ ...prev, googleAppsScriptUrl: cookieUrl }));
                 }
@@ -285,26 +288,24 @@ const App: React.FC = () => {
         storage.set('theme', theme);
     }, [theme]);
 
-    // Persist Fit Screen Preference
+    // Persist View Preferences
     useEffect(() => {
         storage.set('isFitToScreen', String(isFitToScreen));
-    }, [isFitToScreen]);
+        storage.set('showTimeline', String(showTimeline));
+    }, [isFitToScreen, showTimeline]);
 
     useEffect(() => {
         if (settingsLoaded) {
             const saveSettings = async () => {
                 try {
                     await storage.set('taskMasterSettings_v2', JSON.stringify(settings));
-                    
-                    // Logic for Cookie Management
                     if (settings.googleAppsScriptUrl) {
-                         // Redundantly save the Script URL to a cookie for safety
                         setCookie('tm_script_url', settings.googleAppsScriptUrl, 365);
                     } else {
-                        // EXPLICITLY REMOVE COOKIE IF URL IS CLEARED (Disconnect)
                         setCookie('tm_script_url', '', -1);
                     }
-
+                    // Sync time service whenever settings change (e.g. user updates offset)
+                    setUserTimeOffset(settings.userTimeOffset);
                 } catch (e) {
                     console.error("Failed to save settings", e);
                 }
@@ -428,16 +429,12 @@ const App: React.FC = () => {
 
     // NEW: Handle Quick Add Task (Inline)
     const handleQuickAddTask = useCallback((title: string, status: Status) => {
-        const now = new Date().toISOString();
-        const today = new Date().toISOString().split('T')[0];
-        
         addTask({
             title,
             status,
             priority: 'Medium',
-            dueDate: today,
+            dueDate: new Date().toISOString().split('T')[0],
             description: '',
-            // other defaults handled by useTaskManager's addTask, but explicitly passing some for clarity
         });
     }, [addTask]);
 
@@ -490,13 +487,13 @@ const App: React.FC = () => {
                     setShowShortcutsModal(true);
                     break;
                 case '-':
-                    if (e.ctrlKey || e.metaKey) return; // Allow browser zoom
+                    if (e.ctrlKey || e.metaKey) return; 
                     e.preventDefault();
                     setZoomLevel(prev => Math.max(0.1, prev - 0.1));
                     break;
                 case '=':
                 case '+':
-                    if (e.ctrlKey || e.metaKey) return; // Allow browser zoom
+                    if (e.ctrlKey || e.metaKey) return; 
                     e.preventDefault();
                     setZoomLevel(prev => Math.min(1.5, prev + 0.1));
                     break;
@@ -527,7 +524,6 @@ const App: React.FC = () => {
     const handleToggleFitToScreen = () => {
         setIsFitToScreen(prev => {
             const newValue = !prev;
-            // Update zoom defaults: 80% if fitting, 100% if resetting
             if (newValue) {
                 setZoomLevel(0.8);
             } else {
@@ -760,7 +756,7 @@ const App: React.FC = () => {
 
 
     return (
-        <div className="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-white min-h-screen font-sans bg-dots transition-colors duration-300">
+        <div className="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-white h-screen flex flex-col overflow-hidden font-sans bg-dots transition-colors duration-300">
             <Header
                 tasks={tasks}
                 isTodayView={isTodayView}
@@ -790,12 +786,12 @@ const App: React.FC = () => {
                 onToggleFitToScreen={handleToggleFitToScreen}
                 zoomLevel={zoomLevel}
                 setZoomLevel={setZoomLevel}
-                // Pass Audio Data
                 audioControls={audioControls}
+                isTimelineVisible={showTimeline}
+                onToggleTimeline={() => setShowTimeline(prev => !prev)}
             />
 
-            <main className="pl-6 pt-6 pr-2 pb-2 h-[calc(100vh-200px)] overflow-auto relative">
-                {/* CONDITIONAL RENDERING: Strict Sheet Connection Gate */}
+            <main className="flex-1 overflow-y-auto overflow-x-hidden pl-2 sm:pl-6 pt-4 sm:pt-6 pr-2 pb-2 relative flex flex-col scroll-smooth">
                 {!isSheetConfigured ? (
                     <ConnectSheetPlaceholder onConnect={() => handleOpenSettings('sheets')} />
                 ) : (
@@ -807,45 +803,59 @@ const App: React.FC = () => {
                             </div>
                         )}
                         {error && <div className="text-center text-red-500 dark:text-red-400 text-lg">{error}</div>}
+                        
                         {!isLoading && !error && (
                             <>
-                            {viewMode === 'kanban' && (
-                                <KanbanBoard
-                                    tasks={tasks}
-                                    columns={columns}
-                                    columnLayouts={columnLayouts}
-                                    getTasksByStatus={(status) => getTasksByStatus(status, filteredTasks)}
-                                    onTaskMove={handleTaskMove}
+                                {/* --- NEW TIMELINE WIDGET --- */}
+                                <TimelineGantt 
+                                    tasks={filteredTasks} 
                                     onEditTask={handleEditTask}
-                                    onAddTask={(status) => handleOpenAddTaskModal(status)}
-                                    onQuickAddTask={handleQuickAddTask}
-                                    onUpdateColumnLayout={updateColumnLayout}
-                                    activeTaskTimer={activeTaskTimer}
-                                    onToggleTimer={handleToggleTimer}
-                                    onOpenContextMenu={handleOpenContextMenu}
-                                    focusMode={focusMode}
-                                    onDeleteTask={deleteTask}
-                                    isCompactMode={isCompactMode}
-                                    isFitToScreen={isFitToScreen}
-                                    zoomLevel={zoomLevel}
+                                    onUpdateTask={updateTask} // Pass the updater
+                                    isVisible={showTimeline}
+                                    timezone={settings.timezone} // Pass timezone setting
                                 />
-                            )}
-                            {viewMode === 'calendar' && (
-                                <CalendarView
-                                    tasks={tasks}
-                                    onUpdateTask={updateTask}
-                                    onEditTask={handleEditTask}
-                                    onAddTask={handleOpenAddTaskModal}
-                                    timezone={settings.timezone}
-                                />
-                            )}
+
+                                {viewMode === 'kanban' && (
+                                    <div className="flex-grow">
+                                        <KanbanBoard
+                                            tasks={tasks}
+                                            columns={columns}
+                                            columnLayouts={columnLayouts}
+                                            getTasksByStatus={(status) => getTasksByStatus(status, filteredTasks)}
+                                            onTaskMove={handleTaskMove}
+                                            onEditTask={handleEditTask}
+                                            onAddTask={(status) => handleOpenAddTaskModal(status)}
+                                            onQuickAddTask={handleQuickAddTask}
+                                            onUpdateColumnLayout={updateColumnLayout}
+                                            activeTaskTimer={activeTaskTimer}
+                                            onToggleTimer={handleToggleTimer}
+                                            onOpenContextMenu={handleOpenContextMenu}
+                                            focusMode={focusMode}
+                                            onDeleteTask={deleteTask}
+                                            isCompactMode={isCompactMode}
+                                            isFitToScreen={isFitToScreen}
+                                            zoomLevel={zoomLevel}
+                                        />
+                                    </div>
+                                )}
+                                {viewMode === 'calendar' && (
+                                    <div className="flex-grow h-full">
+                                        <CalendarView
+                                            tasks={tasks}
+                                            onUpdateTask={updateTask}
+                                            onEditTask={handleEditTask}
+                                            onAddTask={handleOpenAddTaskModal}
+                                            timezone={settings.timezone}
+                                        />
+                                    </div>
+                                )}
                             </>
                         )}
                     </>
                 )}
             </main>
             
-            {/* Sync Status Indicator (Compact) - Only show if configured */}
+            {/* ... rest of the App component (modals, etc.) ... */}
             {isSheetConfigured && syncStatus !== 'idle' && (
                 <div className="fixed bottom-4 left-4 z-40 flex items-center gap-2 px-3 py-1.5 bg-white/80 dark:bg-gray-800/80 backdrop-blur rounded-full text-xs font-medium shadow-sm border border-gray-200 dark:border-gray-700">
                     {syncStatus === 'syncing' && <i className="fas fa-sync fa-spin text-blue-500"></i>}
@@ -925,8 +935,8 @@ const App: React.FC = () => {
                 <div
                     style={{ top: contextMenu.y, left: contextMenu.x }}
                     className="absolute z-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg py-1"
-                    onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside
-                    onContextMenu={(e) => e.preventDefault()} // Prevent another context menu on top
+                    onClick={(e) => e.stopPropagation()} 
+                    onContextMenu={(e) => e.preventDefault()}
                 >
                     <div className="px-3 py-1 text-sm font-bold border-b border-gray-200 dark:border-gray-700 mb-1 truncate max-w-xs">{contextMenu.task.title}</div>
                     <p className="px-3 pb-2 text-xs text-gray-500 dark:text-gray-400">Move to:</p>
