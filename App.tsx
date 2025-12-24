@@ -13,7 +13,7 @@ import { TimelineGantt } from './components/TimelineGantt';
 import { manageTasksWithAI, generateTaskSummary } from './services/geminiService';
 import { PomodoroTimer } from './components/PomodoroTimer';
 import { initGoogleClient, signIn, signOut } from './services/googleAuthService';
-import { COLUMN_STATUSES } from '../constants';
+import { COLUMN_STATUSES } from './constants';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { IntegrationsModal } from './components/IntegrationsModal';
 import { useGoogleSheetSync } from './hooks/useGoogleSheetSync';
