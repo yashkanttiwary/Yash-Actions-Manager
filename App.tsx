@@ -405,6 +405,21 @@ const App: React.FC = () => {
         });
     }, []);
 
+    // NEW: Handle Quick Add Task (Inline)
+    const handleQuickAddTask = useCallback((title: string, status: Status) => {
+        const now = new Date().toISOString();
+        const today = new Date().toISOString().split('T')[0];
+        
+        addTask({
+            title,
+            status,
+            priority: 'Medium',
+            dueDate: today,
+            description: '',
+            // other defaults handled by useTaskManager's addTask, but explicitly passing some for clarity
+        });
+    }, [addTask]);
+
     const handleOpenSettings = (tab: SettingsTab = 'general') => {
         setActiveSettingsTab(tab);
         setShowIntegrationsModal(true);
@@ -767,6 +782,7 @@ const App: React.FC = () => {
                                     onTaskMove={handleTaskMove}
                                     onEditTask={handleEditTask}
                                     onAddTask={(status) => handleOpenAddTaskModal(status)}
+                                    onQuickAddTask={handleQuickAddTask}
                                     onUpdateColumnLayout={updateColumnLayout}
                                     activeTaskTimer={activeTaskTimer}
                                     onToggleTimer={handleToggleTimer}

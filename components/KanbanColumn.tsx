@@ -11,6 +11,7 @@ interface KanbanColumnProps {
     onTaskMove: (taskId: string, newStatus: Status, newIndex: number) => void;
     onEditTask: (task: Task) => void;
     onAddTask: (status: Status) => void;
+    onQuickAddTask: (title: string) => void; // New Prop for Quick Add
     isCollapsed: boolean;
     onToggleCollapse: () => void;
     sortOption: SortOption;
@@ -29,13 +30,14 @@ interface KanbanColumnProps {
 }
 
 export const KanbanColumn: React.FC<KanbanColumnProps> = ({ 
-    status, tasks, allTasks, onTaskMove, onEditTask, onAddTask, 
+    status, tasks, allTasks, onTaskMove, onEditTask, onAddTask, onQuickAddTask,
     isCollapsed, onToggleCollapse, sortOption, onSortChange, onMouseDown, 
     activeTaskTimer, onToggleTimer, onOpenContextMenu, onDeleteTask, 
     isCompactMode, onTaskSizeChange, width, height, onResize, zoomLevel = 1 
 }) => {
     const [isDraggingOver, setIsDraggingOver] = useState(false);
     const [isResizing, setIsResizing] = useState(false);
+    const [quickAddTitle, setQuickAddTitle] = useState('');
     const statusStyle = STATUS_STYLES[status] || STATUS_STYLES['To Do'];
     const colRef = useRef<HTMLDivElement>(null);
     const resizeStartRef = useRef<{ x: number, y: number, w: number, h: number } | null>(null);
@@ -105,6 +107,14 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
         document.removeEventListener('mouseup', handleResizeEnd);
         if(onTaskSizeChange) onTaskSizeChange(); // Update board layout/lines
     };
+
+    const handleQuickAddSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (quickAddTitle.trim()) {
+            onQuickAddTask(quickAddTitle.trim());
+            setQuickAddTitle('');
+        }
+    };
     
     // Determine dimensions
     // Default width: 80 (collapsed) or 320 (expanded)
@@ -149,6 +159,27 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
             </div>
             {!isCollapsed && (
                 <>
+                    {/* NEW: Quick Add & Detail Add Section */}
+                    <div className="p-2 border-b border-gray-300 dark:border-gray-700 bg-white/20 dark:bg-black/10">
+                        <form onSubmit={handleQuickAddSubmit} className="flex gap-2">
+                            <input 
+                                type="text" 
+                                value={quickAddTitle}
+                                onChange={(e) => setQuickAddTitle(e.target.value)}
+                                placeholder="Add quick task..." 
+                                className="flex-1 min-w-0 px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white/90 dark:bg-gray-800 text-gray-800 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => onAddTask(status)}
+                                className="px-3 py-1.5 bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-md transition-colors border border-gray-300 dark:border-gray-600 shadow-sm flex items-center gap-1.5 whitespace-nowrap text-xs font-bold"
+                                title="Open full task creator to add details like description, subtasks, etc."
+                            >
+                                <i className="fas fa-pen-to-square"></i> Detail
+                            </button>
+                        </form>
+                    </div>
+
                     <div className="p-2 border-b border-gray-300 dark:border-gray-700">
                         <label htmlFor={`sort-${status}`} className="sr-only">Sort tasks by</label>
                         <select
@@ -168,12 +199,8 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                         onDragLeave={handleDragLeave}
                         onDrop={handleDrop}
                         className={`flex-grow p-1 space-y-1 min-h-[200px] column-drop-zone ${isDraggingOver ? 'column-drop-zone-active' : ''} ${isCustomHeight ? 'overflow-y-auto' : ''}`}
-                        style={{ 
-                            // Removed max-height constraint to allow auto-grow "algorithm"
-                        }}
                     >
                         {tasks.length === 0 ? (
-                            // Fix LOW-001: Empty State
                             <div className="h-full flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 opacity-50 p-4 select-none min-h-[150px]">
                                 <i className="far fa-folder-open text-3xl mb-2"></i>
                                 <span className="text-sm font-medium">No Tasks</span>
@@ -195,14 +222,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                             ))
                         )}
                     </div>
-                    <div className="p-1 mt-auto border-t border-gray-300 dark:border-gray-700">
-                        <button
-                            onClick={() => onAddTask(status)}
-                            className="w-full text-left p-2 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-300/60 dark:hover:bg-gray-700/60 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
-                        >
-                            <i className="fas fa-plus mr-2"></i> Add a task
-                        </button>
-                    </div>
+                    {/* Bottom Add Task Button Removed */}
 
                     {/* Resize Handle */}
                     {onResize && (

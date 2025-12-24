@@ -12,6 +12,7 @@ interface KanbanBoardProps {
     onTaskMove: (taskId: string, newStatus: Status, newIndex: number) => void;
     onEditTask: (task: Task) => void;
     onAddTask: (status: Status) => void;
+    onQuickAddTask: (title: string, status: Status) => void; // New Prop
     onUpdateColumnLayout: (id: Status, newLayout: Omit<ColumnLayout, 'id'>) => void;
     activeTaskTimer: {taskId: string, startTime: number} | null;
     onToggleTimer: (taskId: string) => void;
@@ -50,7 +51,7 @@ const sortTasks = (tasks: Task[], option: SortOption): Task[] => {
     }
 };
 
-export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, columnLayouts, getTasksByStatus, onTaskMove, onEditTask, onAddTask, onUpdateColumnLayout, activeTaskTimer, onToggleTimer, onOpenContextMenu, focusMode, onDeleteTask, isCompactMode, zoomLevel }) => {
+export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, columnLayouts, getTasksByStatus, onTaskMove, onEditTask, onAddTask, onQuickAddTask, onUpdateColumnLayout, activeTaskTimer, onToggleTimer, onOpenContextMenu, focusMode, onDeleteTask, isCompactMode, zoomLevel }) => {
     const [collapsedColumns, setCollapsedColumns] = useState<Set<Status>>(new Set());
     const [sortOptions, setSortOptions] = useState<Record<Status, SortOption>>(
         columns.reduce((acc, status) => ({...acc, [status]: 'Default'}), {}) as Record<Status, SortOption>
@@ -284,6 +285,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                         onTaskMove={handleTaskMoveWithSortReset}
                         onEditTask={onEditTask}
                         onAddTask={onAddTask}
+                        onQuickAddTask={(title) => onQuickAddTask(title, focusMode)}
                         isCollapsed={false} // Force expanded in focus mode
                         onToggleCollapse={() => {}} // Disable collapse
                         sortOption={sortOptions[focusMode] || 'Default'}
@@ -299,6 +301,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                         width={undefined} 
                         height={undefined}
                         onResize={() => {}}
+                        zoomLevel={zoomLevel}
                     />
                  </div>
             </div>
@@ -353,6 +356,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                                 onTaskMove={handleTaskMoveWithSortReset}
                                 onEditTask={onEditTask}
                                 onAddTask={onAddTask}
+                                onQuickAddTask={(title) => onQuickAddTask(title, status)}
                                 isCollapsed={collapsedColumns.has(status)}
                                 onToggleCollapse={() => toggleColumnCollapse(status)}
                                 sortOption={sortOptions[status] || 'Default'}
