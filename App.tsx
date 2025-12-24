@@ -78,9 +78,9 @@ const ConnectSheetPlaceholder: React.FC<{ onConnect: () => void }> = ({ onConnec
 const App: React.FC = () => {
     // 1. Load Settings & Theme FIRST
     const [theme, setTheme] = useState('light'); 
-    const [isCompactMode, setIsCompactMode] = useState(false); // Default to FALSE (Full View)
-    const [isFitToScreen, setIsFitToScreen] = useState(false); // New State: Fit to Screen
-    const [zoomLevel, setZoomLevel] = useState(1); // Default Zoom Level (1 = 100%)
+    const [isCompactMode, setIsCompactMode] = useState(true); // Default to TRUE (Compact View)
+    const [isFitToScreen, setIsFitToScreen] = useState(true); // Default: Fit to Screen ON
+    const [zoomLevel, setZoomLevel] = useState(0.8); // Default: 80% Zoom
 
     const [settings, setSettings] = useState<Settings>({
         dailyBudget: 16,
@@ -223,12 +223,20 @@ const App: React.FC = () => {
 
                 // Load view preference
                 const savedFit = await storage.get('isFitToScreen');
-                if (savedFit === 'true') {
-                    setIsFitToScreen(true);
-                    setZoomLevel(0.6); // Default fit zoom
+                if (savedFit !== null) {
+                    // If preference is saved, respect it
+                    const shouldFit = savedFit === 'true';
+                    setIsFitToScreen(shouldFit);
+                    // If fitting is true from storage, sync to our new default of 0.8
+                    // If false, normal 1.0
+                    if (shouldFit) {
+                        setZoomLevel(0.8);
+                    } else {
+                        setZoomLevel(1);
+                    }
                 }
 
-                // Note: We deliberately do NOT load isCompactMode here to ensure it defaults to false (Full View)
+                // Note: We deliberately do NOT load isCompactMode here to ensure it defaults to TRUE (Compact View)
                 // per user request.
 
                 // Try to load settings from storage
@@ -519,9 +527,9 @@ const App: React.FC = () => {
     const handleToggleFitToScreen = () => {
         setIsFitToScreen(prev => {
             const newValue = !prev;
-            // Update zoom defaults: 60% if fitting, 100% if resetting
+            // Update zoom defaults: 80% if fitting, 100% if resetting
             if (newValue) {
-                setZoomLevel(0.6);
+                setZoomLevel(0.8);
             } else {
                 setZoomLevel(1);
             }

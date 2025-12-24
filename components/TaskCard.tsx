@@ -226,7 +226,11 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
                                  <i className="fas fa-grip-vertical text-xs"></i>
                              </div>
                          )}
-                         <div className={`hidden md:block w-2 h-2 rounded-full flex-shrink-0 ${priorityClasses.bg} border ${priorityClasses.text.replace('text-', 'border-')}`} title={`Priority: ${task.priority}`}></div>
+                         
+                         {/* PRIORITY TEXT BADGE */}
+                         <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded flex-shrink-0 uppercase ${priorityClasses.bg} ${priorityClasses.text} border ${priorityClasses.text.replace('text-', 'border-')} border-opacity-30`} title={`Priority: ${task.priority}`}>
+                            {task.priority}
+                         </span>
                          
                          <span className={`text-sm font-medium text-gray-800 dark:text-gray-100 truncate ${isOverdue ? 'text-red-600 dark:text-red-400' : ''}`}>
                              {task.title}
