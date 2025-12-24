@@ -20,6 +20,7 @@ interface KanbanBoardProps {
     focusMode: Status | 'None';
     onDeleteTask: (taskId: string) => void;
     isCompactMode: boolean;
+    isFitToScreen: boolean; // New Prop
     zoomLevel: number; // New Prop
 }
 
@@ -51,7 +52,7 @@ const sortTasks = (tasks: Task[], option: SortOption): Task[] => {
     }
 };
 
-export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, columnLayouts, getTasksByStatus, onTaskMove, onEditTask, onAddTask, onQuickAddTask, onUpdateColumnLayout, activeTaskTimer, onToggleTimer, onOpenContextMenu, focusMode, onDeleteTask, isCompactMode, zoomLevel }) => {
+export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, columnLayouts, getTasksByStatus, onTaskMove, onEditTask, onAddTask, onQuickAddTask, onUpdateColumnLayout, activeTaskTimer, onToggleTimer, onOpenContextMenu, focusMode, onDeleteTask, isCompactMode, isFitToScreen, zoomLevel }) => {
     const [collapsedColumns, setCollapsedColumns] = useState<Set<Status>>(new Set());
     const [sortOptions, setSortOptions] = useState<Record<Status, SortOption>>(
         columns.reduce((acc, status) => ({...acc, [status]: 'Default'}), {}) as Record<Status, SortOption>
@@ -86,8 +87,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
             }
             lastCalcTime = now;
 
-            // Do not calculate lines if in Focus Mode, as other columns are hidden
-            if (focusMode !== 'None') {
+            // Do not calculate lines if in Focus Mode or Fit Mode (to keep fit mode clean)
+            if (focusMode !== 'None' || isFitToScreen) {
                 setLineCoordinates([]);
                 return;
             }
@@ -171,7 +172,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
             if (animationFrameId) cancelAnimationFrame(animationFrameId);
         };
 
-    }, [tasks, columnLayouts, collapsedColumns, focusMode, isCompactMode, layoutTick, zoomLevel]);
+    }, [tasks, columnLayouts, collapsedColumns, focusMode, isCompactMode, layoutTick, zoomLevel, isFitToScreen]);
 
 
     const handleSortChange = (status: Status, option: SortOption) => {
@@ -198,8 +199,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
     };
 
     const handleColumnMouseDown = (e: React.MouseEvent, columnId: Status) => {
-        // Disable column dragging in focus mode
-        if (focusMode !== 'None') return;
+        // Disable column dragging in focus mode or fit to screen mode
+        if (focusMode !== 'None' || isFitToScreen) return;
         // Don't drag if clicking resize handle (though preventDefault in column should handle this)
         if ((e.target as HTMLElement).closest('.resize-handle')) return;
 
@@ -307,8 +308,67 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
             </div>
         );
     }
+    
+    // NEW: Fit to Screen Mode Render (Bento Box / Scaled Grid)
+    if (isFitToScreen) {
+        // Dynamic inverse width to counteract scale and ensure full width coverage
+        // We use Math.max to prevent divide by zero, though min zoom is 0.1
+        const INVERSE_WIDTH = 100 / Math.max(0.1, zoomLevel);
 
-    // Default Render
+        return (
+             <div 
+                ref={boardRef}
+                className="w-full h-full overflow-y-auto overflow-x-hidden bg-gray-50/50 dark:bg-black/10"
+            >
+                 <div
+                    style={{
+                        transform: `scale(${zoomLevel})`,
+                        transformOrigin: 'top left',
+                        width: `${INVERSE_WIDTH}%`,
+                        minHeight: '100%' // Ensure container grows
+                    }}
+                    className="flex flex-wrap justify-center items-start content-start p-8 gap-8"
+                >
+                 {columns.map(status => {
+                     const tasksForColumn = getTasksByStatus(status);
+                     const sortedTasks = sortTasks(tasksForColumn, sortOptions[status] || 'Default');
+                     
+                     return (
+                         <div key={status} className="flex-shrink-0 mb-4">
+                             <KanbanColumn
+                                status={status}
+                                tasks={sortedTasks}
+                                allTasks={tasks}
+                                onTaskMove={handleTaskMoveWithSortReset}
+                                onEditTask={onEditTask}
+                                onAddTask={onAddTask}
+                                onQuickAddTask={(title) => onQuickAddTask(title, status)}
+                                isCollapsed={collapsedColumns.has(status)}
+                                onToggleCollapse={() => toggleColumnCollapse(status)}
+                                sortOption={sortOptions[status] || 'Default'}
+                                onSortChange={handleSortChange}
+                                onMouseDown={(e) => e.preventDefault()} // Disable column drag
+                                activeTaskTimer={activeTaskTimer}
+                                onToggleTimer={onToggleTimer}
+                                onOpenContextMenu={onOpenContextMenu}
+                                onDeleteTask={onDeleteTask}
+                                isCompactMode={isCompactMode}
+                                onTaskSizeChange={triggerLayoutUpdate}
+                                // Enforce fixed dimensions for Bento Box grid layout
+                                width={320} 
+                                height={350}
+                                onResize={() => {}}
+                                zoomLevel={1} // Pass 1 because the container itself is scaled, inner elements don't need double scaling logic
+                            />
+                         </div>
+                     )
+                 })}
+                </div>
+            </div>
+        )
+    }
+
+    // Default Absolute Layout Render
     return (
         <div 
             className="w-full h-full relative"

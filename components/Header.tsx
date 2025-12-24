@@ -46,6 +46,8 @@ interface HeaderProps {
     onManualPush: () => Promise<void>;
     isCompactMode: boolean;
     onToggleCompactMode: () => void;
+    isFitToScreen: boolean; // New Prop
+    onToggleFitToScreen: () => void; // New Prop
     zoomLevel: number;
     setZoomLevel: React.Dispatch<React.SetStateAction<number>>;
     audioControls: AudioControls;
@@ -60,7 +62,7 @@ export const Header: React.FC<HeaderProps> = ({
     gamification, settings, onUpdateSettings, currentViewMode, onViewModeChange, 
     googleAuthState, onGoogleSignIn, onGoogleSignOut, onOpenShortcutsModal, 
     focusMode, setFocusMode, onOpenSettings, connectionHealth,
-    onManualPull, onManualPush, isCompactMode, onToggleCompactMode,
+    onManualPull, onManualPush, isCompactMode, onToggleCompactMode, isFitToScreen, onToggleFitToScreen,
     zoomLevel, setZoomLevel, audioControls
 }) => {
     
@@ -356,18 +358,35 @@ export const Header: React.FC<HeaderProps> = ({
                             <i className="fas fa-th-large sm:mr-2"></i>
                             <span className="hidden sm:inline">Reset</span>
                         </button>
-                        <button
-                            onClick={onToggleCompactMode}
-                            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                                isCompactMode 
-                                    ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 shadow-inner' 
-                                    : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600'
-                            }`}
-                            title={isCompactMode ? "Switch to Full View" : "Switch to Compact View"}
-                        >
-                             <i className={`fas ${isCompactMode ? 'fa-expand' : 'fa-compress'} sm:mr-2`}></i>
-                             <span className="hidden sm:inline">{isCompactMode ? 'Full' : 'Compact'}</span>
-                        </button>
+                        
+                        <div className="bg-gray-200 dark:bg-gray-700 p-0.5 rounded-lg flex items-center gap-1">
+                            <button
+                                onClick={onToggleCompactMode}
+                                className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                                    isCompactMode 
+                                        ? 'bg-white dark:bg-gray-800 shadow text-indigo-600 dark:text-indigo-400' 
+                                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-600'
+                                }`}
+                                title={isCompactMode ? "Switch to Full View" : "Switch to Compact View"}
+                            >
+                                <i className={`fas ${isCompactMode ? 'fa-expand' : 'fa-compress'} sm:mr-2`}></i>
+                                <span className="hidden sm:inline">{isCompactMode ? 'Full' : 'Compact'}</span>
+                            </button>
+                            
+                             <button
+                                onClick={onToggleFitToScreen}
+                                className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                                    isFitToScreen 
+                                        ? 'bg-white dark:bg-gray-800 shadow text-indigo-600 dark:text-indigo-400' 
+                                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-600'
+                                }`}
+                                title={isFitToScreen ? "Switch to Scrollable View" : "Fit all columns to screen"}
+                            >
+                                <i className={`fas ${isFitToScreen ? 'fa-expand-arrows-alt' : 'fa-compress-arrows-alt'} sm:mr-2`}></i>
+                                <span className="hidden sm:inline">Fit</span>
+                            </button>
+                        </div>
+
                         <button
                             onClick={() => exportTasksToCSV(tasks)}
                             className="px-3 py-1.5 rounded-md text-xs font-semibold transition-all bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"

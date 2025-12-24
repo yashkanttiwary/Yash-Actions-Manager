@@ -79,6 +79,7 @@ const App: React.FC = () => {
     // 1. Load Settings & Theme FIRST
     const [theme, setTheme] = useState('light'); 
     const [isCompactMode, setIsCompactMode] = useState(false); // Default to FALSE (Full View)
+    const [isFitToScreen, setIsFitToScreen] = useState(false); // New State: Fit to Screen
     const [zoomLevel, setZoomLevel] = useState(1); // Default Zoom Level (1 = 100%)
 
     const [settings, setSettings] = useState<Settings>({
@@ -220,6 +221,13 @@ const App: React.FC = () => {
                 if (savedTheme) setTheme(savedTheme);
                 else setTheme('light');
 
+                // Load view preference
+                const savedFit = await storage.get('isFitToScreen');
+                if (savedFit === 'true') {
+                    setIsFitToScreen(true);
+                    setZoomLevel(0.6); // Default fit zoom
+                }
+
                 // Note: We deliberately do NOT load isCompactMode here to ensure it defaults to false (Full View)
                 // per user request.
 
@@ -268,6 +276,11 @@ const App: React.FC = () => {
         }
         storage.set('theme', theme);
     }, [theme]);
+
+    // Persist Fit Screen Preference
+    useEffect(() => {
+        storage.set('isFitToScreen', String(isFitToScreen));
+    }, [isFitToScreen]);
 
     useEffect(() => {
         if (settingsLoaded) {
@@ -501,6 +514,19 @@ const App: React.FC = () => {
 
     const toggleTheme = () => {
         setTheme(prevTheme => (prevTheme === 'dark' ? 'light' : 'dark'));
+    };
+
+    const handleToggleFitToScreen = () => {
+        setIsFitToScreen(prev => {
+            const newValue = !prev;
+            // Update zoom defaults: 60% if fitting, 100% if resetting
+            if (newValue) {
+                setZoomLevel(0.6);
+            } else {
+                setZoomLevel(1);
+            }
+            return newValue;
+        });
     };
 
     const xpForPriority: Record<Priority, number> = { 'Critical': 50, 'High': 30, 'Medium': 20, 'Low': 10 };
@@ -752,6 +778,8 @@ const App: React.FC = () => {
                 onManualPush={manualPush}
                 isCompactMode={isCompactMode}
                 onToggleCompactMode={() => setIsCompactMode(prev => !prev)}
+                isFitToScreen={isFitToScreen}
+                onToggleFitToScreen={handleToggleFitToScreen}
                 zoomLevel={zoomLevel}
                 setZoomLevel={setZoomLevel}
                 // Pass Audio Data
@@ -790,6 +818,7 @@ const App: React.FC = () => {
                                     focusMode={focusMode}
                                     onDeleteTask={deleteTask}
                                     isCompactMode={isCompactMode}
+                                    isFitToScreen={isFitToScreen}
                                     zoomLevel={zoomLevel}
                                 />
                             )}
