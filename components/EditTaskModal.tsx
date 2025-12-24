@@ -16,6 +16,10 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
     const [tagsInput, setTagsInput] = useState(task.tags?.join(', ') || '');
     const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
     const [activeBlockerReason, setActiveBlockerReason] = useState('');
+    
+    // Validation State
+    const [errors, setErrors] = useState<{ title?: string; timeEstimate?: string }>({});
+    const [showBlockerWarning, setShowBlockerWarning] = useState(false);
 
     const isNewTask = task.id.startsWith('new-');
     
@@ -25,6 +29,14 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
         setTagsInput(task.tags?.join(', ') || '');
         setActiveBlockerReason(currentActiveBlocker?.reason || '');
     }, [task]);
+
+    // Check for blocker warning logic
+    useEffect(() => {
+        const currentActiveBlocker = task.blockers?.find(b => !b.resolved);
+        const newReason = activeBlockerReason.trim();
+        const hasNewBlocker = newReason !== '' && newReason !== (currentActiveBlocker?.reason || '');
+        setShowBlockerWarning(hasNewBlocker && editedTask.status !== 'Blocker');
+    }, [activeBlockerReason, editedTask.status, task.blockers]);
 
 
     // Function to recursively check for circular dependencies
@@ -56,6 +68,20 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
 
 
     const handleSave = useCallback(() => {
+        // Validation
+        const newErrors: { title?: string; timeEstimate?: string } = {};
+        if (!editedTask.title.trim()) {
+            newErrors.title = "Task title is required.";
+        }
+        if (editedTask.timeEstimate !== undefined && editedTask.timeEstimate < 0) {
+            newErrors.timeEstimate = "Time estimate cannot be negative.";
+        }
+        
+        if (Object.keys(newErrors).length > 0) {
+            setErrors(newErrors);
+            return;
+        }
+
         const tags = tagsInput.split(',').map(tag => tag.trim()).filter(Boolean);
         let finalTask = { ...editedTask, tags };
     
@@ -103,11 +129,20 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
     const handleDelete = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        if (window.confirm(`Are you sure you want to delete "${task.title}" permanently?`)) {
-            onDelete(task.id);
-            onClose();
-        }
-    }, [onDelete, task.id, task.title, onClose]);
+        // Uses global ConfirmModal triggered in App.tsx via onDelete callback which should trigger the check
+        // But here we are calling onDelete directly. The audit wants a custom modal.
+        // We will delegate the visual part to the parent App.tsx if it wraps this, but `EditTaskModal` is a child.
+        // To fix properly, we will modify `handleDelete` to accept a callback or use a window.confirm replacement? 
+        // No, the instruction is to replace browser confirm.
+        // We can't render the global ConfirmModal from here easily without context.
+        // We will assume the parent passes a wrapper or we invoke the global modal method if available.
+        // Since we are refactoring, we'll assume `onDelete` handles the confirmation flow or we trigger it.
+        // Actually, let's keep it simple: We call onDelete, and the Parent (App) shows the confirm dialog.
+        // Wait, current `App.tsx` `handleEditTask` -> `EditTaskModal` calls `deleteTask`.
+        // We will change the `onDelete` prop behavior in `App.tsx` to show the modal.
+        onDelete(task.id);
+        // We don't close immediately here if the parent handles confirmation.
+    }, [onDelete, task.id]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -123,6 +158,9 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
 
     const handleInputChange = <K extends keyof Task>(key: K, value: Task[K]) => {
         setEditedTask(prev => ({...prev, [key]: value}));
+        // Clear errors
+        if (key === 'title') setErrors(prev => ({ ...prev, title: undefined }));
+        if (key === 'timeEstimate') setErrors(prev => ({ ...prev, timeEstimate: undefined }));
     };
 
     const handleDateTimeChange = (value: string) => {
@@ -180,8 +218,16 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
                 
                 <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-4">
                     <div>
-                        <label htmlFor="task-title" className={labelClasses}>Title</label>
-                        <input id="task-title" type="text" value={editedTask.title} onChange={e => handleInputChange('title', e.target.value)} placeholder="Title" className={inputClasses}/>
+                        <label htmlFor="task-title" className={labelClasses}>Title <span className="text-red-500">*</span></label>
+                        <input 
+                            id="task-title" 
+                            type="text" 
+                            value={editedTask.title} 
+                            onChange={e => handleInputChange('title', e.target.value)} 
+                            placeholder="Title" 
+                            className={`${inputClasses} ${errors.title ? 'border-red-500 focus:ring-red-500' : ''}`}
+                        />
+                        {errors.title && <p className="text-red-500 text-xs mt-1">{errors.title}</p>}
                     </div>
                     <div>
                         <label htmlFor="task-desc" className={labelClasses}>Description</label>
@@ -207,7 +253,17 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
                          </div>
                          <div>
                             <label htmlFor="task-time-est" className={labelClasses}>Time Estimate (hours)</label>
-                            <input id="task-time-est" type="number" value={editedTask.timeEstimate || ''} onChange={e => handleInputChange('timeEstimate', Number(e.target.value))} placeholder="e.g., 2.5" className={inputClasses}/>
+                            <input 
+                                id="task-time-est" 
+                                type="number" 
+                                min="0" 
+                                step="0.5" 
+                                value={editedTask.timeEstimate || ''} 
+                                onChange={e => handleInputChange('timeEstimate', Number(e.target.value))} 
+                                placeholder="e.g., 2.5" 
+                                className={`${inputClasses} ${errors.timeEstimate ? 'border-red-500 focus:ring-red-500' : ''}`}
+                            />
+                            {errors.timeEstimate && <p className="text-red-500 text-xs mt-1">{errors.timeEstimate}</p>}
                          </div>
                     </div>
                      <div>
@@ -236,8 +292,14 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
                             value={activeBlockerReason}
                             onChange={e => setActiveBlockerReason(e.target.value)}
                             placeholder="e.g., Waiting for API key from external team..."
-                            className={`${inputClasses} h-20`}
+                            className={`${inputClasses} h-20 ${showBlockerWarning ? 'border-amber-500 focus:ring-amber-500' : ''}`}
                         />
+                        {showBlockerWarning && (
+                            <p className="text-amber-600 dark:text-amber-400 text-xs mt-1 font-bold">
+                                <i className="fas fa-exclamation-triangle mr-1"></i>
+                                Warning: Saving this will automatically move the task to the 'Blocker' column.
+                            </p>
+                        )}
                     </div>
 
                      {/* Dependencies Section */}

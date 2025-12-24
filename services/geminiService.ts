@@ -11,8 +11,12 @@ const process = {
     }
 };
 
+// Check for API Key immediately
+const hasApiKey = !!process.env.API_KEY && process.env.API_KEY !== 'undefined';
+
 // The API key must be obtained exclusively from the environment variable process.env.API_KEY.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// We only initialize if the key exists to avoid immediate errors, but we handle missing keys in the methods.
+const ai = hasApiKey ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
 
 const responseSchema = {
     type: Type.ARRAY,
@@ -99,6 +103,7 @@ const backfillNewFields = (task: any): Task => {
 };
 
 export const generateInitialTasks = async (): Promise<Task[]> => {
+    if (!ai) throw new Error("Gemini API Key is missing. Please check your environment variables (VITE_GEMINI_API_KEY).");
     try {
         const currentDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
         const prompt = `Current Date: ${currentDate}\n\nGenerate 5 diverse example tasks for a software developer using this kanban board for the first time. Include different priorities, statuses, and a due date for every single task. One task should be due tomorrow. Add a few subtasks to at least two of the main tasks.`;
@@ -123,6 +128,7 @@ export const generateInitialTasks = async (): Promise<Task[]> => {
 };
 
 export const manageTasksWithAI = async (command: string, currentTasks: Task[]): Promise<Task[]> => {
+    if (!ai) throw new Error("Gemini API Key is missing. Please configuration your environment.");
     try {
         const currentDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
         const prompt = `Current Date: ${currentDate}\n\nUser command: "${command}"\n\nCurrent tasks state:\n${JSON.stringify(currentTasks, null, 2)}`;
@@ -141,13 +147,17 @@ export const manageTasksWithAI = async (command: string, currentTasks: Task[]): 
         const updatedTasks = JSON.parse(jsonText);
         return updatedTasks.map(backfillNewFields);
 
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error managing tasks with AI:", error);
+        if (error.message && error.message.includes("API_KEY")) {
+             throw new Error("Invalid or missing API Key.");
+        }
         throw new Error("The AI assistant had trouble understanding that. Please try rephrasing your command.");
     }
 };
 
 export const generateTaskSummary = async (currentTasks: Task[]): Promise<string> => {
+    if (!ai) throw new Error("Gemini API Key is missing. The AI assistant cannot function without it.");
     try {
         const prompt = `Here is the current list of tasks:\n${JSON.stringify(currentTasks, null, 2)}`;
 
@@ -161,8 +171,11 @@ export const generateTaskSummary = async (currentTasks: Task[]): Promise<string>
         
         return response.text.trim();
 
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error generating task summary with AI:", error);
-        throw new Error("The AI assistant had trouble generating a summary. Please try again.");
+        if (error.message && error.message.includes("API_KEY")) {
+             throw new Error("Invalid or missing API Key.");
+        }
+        throw new Error("The AI assistant had trouble generating a summary. Please try again later.");
     }
 };

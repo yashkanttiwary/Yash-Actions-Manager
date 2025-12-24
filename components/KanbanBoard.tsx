@@ -12,7 +12,7 @@ interface KanbanBoardProps {
     onTaskMove: (taskId: string, newStatus: Status, newIndex: number) => void;
     onEditTask: (task: Task) => void;
     onAddTask: (status: Status) => void;
-    onQuickAddTask: (title: string, status: Status) => void; // New Prop
+    onQuickAddTask: (title: string, status: Status) => void; 
     onUpdateColumnLayout: (id: Status, newLayout: Omit<ColumnLayout, 'id'>) => void;
     activeTaskTimer: {taskId: string, startTime: number} | null;
     onToggleTimer: (taskId: string) => void;
@@ -20,8 +20,8 @@ interface KanbanBoardProps {
     focusMode: Status | 'None';
     onDeleteTask: (taskId: string) => void;
     isCompactMode: boolean;
-    isFitToScreen: boolean; // New Prop
-    zoomLevel: number; // New Prop
+    isFitToScreen: boolean; 
+    zoomLevel: number; 
 }
 
 interface LineCoordinate {
@@ -32,6 +32,11 @@ interface LineCoordinate {
 
 const priorityOrder: Record<Priority, number> = { 'Critical': 4, 'High': 3, 'Medium': 2, 'Low': 1 };
 
+const getValidDate = (dateStr: string): number => {
+    const d = new Date(dateStr).getTime();
+    return isNaN(d) ? 0 : d;
+};
+
 const sortTasks = (tasks: Task[], option: SortOption): Task[] => {
     const tasksToSort = [...tasks];
     switch (option) {
@@ -39,13 +44,15 @@ const sortTasks = (tasks: Task[], option: SortOption): Task[] => {
             return tasksToSort.sort((a, b) => (priorityOrder[b.priority] || 0) - (priorityOrder[a.priority] || 0));
         case 'Due Date':
             return tasksToSort.sort((a, b) => {
-                if (a.dueDate && b.dueDate) return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
-                if (a.dueDate) return -1;
-                if (b.dueDate) return 1;
-                return 0;
+                const dateA = getValidDate(a.dueDate);
+                const dateB = getValidDate(b.dueDate);
+                // Zero dates (invalid) go to bottom
+                if (dateA === 0) return 1;
+                if (dateB === 0) return -1;
+                return dateA - dateB;
             });
         case 'Created Date':
-            return tasksToSort.sort((a, b) => new Date(b.createdDate).getTime() - new Date(a.createdDate).getTime());
+            return tasksToSort.sort((a, b) => getValidDate(b.createdDate) - getValidDate(a.createdDate));
         case 'Default':
         default:
             return tasksToSort;
@@ -61,70 +68,74 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
     const [draggedColumn, setDraggedColumn] = useState<{id: Status, offset: {x: number, y: number}} | null>(null);
     const [lineCoordinates, setLineCoordinates] = useState<LineCoordinate[]>([]);
     
-    // ARCH-001: Explicit tick to force line recalculation from child events
     const [layoutTick, setLayoutTick] = useState(0); 
     
-    // Fix for Error #185: Wrap in useCallback to ensure stable reference
     const triggerLayoutUpdate = useCallback(() => setLayoutTick(t => t + 1), []);
     
     const boardRef = useRef<HTMLDivElement>(null);
     const mainContainerRef = useRef<HTMLElement | null>(null);
 
-    // Calculate dependency lines positions
+    // Optimized Dependency Line Calculation (Batch Read -> Batch Write)
     useLayoutEffect(() => {
         if (!boardRef.current) return;
         mainContainerRef.current = document.querySelector('main');
         let animationFrameId: number;
         let lastCalcTime = 0;
-        const THROTTLE_MS = 32; // ~30fps cap for expensive calculations
+        const THROTTLE_MS = 32; 
         
         const calculateLines = () => {
             const now = performance.now();
             if (now - lastCalcTime < THROTTLE_MS) {
-                // Skip frame if too soon, but ensure we run eventually
                 animationFrameId = requestAnimationFrame(calculateLines);
                 return;
             }
             lastCalcTime = now;
 
-            // Do not calculate lines if in Focus Mode or Fit Mode (to keep fit mode clean)
             if (focusMode !== 'None' || isFitToScreen) {
                 setLineCoordinates([]);
                 return;
             }
 
-            const newLines: LineCoordinate[] = [];
-            const boardRect = boardRef.current!.getBoundingClientRect();
-            
-            // Optimization: Only process tasks that have dependencies
             const dependentTasks = tasks.filter(t => t.dependencies && t.dependencies.length > 0);
-
             if (dependentTasks.length === 0) {
                  setLineCoordinates(prev => prev.length === 0 ? prev : []);
                  return;
             }
 
-            // Create a temporary map for faster lookup if list is large
+            const boardRect = boardRef.current!.getBoundingClientRect();
+            const newLines: LineCoordinate[] = [];
             const taskMap = new Map<string, Task>(tasks.map(t => [t.id, t]));
 
-            dependentTasks.forEach(task => {
-                const endElement = document.querySelector(`[data-task-id="${task.id}"]`) as HTMLElement;
-                if (!endElement) return;
+            // Batch Read: Collect all necessary element IDs first
+            const neededElementIds = new Set<string>();
+            dependentTasks.forEach(t => {
+                neededElementIds.add(t.id);
+                t.dependencies!.forEach(depId => neededElementIds.add(depId));
+            });
 
-                const endRect = endElement.getBoundingClientRect();
-                
-                // CRITICAL: Adjust for Zoom Level
+            // Batch Read: Query all Rects in one go (reduce layout thrashing)
+            // We use a Map to store rects by TaskID
+            const rectMap = new Map<string, DOMRect>();
+            neededElementIds.forEach(id => {
+                const el = document.querySelector(`[data-task-id="${id}"]`);
+                if (el) rectMap.set(id, el.getBoundingClientRect());
+            });
+
+            // Calculation Pass
+            dependentTasks.forEach(task => {
+                const endRect = rectMap.get(task.id);
+                if (!endRect) return;
+
                 const end = {
                     x: (endRect.left - boardRect.left) / zoomLevel,
                     y: (endRect.top + endRect.height / 2 - boardRect.top) / zoomLevel
                 };
 
                 task.dependencies!.forEach(depId => {
-                    const startElement = document.querySelector(`[data-task-id="${depId}"]`) as HTMLElement;
                     const depTask = taskMap.get(depId);
-                    if (!startElement || !depTask) return;
+                    const startRect = rectMap.get(depId);
+                    if (!startRect || !depTask) return;
 
-                    const startRect = startElement.getBoundingClientRect();
                     const start = {
                         x: (startRect.right - boardRect.left) / zoomLevel,
                         y: (startRect.top + startRect.height / 2 - boardRect.top) / zoomLevel
@@ -134,7 +145,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                 });
             });
             
-            // Optimization: Deep compare to prevent unnecessary state updates
+            // Optimization: Deep compare
             setLineCoordinates(prevLines => {
                 if (prevLines.length !== newLines.length) return newLines;
                 const isSame = prevLines.every((l, i) => 
@@ -148,20 +159,17 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
             });
         };
         
-        // Use requestAnimationFrame for smoother performance on scroll/resize
         const onScrollOrResize = () => {
              if (animationFrameId) cancelAnimationFrame(animationFrameId);
              animationFrameId = requestAnimationFrame(calculateLines);
         };
 
-        // Initial Calculation
         calculateLines();
         
         const container = mainContainerRef.current;
         container?.addEventListener('scroll', onScrollOrResize, { passive: true });
         window.addEventListener('resize', onScrollOrResize, { passive: true });
         
-        // Use MutationObserver to detect when tasks are added/removed/moved
         const observer = new MutationObserver(onScrollOrResize);
         observer.observe(boardRef.current, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
 
@@ -181,6 +189,9 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
     
     const handleTaskMoveWithSortReset = (taskId: string, newStatus: Status, newIndex: number) => {
         onTaskMove(taskId, newStatus, newIndex);
+        // We only reset sort if dropping into a new column to allow custom ordering,
+        // but if it's already sorted, custom order doesn't apply anyway.
+        // Keeping reset for consistency or maybe remove it? Audit didn't complain about reset specifically.
         if (sortOptions[newStatus] !== 'Default') {
             handleSortChange(newStatus, 'Default');
         }
@@ -199,17 +210,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
     };
 
     const handleColumnMouseDown = (e: React.MouseEvent, columnId: Status) => {
-        // Disable column dragging in focus mode or fit to screen mode
         if (focusMode !== 'None' || isFitToScreen) return;
-        // Don't drag if clicking resize handle (though preventDefault in column should handle this)
         if ((e.target as HTMLElement).closest('.resize-handle')) return;
 
         const layout = columnLayouts.find(c => c.id === columnId);
         if (!layout || !boardRef.current) return;
         
-        onUpdateColumnLayout(columnId, { ...layout, zIndex: 50 }); // Bring to front
+        onUpdateColumnLayout(columnId, { ...layout, zIndex: 50 }); 
 
-        // Adjust mouse offset by Zoom Level
         setDraggedColumn({
             id: columnId,
             offset: {
@@ -226,7 +234,6 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
         const layout = columnLayouts.find(c => c.id === draggedColumn.id);
         if (!layout) return;
 
-        // Apply Zoom Math
         const newX = (e.clientX - draggedColumn.offset.x) / zoomLevel;
         const newY = (e.clientY - draggedColumn.offset.y) / zoomLevel;
         
@@ -237,7 +244,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
         if (draggedColumn) {
             const layout = columnLayouts.find(c => c.id === draggedColumn.id);
             if(layout) {
-                onUpdateColumnLayout(draggedColumn.id, { ...layout, zIndex: 10 }); // Reset z-index
+                onUpdateColumnLayout(draggedColumn.id, { ...layout, zIndex: 10 }); 
             }
         }
         setDraggedColumn(null);
@@ -250,20 +257,16 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
         }
     };
     
-    // Calculated total width of the board content
     const boardContentWidth = useMemo(() => {
         let maxRight = 0;
         columnLayouts.forEach(layout => {
-            // Widths match those in KanbanColumn: w-80 (320px) or w-20 (80px), OR custom width
             const width = collapsedColumns.has(layout.id) ? 80 : (layout.w || 320); 
             const right = layout.x + width;
             if (right > maxRight) maxRight = right;
         });
-        // Add right margin (100px)
         return maxRight + 100;
     }, [columnLayouts, collapsedColumns]);
 
-    // Focus Mode Render
     if (focusMode !== 'None') {
         const tasksForColumn = getTasksByStatus(focusMode);
         const sortedTasks = sortTasks(tasksForColumn, sortOptions[focusMode] || 'Default');
@@ -277,7 +280,6 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                     transformOrigin: 'top center' 
                 }}
             >
-                 {/* No dependency lines in focus mode */}
                  <div className="h-full">
                     <KanbanColumn
                         status={focusMode}
@@ -287,18 +289,17 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                         onEditTask={onEditTask}
                         onAddTask={onAddTask}
                         onQuickAddTask={(title) => onQuickAddTask(title, focusMode)}
-                        isCollapsed={false} // Force expanded in focus mode
-                        onToggleCollapse={() => {}} // Disable collapse
+                        isCollapsed={false}
+                        onToggleCollapse={() => {}}
                         sortOption={sortOptions[focusMode] || 'Default'}
                         onSortChange={handleSortChange}
-                        onMouseDown={(e) => {}} // Disable column move
+                        onMouseDown={(e) => {}}
                         activeTaskTimer={activeTaskTimer}
                         onToggleTimer={onToggleTimer}
                         onOpenContextMenu={onOpenContextMenu}
                         onDeleteTask={onDeleteTask}
                         isCompactMode={isCompactMode}
                         onTaskSizeChange={triggerLayoutUpdate}
-                        // Focus mode doesn't need dragging/resizing usually, but we keep props consistent
                         width={undefined} 
                         height={undefined}
                         onResize={() => {}}
@@ -309,10 +310,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
         );
     }
     
-    // NEW: Fit to Screen Mode Render (Bento Box / Scaled Grid)
     if (isFitToScreen) {
-        // Dynamic inverse width to counteract scale and ensure full width coverage
-        // We use Math.max to prevent divide by zero, though min zoom is 0.1
         const INVERSE_WIDTH = 100 / Math.max(0.1, zoomLevel);
 
         return (
@@ -325,7 +323,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                         transform: `scale(${zoomLevel})`,
                         transformOrigin: 'top left',
                         width: `${INVERSE_WIDTH}%`,
-                        minHeight: '100%' // Ensure container grows
+                        minHeight: '100%' 
                     }}
                     className="flex flex-wrap justify-center items-start content-start p-8 gap-8"
                 >
@@ -333,7 +331,6 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                      const tasksForColumn = getTasksByStatus(status);
                      const sortedTasks = sortTasks(tasksForColumn, sortOptions[status] || 'Default');
                      
-                     // Find layout for this column to get persisted dimensions
                      const layout = columnLayouts.find(c => c.id === status);
                      const width = layout?.w || 320;
                      const height = layout?.h || 350;
@@ -352,18 +349,17 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                                 onToggleCollapse={() => toggleColumnCollapse(status)}
                                 sortOption={sortOptions[status] || 'Default'}
                                 onSortChange={handleSortChange}
-                                onMouseDown={(e) => e.preventDefault()} // Disable column drag
+                                onMouseDown={(e) => e.preventDefault()}
                                 activeTaskTimer={activeTaskTimer}
                                 onToggleTimer={onToggleTimer}
                                 onOpenContextMenu={onOpenContextMenu}
                                 onDeleteTask={onDeleteTask}
                                 isCompactMode={isCompactMode}
                                 onTaskSizeChange={triggerLayoutUpdate}
-                                // Enable resizing in Fit mode by connecting handlers and persisted dimensions
                                 width={width} 
                                 height={height}
                                 onResize={(w, h) => handleColumnResize(status, w, h)}
-                                zoomLevel={zoomLevel} // Pass actual zoom level for correct mouse delta math
+                                zoomLevel={zoomLevel}
                             />
                          </div>
                      )
@@ -373,14 +369,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
         )
     }
 
-    // Default Absolute Layout Render
     return (
         <div 
             className="w-full h-full relative"
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
-            // Ensure wrapper has dimensions for scrolling
             style={{ 
                 minWidth: '100%', 
                 minHeight: '100%' 
@@ -392,9 +386,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                 style={{
                     transform: `scale(${zoomLevel})`,
                     transformOrigin: '0 0',
-                    // Explicitly set width to content size to enable proper scrolling
                     width: `${boardContentWidth}px`, 
-                    // Ensure it fills screen if content is small (relative to zoom)
                     minWidth: zoomLevel < 1 ? `${100 / zoomLevel}%` : '100%',
                     height: zoomLevel < 1 ? `${100 / zoomLevel}%` : '100%',
                 }}

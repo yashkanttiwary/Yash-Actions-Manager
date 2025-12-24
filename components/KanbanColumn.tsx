@@ -6,12 +6,12 @@ import { STATUS_STYLES } from '../constants';
 
 interface KanbanColumnProps {
     status: Status;
-    tasks: Task[]; // Tasks for this specific column
+    tasks: Task[]; // Tasks for this specific column (potentially sorted)
     allTasks: Task[]; // All tasks for context (e.g., dependencies)
     onTaskMove: (taskId: string, newStatus: Status, newIndex: number) => void;
     onEditTask: (task: Task) => void;
     onAddTask: (status: Status) => void;
-    onQuickAddTask: (title: string) => void; // New Prop for Quick Add
+    onQuickAddTask: (title: string) => void; 
     isCollapsed: boolean;
     onToggleCollapse: () => void;
     sortOption: SortOption;
@@ -23,10 +23,10 @@ interface KanbanColumnProps {
     onDeleteTask: (taskId: string) => void;
     isCompactMode: boolean;
     onTaskSizeChange?: () => void; 
-    width?: number; // Custom width
-    height?: number; // Custom height
+    width?: number; 
+    height?: number; 
     onResize?: (width: number, height: number) => void;
-    zoomLevel?: number; // Needed for correct resizing math
+    zoomLevel?: number;
 }
 
 export const KanbanColumn: React.FC<KanbanColumnProps> = ({ 
@@ -65,18 +65,50 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
         
         const dropY = e.clientY;
         const cards = Array.from(e.currentTarget.querySelectorAll('.task-card'));
-        const dropIndex = cards.findIndex(card => {
+        
+        // Find visual index based on Y position
+        let visualDropIndex = cards.findIndex(card => {
             const rect = (card as HTMLElement).getBoundingClientRect();
             return dropY < rect.top + rect.height / 2;
         });
 
-        onTaskMove(taskId, status, dropIndex === -1 ? tasks.length : dropIndex);
+        if (visualDropIndex === -1) {
+            visualDropIndex = tasks.length;
+        }
+
+        // Fix H-01: Map visual index (which might be sorted) to logical index
+        let logicalIndex = visualDropIndex;
+
+        if (sortOption !== 'Default') {
+            // If sorted, we can't trust visualDropIndex as the insertion point for the master list.
+            // Strategy: Find the task currently at visualDropIndex (the "target").
+            // Insert *before* that target in the unsorted list.
+            
+            if (visualDropIndex < tasks.length) {
+                const targetTask = tasks[visualDropIndex];
+                // Find where this target task lives in the unsorted list for this column
+                // We need to filter allTasks by this status to get the "Master Column List"
+                const unsortedColumnTasks = allTasks.filter(t => t.status === status);
+                const targetIndexInMaster = unsortedColumnTasks.findIndex(t => t.id === targetTask.id);
+                
+                if (targetIndexInMaster !== -1) {
+                    logicalIndex = targetIndexInMaster;
+                }
+            } else {
+                // Dropped at the end of a sorted list
+                // We simply append to the end of the logical list
+                const unsortedColumnTasks = allTasks.filter(t => t.status === status);
+                logicalIndex = unsortedColumnTasks.length;
+            }
+        }
+
+        onTaskMove(taskId, status, logicalIndex);
     };
     
     const handleResizeStart = (e: React.MouseEvent) => {
         if (!onResize || !colRef.current) return;
         e.preventDefault();
-        e.stopPropagation(); // Prevent column drag
+        e.stopPropagation();
         
         setIsResizing(true);
         resizeStartRef.current = {
@@ -93,12 +125,11 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
     const handleResizeMove = (e: MouseEvent) => {
         if (!resizeStartRef.current || !onResize) return;
         
-        // Calculate deltas, adjusting for zoom level
         const dx = (e.clientX - resizeStartRef.current.x) / zoomLevel;
         const dy = (e.clientY - resizeStartRef.current.y) / zoomLevel;
         
-        const newW = Math.max(200, resizeStartRef.current.w + dx); // Min width 200
-        const newH = Math.max(100, resizeStartRef.current.h + dy); // Min height 100
+        const newW = Math.max(200, resizeStartRef.current.w + dx);
+        const newH = Math.max(100, resizeStartRef.current.h + dy);
         
         onResize(newW, newH);
     };
@@ -108,7 +139,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
         resizeStartRef.current = null;
         document.removeEventListener('mousemove', handleResizeMove);
         document.removeEventListener('mouseup', handleResizeEnd);
-        if(onTaskSizeChange) onTaskSizeChange(); // Update board layout/lines
+        if(onTaskSizeChange) onTaskSizeChange();
     };
 
     const handleQuickAddSubmit = (e: React.FormEvent) => {
@@ -123,7 +154,6 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
         const el = scrollContainerRef.current;
         if (!el) return;
         
-        // Show if there is overflow and we haven't scrolled to the very bottom
         const hasOverflow = el.scrollHeight > el.clientHeight;
         const isAtBottom = Math.abs(el.scrollHeight - el.clientHeight - el.scrollTop) < 5;
         
@@ -132,16 +162,12 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
 
     useEffect(() => {
         checkScrollIndicator();
-        // Re-check when task list changes or layout changes
     }, [tasks, height, isCollapsed, checkScrollIndicator, isCompactMode]);
 
     const handleScroll = () => {
         checkScrollIndicator();
     };
     
-    // Determine dimensions
-    // Default width: 80 (collapsed) or 320 (expanded)
-    // Default height: undefined (auto)
     const currentWidth = isCollapsed ? 80 : (width || 320);
     const currentHeight = height ? height : 'auto';
     const isCustomHeight = !!height;
@@ -178,7 +204,6 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
             </div>
             {!isCollapsed && (
                 <>
-                    {/* NEW: Quick Add & Detail Add Section */}
                     <div className="p-2 border-b border-gray-300 dark:border-gray-700 bg-white/20 dark:bg-black/10">
                         <form onSubmit={handleQuickAddSubmit} className="flex gap-2">
                             <input 
@@ -192,7 +217,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                                 type="button"
                                 onClick={() => onAddTask(status)}
                                 className="px-3 py-1.5 bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-md transition-colors border border-gray-300 dark:border-gray-600 shadow-sm flex items-center gap-1.5 whitespace-nowrap text-xs font-bold"
-                                title="Open full task creator to add details like description, subtasks, etc."
+                                title="Open full task creator"
                             >
                                 <i className="fas fa-pen-to-square"></i> Detail
                             </button>
@@ -244,7 +269,6 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                         )}
                     </div>
                     
-                    {/* Scroll Indicator Gradient */}
                     <div 
                         className={`absolute bottom-0 left-0 right-0 h-12 pointer-events-none transition-opacity duration-300 rounded-b-xl z-20 ${showScrollIndicator ? 'opacity-100' : 'opacity-0'}`}
                         style={{
@@ -252,7 +276,6 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                         }}
                     ></div>
 
-                    {/* Resize Handle */}
                     {onResize && (
                         <div 
                             className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize flex items-center justify-center resize-handle opacity-50 hover:opacity-100 z-30"

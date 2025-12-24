@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Task, Status } from '../types';
 import { PRIORITY_COLORS, STATUS_STYLES, COLUMN_STATUSES } from '../constants';
@@ -141,16 +142,22 @@ const ScheduledEvent: React.FC<{
     const handleDragStart = (e: React.DragEvent) => {
         e.dataTransfer.setData('taskId', task.id);
         e.dataTransfer.effectAllowed = 'move';
+        // Need to allow propagation for the parent column to potentially see it, but we also want to start drag.
+        // Actually, preventing default on drop targets is key.
     };
 
     return (
         <div
             ref={eventRef}
             style={{ top, height }}
-            onClick={() => onEditTask(task)}
+            onClick={(e) => { e.stopPropagation(); onEditTask(task); }}
             onContextMenu={(e) => onContextMenu(e, task)}
             draggable={true}
             onDragStart={handleDragStart}
+            // IMPORTANT: Allow dropping on the event itself (to bubble up to column) or prevent it?
+            // If we don't preventDefault in dragOver, it won't be a drop target.
+            // But we WANT the underlying column to receive the drop.
+            // By default, events bubble. So if we do nothing, dragOver bubbles to column.
             className={`absolute left-0 right-1 ${statusStyle.header} ${statusStyle.cardBorder} p-2 rounded-r-lg overflow-hidden cursor-pointer group hover:opacity-90 transition-opacity z-10 text-white ${isDone ? 'line-through opacity-70' : ''}`}
         >
             <h5 className="font-bold text-sm truncate">{task.title}</h5>
@@ -238,12 +245,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onUpdateTask,
         const task = tasks.find(t => t.id === taskId);
         if (!task) return;
         
+        // Calculate drop time
         const rect = e.currentTarget.getBoundingClientRect();
         const dropY = e.clientY - rect.top;
         const hourFraction = dropY / HOUR_HEIGHT;
         const droppedHour = hour ?? Math.floor(hourFraction);
         const minute = Math.floor((hourFraction % 1) * 4) * SNAP_MINUTES;
 
+        // Construct new date in UTC
         const newStartDate = new Date(Date.UTC(
             date.getFullYear(),
             date.getMonth(),
@@ -336,7 +345,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onUpdateTask,
             <div 
                 key={day.toISOString()}
                 className="relative border-r border-gray-300 dark:border-gray-700 h-full"
-                onDragOver={(e) => e.preventDefault()}
+                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
                 onDrop={(e) => handleDropOnCalendar(e, day)}
                 onDoubleClick={(e) => {
                     const rect = e.currentTarget.getBoundingClientRect();
@@ -346,7 +355,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onUpdateTask,
                 }}
             >
                 {timelineHours.map(hour => (
-                    <div key={hour} className="h-[60px] border-b border-gray-300/50 dark:border-gray-700/50"></div>
+                    <div key={hour} className="h-[60px] border-b border-gray-300/50 dark:border-gray-700/50 pointer-events-none"></div>
                 ))}
                 {isToday && timeIndicatorPosition !== -1 && (
                     <div 
@@ -367,14 +376,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onUpdateTask,
 
     const renderTimeGrid = (days: Date[]) => (
          <div className="flex-grow flex border-t border-gray-300 dark:border-gray-700 h-full">
-            <div className="w-16 border-r border-gray-300 dark:border-gray-700">
+            <div className="w-16 border-r border-gray-300 dark:border-gray-700 flex-shrink-0 bg-white dark:bg-gray-800 z-10">
                 {timelineHours.map(hour => (
                     <div key={hour} className="h-[60px] text-right pr-2 text-xs text-gray-500 dark:text-gray-400 relative -top-2">
                         {hour > 0 ? (hour >= 12 ? `${hour === 12 ? 12 : hour - 12} PM` : `${hour} AM`) : ''}
                     </div>
                 ))}
             </div>
-            <div className={`flex-grow grid grid-cols-${days.length}`}>
+            <div className={`flex-grow grid grid-cols-${days.length} min-w-[300px]`}>
                 {days.map(day => renderDayColumn(day))}
             </div>
         </div>
@@ -386,7 +395,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onUpdateTask,
                 <div 
                     key={day ? day.toISOString() : `blank-${index}`} 
                     className="border-b border-r border-gray-300 dark:border-gray-700 p-1 overflow-y-auto min-h-[100px]"
-                    onDragOver={(e) => e.preventDefault()}
+                    onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
                     onDrop={day ? (e) => handleDropOnCalendar(e, day, 9) : undefined}
                 >
                     {day && (
@@ -443,7 +452,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onUpdateTask,
                         placeholder="Search tasks..." 
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full p-2 bg-gray-100 dark:bg-gray-700 rounded-md text-sm" 
+                        className="w-full p-2 bg-gray-100 dark:bg-gray-700 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" 
                     />
                 </div>
                 <div className="p-2 overflow-y-auto">
@@ -477,10 +486,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onUpdateTask,
                     {view !== 'month' && (
                         <>
                             <div className="flex flex-shrink-0">
-                                <div className="w-16 border-r border-gray-300 dark:border-gray-700"></div>
+                                <div className="w-16 border-r border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800"></div>
                                 <div className={`flex-grow grid ${view === 'week' ? 'grid-cols-7' : 'grid-cols-1'}`}>
                                     {(view === 'week' ? weekDays : [currentDate]).map(day => (
-                                        <div key={day.toISOString()} className="text-center p-2 border-r border-gray-300 dark:border-gray-700">
+                                        <div key={day.toISOString()} className="text-center p-2 border-r border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800">
                                             <div className="text-xs">{day.toLocaleDateString('default', { weekday: 'short', timeZone: timezone })}</div>
                                             <div className={`text-xl font-bold ${areDatesEqualInZone(day, currentTime, timezone) ? 'text-indigo-500' : ''}`}>{day.getDate()}</div>
                                         </div>
@@ -495,7 +504,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onUpdateTask,
                     
                     {view === 'month' && (
                         <div className="flex flex-col flex-grow overflow-auto">
-                             <div className="grid grid-cols-7 sticky top-0 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm z-10 border-b border-gray-300 dark:border-gray-700">
+                             <div className="grid grid-cols-7 sticky top-0 bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm z-10 border-b border-gray-300 dark:border-gray-700">
                                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
                                     <div key={day} className="text-center font-bold text-sm p-2">{day}</div>
                                ))}

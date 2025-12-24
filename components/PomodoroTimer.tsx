@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { playTimerSound } from '../utils/audio';
 
 interface PomodoroSettings {
@@ -26,60 +26,131 @@ const modeColors: Record<TimerMode, { text: string; stroke: string; name: string
     longBreak: { text: 'text-sky-500 dark:text-sky-400', stroke: '#38bdf8', name: 'Long Break' },
 };
 
+const STORAGE_KEY = 'pomodoro_state_v2';
+
 export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ settings }) => {
     const [mode, setMode] = useState<TimerMode>('focus');
     const [isActive, setIsActive] = useState(false);
     const [sessionCount, setSessionCount] = useState(0);
-    const [time, setTime] = useState(modeDurations(settings)[mode] * 60);
+    const [time, setTime] = useState(modeDurations(settings).focus * 60);
 
-    // Update timer when settings change
+    // Initial Load from Storage
     useEffect(() => {
-        if (!isActive) {
-            setTime(modeDurations(settings)[mode] * 60);
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved);
+                // Validate parsed data
+                if (parsed.targetTime && parsed.mode && typeof parsed.isActive === 'boolean') {
+                    const now = Date.now();
+                    const remaining = Math.ceil((parsed.targetTime - now) / 1000);
+                    
+                    if (remaining > 0 && parsed.isActive) {
+                        // Resume active timer
+                        setMode(parsed.mode);
+                        setIsActive(true);
+                        setTime(remaining);
+                        setSessionCount(parsed.sessionCount || 0);
+                    } else if (parsed.isActive) {
+                        // Timer expired while away
+                        setMode(parsed.mode);
+                        setIsActive(false);
+                        setTime(0); // This will trigger the "next mode" logic immediately on effect
+                        setSessionCount(parsed.sessionCount || 0);
+                    } else {
+                        // Paused state
+                        setMode(parsed.mode);
+                        setIsActive(false);
+                        setTime(parsed.savedTime || modeDurations(settings)[parsed.mode as TimerMode] * 60);
+                        setSessionCount(parsed.sessionCount || 0);
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to load timer state", e);
+            }
         }
-    }, [settings, mode, isActive]);
+    }, []);
+
+    // Save State logic
+    const saveState = useCallback((currentMode: TimerMode, active: boolean, currentTime: number, count: number) => {
+        const state = {
+            mode: currentMode,
+            isActive: active,
+            sessionCount: count,
+            // If active, save the target timestamp (now + remaining)
+            // If paused, save the remaining seconds
+            targetTime: active ? Date.now() + (currentTime * 1000) : null,
+            savedTime: currentTime
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }, []);
 
     const handleNextMode = useCallback(() => {
-        // Use the safe utility for sound
         playTimerSound(mode === 'focus' ? 'focus' : 'break');
 
+        let nextMode: TimerMode = 'focus';
+        let newSessionCount = sessionCount;
+
         if (mode === 'focus') {
-            const newSessionCount = sessionCount + 1;
-            setSessionCount(newSessionCount);
-            const nextMode = newSessionCount % 4 === 0 ? 'longBreak' : 'shortBreak';
-            setMode(nextMode);
-            setTime(modeDurations(settings)[nextMode] * 60);
-        } else {
-            setMode('focus');
-            setTime(modeDurations(settings).focus * 60);
+            newSessionCount++;
+            nextMode = newSessionCount % 4 === 0 ? 'longBreak' : 'shortBreak';
         }
-        setIsActive(true); // Auto-start next session
-    }, [mode, sessionCount, settings]);
+
+        setSessionCount(newSessionCount);
+        setMode(nextMode);
+        
+        const newTime = modeDurations(settings)[nextMode] * 60;
+        setTime(newTime);
+        setIsActive(true);
+        saveState(nextMode, true, newTime, newSessionCount);
+
+    }, [mode, sessionCount, settings, saveState]);
 
     useEffect(() => {
-        if (!isActive) return;
+        if (!isActive) {
+            saveState(mode, false, time, sessionCount);
+            return;
+        }
 
         const interval = setInterval(() => {
             setTime(prevTime => {
-                if (prevTime <= 1) {
-                    handleNextMode();
+                const newTime = prevTime - 1;
+                if (newTime <= 0) {
+                    // We can't call handleNextMode directly here inside setState due to dependencies
+                    // But we set to 0, and have an effect watch for 0
                     return 0;
                 }
-                return prevTime - 1;
+                // Save state every second is safe for localStorage (sync)
+                // To optimize, maybe every 5s? But 1s ensures accuracy on crash.
+                saveState(mode, true, newTime, sessionCount);
+                return newTime;
             });
         }, 1000);
 
         return () => clearInterval(interval);
-    }, [isActive, handleNextMode]);
+    }, [isActive, mode, sessionCount, saveState]);
 
-    const toggle = () => setIsActive(!isActive);
+    // Watch for time hitting 0
+    useEffect(() => {
+        if (time === 0 && isActive) {
+            handleNextMode();
+        }
+    }, [time, isActive, handleNextMode]);
+
+    const toggle = () => {
+        const newState = !isActive;
+        setIsActive(newState);
+        saveState(mode, newState, time, sessionCount);
+    };
 
     const resetTimer = useCallback(() => {
         setIsActive(false);
         setMode('focus');
         setSessionCount(0);
-        setTime(modeDurations(settings).focus * 60);
-    }, [settings]);
+        const newTime = modeDurations(settings).focus * 60;
+        setTime(newTime);
+        saveState('focus', false, newTime, 0);
+    }, [settings, saveState]);
 
     const minutes = Math.floor(time / 60);
     const seconds = time % 60;

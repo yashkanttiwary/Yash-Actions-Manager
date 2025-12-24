@@ -89,7 +89,6 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
     }, [isCompactMode]);
 
     // ARCH-001: Trigger layout recalculation when expanded state changes
-    // This makes dependency lines snap to the new height instantly
     useLayoutEffect(() => {
         if (onTaskSizeChange) {
             onTaskSizeChange();
@@ -105,7 +104,6 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
     const isOverdue = new Date(task.dueDate) < new Date() && task.status !== 'Done';
     const { style: agingStyle, message: agingMessage } = getAgingInfo(task.statusChangeDate, task.status);
     
-    // Use persisted start time from task object
     const isActiveTimer = !!task.currentSessionStartTime;
     const isBlockedByDep = task.isBlockedByDependencies;
     const activeBlocker = task.blockers?.find(b => !b.resolved);
@@ -165,11 +163,9 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
         // Stop everything to prevent parent handlers (drag/edit)
         e.preventDefault();
         e.stopPropagation();
-        e.nativeEvent.stopImmediatePropagation(); // Extra layer of safety
+        e.nativeEvent.stopImmediatePropagation(); 
         
-        if (window.confirm(`Are you sure you want to delete "${task.title}"?`)) {
-            onDeleteTask(task.id);
-        }
+        onDeleteTask(task.id);
     };
 
     const handleButtonMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
@@ -179,7 +175,6 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
 
     const cardCursorClass = isBlockedByDep ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing';
     
-    // Common Logic for Timer Button
     const renderTimerButton = (compact = false) => {
         if (task.status !== 'In Progress') return null;
         
@@ -200,7 +195,6 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
     };
 
     // --- COMPACT MODE RENDER ---
-    // Only render compact if global mode is on AND individual card is not expanded
     if (isCompactMode && !isExpanded) {
         return (
             <div
@@ -212,22 +206,21 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
                 onClick={handleCardClick}
                 onContextMenu={handleContextMenu}
                 title={agingMessage || `${task.title} (Priority: ${task.priority})`}
+                role="article"
+                aria-label={`Task: ${task.title}`}
             >
                 <div style={agingStyle} className="absolute inset-0 bg-amber-400 dark:bg-amber-500 rounded-md pointer-events-none transition-opacity duration-500 z-0"></div>
                 <div className="relative flex items-center justify-between gap-2 z-10">
                     
-                    {/* Left: Priority Indicator & Title */}
                     <div className="flex items-center gap-2 flex-grow min-w-0">
                          {isBlockedByDep ? (
                              <i className="fas fa-lock text-xs text-amber-500 flex-shrink-0" title={blockerTooltip}></i>
                          ) : (
-                             // Mobile Drag Handle (Dots)
                              <div className="md:hidden text-gray-400 cursor-move">
                                  <i className="fas fa-grip-vertical text-xs"></i>
                              </div>
                          )}
                          
-                         {/* PRIORITY TEXT BADGE */}
                          <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded flex-shrink-0 uppercase ${priorityClasses.bg} ${priorityClasses.text} border ${priorityClasses.text.replace('text-', 'border-')} border-opacity-30`} title={`Priority: ${task.priority}`}>
                             {task.priority}
                          </span>
@@ -237,26 +230,29 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
                          </span>
                     </div>
 
-                    {/* Right: Indicators, Timer & Expand Button */}
                     <div className="flex items-center gap-2 flex-shrink-0">
                         {activeBlocker && (
                             <i className="fas fa-exclamation-triangle text-red-500 text-xs" title={`Blocked: ${activeBlocker.reason}`}></i>
                         )}
                         
                         {totalSubtasks > 0 && (
-                            <span className="text-xs text-gray-500 dark:text-gray-400 font-mono flex items-center gap-1" title={`${completedSubtasks}/${totalSubtasks} subtasks completed`}>
+                            <button 
+                                type="button" 
+                                onClick={(e) => handleExpandToggle(e, true)}
+                                className="text-xs text-gray-500 dark:text-gray-400 font-mono flex items-center gap-1 hover:text-indigo-500 transition-colors" 
+                                title={`${completedSubtasks}/${totalSubtasks} subtasks completed`}
+                            >
                                 <i className="fas fa-check-square text-[10px]"></i>
                                 {completedSubtasks}/{totalSubtasks}
-                            </span>
+                            </button>
                         )}
 
                         {renderTimerButton(true)}
 
-                        {/* Expand Button */}
                         <button
                             type="button"
                             onClick={(e) => handleExpandToggle(e, true)}
-                            onMouseDown={handleButtonMouseDown} // Prevent Drag Start
+                            onMouseDown={handleButtonMouseDown} 
                             className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                             title="Expand task details"
                             aria-label="Expand task details"
@@ -276,43 +272,39 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
             data-task-id={task.id}
-            className={`group task-card task-card-tilt relative bg-white dark:bg-gray-800 rounded-lg p-2 border border-gray-200 dark:border-gray-700 shadow-md ${cardCursorClass} ${priorityClasses.glow} hover:shadow-2xl ${statusStyle.cardBorder} ${isBlockedByDep ? 'opacity-60 saturate-50' : ''}`}
+            className={`group task-card task-card-tilt relative bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700 shadow-md ${cardCursorClass} ${priorityClasses.glow} hover:shadow-2xl ${statusStyle.cardBorder} ${isBlockedByDep ? 'opacity-60 saturate-50' : ''}`}
             onClick={handleCardClick}
             onContextMenu={handleContextMenu}
             title={agingMessage || `Priority: ${task.priority} | Due: ${new Date(task.dueDate).toLocaleDateString()}`}
+            role="article"
+            aria-label={`Task: ${task.title}`}
         >
-            {/* Background Layer: z-0 */}
             <div style={agingStyle} className="absolute inset-0 bg-amber-400 dark:bg-amber-500 rounded-lg pointer-events-none transition-opacity duration-500 z-0"></div>
             
-            {/* Content Layer: z-10 (Crucial to sit above background) */}
             <div className="relative z-10">
-                {/* UX-001: Revised Header Layout to prevent overlap */}
+                {/* Header */}
                 <div className="flex justify-between items-start gap-2">
-                    <h3 className="font-bold text-gray-800 dark:text-gray-100 flex-1 flex items-center gap-2 min-w-0">
+                    <h3 className="font-bold text-gray-800 dark:text-gray-100 flex-1 flex items-center gap-2 min-w-0 text-base">
                          {isBlockedByDep ? (
                              <i className="fas fa-lock text-xs text-amber-500 flex-shrink-0" title={blockerTooltip}></i>
                          ) : (
-                             // Mobile Drag Handle
                             <div className="md:hidden text-gray-300 dark:text-gray-600 cursor-move mr-1">
                                 <i className="fas fa-grip-vertical"></i>
                             </div>
                          )}
-                        <span className="truncate">{task.title}</span>
+                        <span className="break-words leading-tight">{task.title}</span>
                     </h3>
                     
-                    {/* Header Controls: Priority & Collapse Button */}
-                    {/* z-20 Ensure controls are clickable above content */}
                     <div className="flex items-center gap-1 flex-shrink-0 relative z-20">
                         <span className={`text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap ${priorityClasses.bg} ${priorityClasses.text}`}>
                             {task.priority}
                         </span>
                         
-                        {/* Collapse Button (Only visible if expanded from compact mode) */}
                         {isCompactMode && isExpanded && (
                             <button
                                 type="button"
                                 onClick={(e) => handleExpandToggle(e, false)}
-                                onMouseDown={handleButtonMouseDown} // Prevent Drag Start
+                                onMouseDown={handleButtonMouseDown} 
                                 className="w-8 h-8 flex items-center justify-center bg-gray-100 dark:bg-gray-700 rounded-full text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 shadow-sm transition-all hover:bg-gray-200 dark:hover:bg-gray-600 ml-1 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 relative z-30 pointer-events-auto"
                                 title="Collapse to compact view"
                                 aria-label="Collapse to compact view"
@@ -324,68 +316,81 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
                 </div>
                 
                 {task.description && (
-                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-400 truncate">
+                    <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 line-clamp-3">
                         {task.description}
                     </p>
                 )}
 
                 {activeBlocker && (
-                     <div className="mt-2 p-2 bg-red-900/50 rounded-md border border-red-500/50">
-                        <p className="text-sm font-semibold text-red-300"><i className="fas fa-exclamation-triangle mr-2"></i>Blocker</p>
-                        <p className="text-xs text-red-300/80 mt-1">{activeBlocker.reason}</p>
+                     <div className="mt-2 p-2 bg-red-50 dark:bg-red-900/20 rounded-md border border-red-200 dark:border-red-800">
+                        <p className="text-xs font-bold text-red-600 dark:text-red-400 flex items-center gap-1">
+                            <i className="fas fa-exclamation-triangle"></i> Blocker
+                        </p>
+                        <p className="text-xs text-red-500 dark:text-red-300 mt-0.5">{activeBlocker.reason}</p>
                      </div>
                 )}
                 
-                <div className="flex flex-wrap gap-1 mt-2">
+                <div className="flex flex-wrap gap-1 mt-3">
                     {task.tags?.map(tag => (
-                        <span key={tag} className={`text-xs px-2 py-0.5 rounded-full text-white/90 ${getTagColor(tag)}`}>{tag}</span>
+                        <span key={tag} className={`text-xs px-2 py-0.5 rounded-full text-white/90 font-medium ${getTagColor(tag)} shadow-sm`}>{tag}</span>
                     ))}
                 </div>
 
                 {totalSubtasks > 0 && (
-                    <div className="mt-2">
-                        <div className="flex justify-between items-center text-xs text-gray-500 dark:text-gray-400 mb-1">
+                    <div className="mt-3 bg-gray-50 dark:bg-gray-900/50 rounded-md p-2">
+                        <div className="flex justify-between items-center text-xs text-gray-500 dark:text-gray-400 mb-1.5">
                             <span className="font-semibold">Subtasks</span>
                             <span>{completedSubtasks} / {totalSubtasks}</span>
                         </div>
-                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
-                            <div className="bg-green-500 h-1.5 rounded-full" style={{ width: `${subtaskProgress}%` }}></div>
+                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mb-2">
+                            <div className="bg-green-500 h-1.5 rounded-full transition-all duration-300" style={{ width: `${subtaskProgress}%` }}></div>
+                        </div>
+                        {/* Interactive Subtask List (Preview) */}
+                        <div className="space-y-1" onClick={e => e.stopPropagation()}>
+                            {task.subtasks?.slice(0, 3).map(st => (
+                                <div key={st.id} className="flex items-center gap-2 text-xs">
+                                    <i className={`fas ${st.isCompleted ? 'fa-check-square text-green-500' : 'fa-square text-gray-400'}`}></i>
+                                    <span className={`truncate ${st.isCompleted ? 'line-through text-gray-400' : 'text-gray-600 dark:text-gray-300'}`}>{st.title}</span>
+                                </div>
+                            ))}
+                            {totalSubtasks > 3 && (
+                                <div className="text-[10px] text-gray-400 pl-5">+{totalSubtasks - 3} more...</div>
+                            )}
                         </div>
                     </div>
                 )}
                 
-                <div className="mt-2 flex justify-between items-center text-xs text-gray-500 dark:text-gray-400">
+                <div className="mt-3 flex justify-between items-center text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-700/50 pt-2">
                     <span className={`flex items-center ${isOverdue ? 'text-red-500 dark:text-red-400 font-bold' : ''}`}>
                         <i className="far fa-calendar-alt mr-1.5"></i>
                         {new Date(task.dueDate).toLocaleDateString()}
                     </span>
-                    <span>In column for {formatTimeSince(task.statusChangeDate)}</span>
+                    <span>{formatTimeSince(task.statusChangeDate)}</span>
                 </div>
 
-                <div className="mt-2 pt-1 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center text-sm">
-                    <div className="text-xs font-mono text-gray-500 dark:text-gray-400 flex items-center" title="Time Tracked / Time Estimated">
-                        <i className="far fa-clock mr-1"></i>
+                <div className="mt-2 flex justify-between items-center text-sm">
+                    <div className="text-xs font-mono text-gray-500 dark:text-gray-400 flex items-center bg-gray-100 dark:bg-gray-700/50 px-2 py-1 rounded" title="Time Tracked / Time Estimated">
+                        <i className="far fa-clock mr-1.5"></i>
                         {formatSeconds(task.actualTimeSpent)}
                         {task.timeEstimate ? ` / ${task.timeEstimate}h` : ''}
                     </div>
                     
-                    {/* ACTION BUTTONS */}
                     <div className="flex items-center gap-2 relative z-50 isolate">
                         {renderTimerButton()}
                         <button
                             type="button"
                             onClick={handleDeleteClick}
                             onMouseDown={handleButtonMouseDown} 
-                            onTouchStart={handleButtonMouseDown} // Robustness for touch devices
+                            onTouchStart={handleButtonMouseDown}
                             className="w-7 h-7 flex items-center justify-center rounded-md text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
                             title="Delete Task"
+                            aria-label="Delete Task"
                         >
                             <i className="fas fa-trash-alt pointer-events-none"></i>
                         </button>
                     </div>
                 </div>
             </div>
-
         </div>
     );
 };

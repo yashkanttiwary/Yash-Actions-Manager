@@ -18,19 +18,19 @@ import { ShortcutsModal } from './components/ShortcutsModal';
 import { IntegrationsModal } from './components/IntegrationsModal';
 import { useGoogleSheetSync } from './hooks/useGoogleSheetSync';
 import { checkCalendarConnection } from './services/googleCalendarService'; 
-import { playCompletionSound, resumeAudioContext } from './utils/audio'; // Import Audio Utility
-import { storage } from './utils/storage'; // Import Centralized Storage
-import { useBackgroundAudio } from './hooks/useBackgroundAudio'; // New Audio Hook
+import { playCompletionSound, resumeAudioContext } from './utils/audio';
+import { storage } from './utils/storage';
+import { useBackgroundAudio } from './hooks/useBackgroundAudio';
 import { setUserTimeOffset } from './services/timeService';
+import { ConfirmModal } from './components/ConfirmModal';
 
-// This is a global declaration for the confetti library loaded from CDN
 declare const confetti: any;
 
-// --- COOKIE HELPERS ---
 const setCookie = (name: string, value: string, days: number) => {
     try {
         const expires = new Date(Date.now() + days * 864e5).toUTCString();
-        document.cookie = name + '=' + encodeURIComponent(value) + '; expires=' + expires + '; path=/; SameSite=Strict';
+        // Secure and SameSite=Strict added as per audit recommendation
+        document.cookie = name + '=' + encodeURIComponent(value) + '; expires=' + expires + '; path=/; SameSite=Strict; Secure';
     } catch (e) {
         console.error("Failed to set cookie", e);
     }
@@ -47,7 +47,6 @@ const getCookie = (name: string) => {
     }
 }
 
-
 interface GoogleAuthState {
     gapiLoaded: boolean;
     gisLoaded: boolean;
@@ -56,7 +55,6 @@ interface GoogleAuthState {
     disabled?: boolean;
 }
 
-// --- NEW COMPONENT: Connect Placeholder ---
 const ConnectSheetPlaceholder: React.FC<{ onConnect: () => void }> = ({ onConnect }) => (
     <div className="flex flex-col items-center justify-center h-full text-center p-8 animate-fadeIn">
         <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-xl border-2 border-dashed border-gray-300 dark:border-gray-700 max-w-md w-full">
@@ -78,17 +76,16 @@ const ConnectSheetPlaceholder: React.FC<{ onConnect: () => void }> = ({ onConnec
 );
 
 const App: React.FC = () => {
-    // 1. Load Settings & Theme FIRST
     const [theme, setTheme] = useState('light'); 
-    const [isCompactMode, setIsCompactMode] = useState(true); // Default to TRUE (Compact View)
-    const [isFitToScreen, setIsFitToScreen] = useState(true); // Default: Fit to Screen ON
-    const [zoomLevel, setZoomLevel] = useState(0.8); // Default: 80% Zoom
-    const [showTimeline, setShowTimeline] = useState(false); // Default: Timeline hidden
+    const [isCompactMode, setIsCompactMode] = useState(true);
+    const [isFitToScreen, setIsFitToScreen] = useState(true);
+    const [zoomLevel, setZoomLevel] = useState(0.8);
+    const [showTimeline, setShowTimeline] = useState(false);
 
     const [settings, setSettings] = useState<Settings>({
         dailyBudget: 16,
-        timezone: 'Asia/Kolkata', // Updated Default per user request
-        userTimeOffset: 0, // Default 0 minutes offset
+        timezone: 'Asia/Kolkata',
+        userTimeOffset: 0,
         pomodoroFocus: 25,
         pomodoroShortBreak: 5,
         pomodoroLongBreak: 15,
@@ -96,9 +93,8 @@ const App: React.FC = () => {
         googleSheetId: '',
         googleAppsScriptUrl: '',
         googleCalendarId: 'primary',
-        // Default Audio Settings
         audio: {
-            enabled: true, // Default ON
+            enabled: true,
             mode: 'brown_noise',
             volume: 0.1,
             loopMode: 'all',
@@ -107,13 +103,10 @@ const App: React.FC = () => {
     });
     const [settingsLoaded, setSettingsLoaded] = useState(false);
 
-    // 2. Determine if we are configured. 
-    // This gate controls whether useTaskManager even ATTEMPTS to load data.
     const isSheetConfigured = useMemo(() => {
         return !!(settings.googleSheetId || settings.googleAppsScriptUrl);
     }, [settings.googleSheetId, settings.googleAppsScriptUrl]);
 
-    // 3. Initialize Task Manager (With Loading Gate)
     const {
         tasks,
         columns,
@@ -130,28 +123,37 @@ const App: React.FC = () => {
         error
     } = useTaskManager(settingsLoaded && isSheetConfigured);
 
-    // --- BACKGROUND AUDIO HOOK ---
-    // Manages the actual playback logic based on settings
     const audioControls = useBackgroundAudio(settings.audio);
 
     const [editingTask, setEditingTask] = useState<Task | null>(null);
     const [blockingTask, setBlockingTask] = useState<Task | null>(null);
     const [resolvingBlockerTask, setResolvingBlockerTask] = useState<{ task: Task; newStatus: Status; newIndex: number } | null>(null);
     const [isTodayView, setIsTodayView] = useState<boolean>(false);
-    const [showBreakReminder, setShowBreakReminder] = useState<boolean>(false);
     const [showAIModal, setShowAIModal] = useState(false);
     const [isAIProcessing, setIsAIProcessing] = useState(false);
     const [aiError, setAiError] = useState<string | null>(null);
     const [aiSummary, setAiSummary] = useState<string | null>(null);
     
-    // Integrations Modal State
     const [showIntegrationsModal, setShowIntegrationsModal] = useState(false);
     const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>('general');
     
     const [viewMode, setViewMode] = useState<'kanban' | 'calendar'>('kanban');
     const [focusMode, setFocusMode] = useState<Status | 'None'>('None');
     
-    // Derived active timer from tasks to ensure persistence (HIGH-002)
+    // Confirmation Modal State
+    const [confirmModalState, setConfirmModalState] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+        isDestructive?: boolean;
+        onConfirm: () => void;
+    }>({
+        isOpen: false,
+        title: '',
+        message: '',
+        onConfirm: () => {}
+    });
+
     const activeTaskTimer = useMemo(() => {
         const activeTask = tasks.find(t => t.currentSessionStartTime);
         return activeTask ? { taskId: activeTask.id, startTime: activeTask.currentSessionStartTime! } : null;
@@ -168,7 +170,6 @@ const App: React.FC = () => {
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; task: Task } | null>(null);
     const [showShortcutsModal, setShowShortcutsModal] = useState(false);
 
-
     const [googleAuth, setGoogleAuth] = useState<GoogleAuthState>({
         gapiLoaded: false,
         gisLoaded: false,
@@ -176,7 +177,6 @@ const App: React.FC = () => {
         disabled: false,
     });
 
-    // --- SYSTEM HEALTH MONITORING STATE ---
     const [connectionHealth, setConnectionHealth] = useState<ConnectionHealth>({
         auth: { status: 'loading', message: 'Initializing...' },
         sheet: { status: 'pending', message: 'Not configured' },
@@ -184,7 +184,6 @@ const App: React.FC = () => {
         api: { status: 'missing', message: 'API Keys missing' }
     });
     
-    // Initialize Google Clients
     useEffect(() => {
         const initialize = async () => {
             try {
@@ -217,7 +216,6 @@ const App: React.FC = () => {
         setTimeout(initialize, 500); 
     }, [settings.googleApiKey, settings.googleClientId, settings.googleAppsScriptUrl]);
 
-    // FIX CRIT-001: Load/Save theme, settings, and gamification data from/to window.storage
     useEffect(() => {
         const loadPersistedData = async () => {
             try {
@@ -225,23 +223,17 @@ const App: React.FC = () => {
                 if (savedTheme) setTheme(savedTheme);
                 else setTheme('light');
 
-                // Load view preference
                 const savedFit = await storage.get('isFitToScreen');
                 if (savedFit !== null) {
                     const shouldFit = savedFit === 'true';
                     setIsFitToScreen(shouldFit);
-                    if (shouldFit) {
-                        setZoomLevel(0.8);
-                    } else {
-                        setZoomLevel(1);
-                    }
+                    if (shouldFit) setZoomLevel(0.8);
+                    else setZoomLevel(1);
                 }
                 
-                // Load Timeline preference
                 const savedTimeline = await storage.get('showTimeline');
                 if (savedTimeline !== null) setShowTimeline(savedTimeline === 'true');
 
-                // Try to load settings from storage
                 const savedSettings = await storage.get('taskMasterSettings_v2'); 
                 const cookieUrl = getCookie('tm_script_url');
 
@@ -254,15 +246,13 @@ const App: React.FC = () => {
                          ...parsedSettings,
                          audio: mergedAudio,
                          googleAppsScriptUrl: parsedSettings.googleAppsScriptUrl || cookieUrl || prev.googleAppsScriptUrl,
-                         timezone: parsedSettings.timezone || 'Asia/Kolkata', // Fallback to user pref
+                         timezone: parsedSettings.timezone || 'Asia/Kolkata',
                          userTimeOffset: parsedSettings.userTimeOffset || 0
                      }));
                      
-                     // Sync Time Service immediately
                      setUserTimeOffset(parsedSettings.userTimeOffset || 0);
 
                 } else if (cookieUrl) {
-                    console.log("Restoring connection from Cookie...");
                     setSettings(prev => ({ ...prev, googleAppsScriptUrl: cookieUrl }));
                 }
 
@@ -280,15 +270,11 @@ const App: React.FC = () => {
 
     useEffect(() => {
         const root = window.document.documentElement;
-        if (theme === 'light') {
-            root.classList.remove('dark');
-        } else {
-            root.classList.add('dark');
-        }
+        if (theme === 'light') root.classList.remove('dark');
+        else root.classList.add('dark');
         storage.set('theme', theme);
     }, [theme]);
 
-    // Persist View Preferences
     useEffect(() => {
         storage.set('isFitToScreen', String(isFitToScreen));
         storage.set('showTimeline', String(showTimeline));
@@ -304,7 +290,6 @@ const App: React.FC = () => {
                     } else {
                         setCookie('tm_script_url', '', -1);
                     }
-                    // Sync time service whenever settings change (e.g. user updates offset)
                     setUserTimeOffset(settings.userTimeOffset);
                 } catch (e) {
                     console.error("Failed to save settings", e);
@@ -318,22 +303,23 @@ const App: React.FC = () => {
         storage.set('taskMasterGamification', JSON.stringify(gamification));
     }, [gamification]);
     
-    // Integrate Google Sheets Sync Hook
+    // Fix H-02: Pass Metadata State to Sync Hook
     const shouldSync = settingsLoaded && !isLoading;
-    
     const { status: syncStatus, errorMsg: syncError, syncMethod, manualPull, manualPush } = useGoogleSheetSync(
         shouldSync ? settings.googleSheetId : undefined,
         tasks,
         setAllTasks,
         googleAuth.isSignedIn,
-        shouldSync ? settings.googleAppsScriptUrl : undefined
+        shouldSync ? settings.googleAppsScriptUrl : undefined,
+        gamification,
+        settings,
+        setGamification,
+        setSettings
     );
 
-    // --- HEALTH CHECK LOGIC ---
     useEffect(() => {
         const isScriptMode = !!settings.googleAppsScriptUrl;
 
-        // 1. Auth Health & API Health Logic Update
         if (isScriptMode) {
              setConnectionHealth(prev => ({
                  ...prev, 
@@ -350,7 +336,6 @@ const App: React.FC = () => {
              }
         }
 
-        // 2. Sheet Health
         if (!settings.googleSheetId && !settings.googleAppsScriptUrl) {
              setConnectionHealth(prev => ({...prev, sheet: { status: 'pending', message: 'Not configured' }}));
         } else if (syncStatus === 'error') {
@@ -364,7 +349,6 @@ const App: React.FC = () => {
         }
     }, [googleAuth.isSignedIn, googleAuth.disabled, settings.googleSheetId, settings.googleAppsScriptUrl, syncStatus, syncError, syncMethod]);
 
-    // 3. Calendar Health
     useEffect(() => {
         if (!googleAuth.isSignedIn || !settings.googleCalendarId) {
              setConnectionHealth(prev => ({...prev, calendar: { status: 'pending', message: 'Not Connected' }}));
@@ -388,7 +372,6 @@ const App: React.FC = () => {
 
 
     useEffect(() => {
-        // Global listener to unlock audio context on first user interaction
         const unlockAudio = () => {
             resumeAudioContext();
             window.removeEventListener('click', unlockAudio);
@@ -427,7 +410,6 @@ const App: React.FC = () => {
         });
     }, []);
 
-    // NEW: Handle Quick Add Task (Inline)
     const handleQuickAddTask = useCallback((title: string, status: Status) => {
         addTask({
             title,
@@ -443,7 +425,6 @@ const App: React.FC = () => {
         setShowIntegrationsModal(true);
     };
 
-    // Keyboard shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             const target = e.target as HTMLElement;
@@ -457,11 +438,12 @@ const App: React.FC = () => {
                 else if (showAIModal) setShowAIModal(false);
                 else if (showShortcutsModal) setShowShortcutsModal(false);
                 else if (showIntegrationsModal) setShowIntegrationsModal(false);
+                else if (confirmModalState.isOpen) setConfirmModalState(prev => ({...prev, isOpen: false}));
                 return;
             }
     
             if (isEditing) return;
-            if (!isSheetConfigured) return; // Disable shortcuts if locked out
+            if (!isSheetConfigured) return;
 
             switch (e.key.toLowerCase()) {
                 case 'n':
@@ -513,9 +495,8 @@ const App: React.FC = () => {
     }, [
         editingTask, blockingTask, resolvingBlockerTask, showAIModal, showShortcutsModal, 
         showIntegrationsModal, contextMenu, isTodayView, viewMode, handleOpenAddTaskModal,
-        isSheetConfigured
+        isSheetConfigured, confirmModalState.isOpen
     ]);
-
 
     const toggleTheme = () => {
         setTheme(prevTheme => (prevTheme === 'dark' ? 'light' : 'dark'));
@@ -524,11 +505,8 @@ const App: React.FC = () => {
     const handleToggleFitToScreen = () => {
         setIsFitToScreen(prev => {
             const newValue = !prev;
-            if (newValue) {
-                setZoomLevel(0.8);
-            } else {
-                setZoomLevel(1);
-            }
+            if (newValue) setZoomLevel(0.8);
+            else setZoomLevel(1);
             return newValue;
         });
     };
@@ -614,9 +592,7 @@ const App: React.FC = () => {
                 spread: 90,
                 origin: { y: 0.6 }
             });
-            // Use safe Audio utility instead of direct instantiation
             playCompletionSound();
-            
             handleTaskCompletion(task);
         }
         moveTask(task.id, newStatus, newIndex);
@@ -754,6 +730,32 @@ const App: React.FC = () => {
         setContextMenu(null);
     };
 
+    const handleEditFromContextMenu = (task: Task) => {
+        setEditingTask(task);
+        setContextMenu(null);
+    };
+
+    const requestDeleteTask = useCallback((taskId: string) => {
+        const task = tasks.find(t => t.id === taskId);
+        if (!task) return;
+        
+        setConfirmModalState({
+            isOpen: true,
+            title: "Delete Task?",
+            message: `Are you sure you want to permanently delete "${task.title}"? This action cannot be undone.`,
+            isDestructive: true,
+            onConfirm: () => {
+                deleteTask(taskId);
+                setConfirmModalState(prev => ({...prev, isOpen: false}));
+                setEditingTask(null); // Close modal if open
+            }
+        });
+    }, [tasks, deleteTask]);
+
+    const handleDeleteFromContextMenu = (task: Task) => {
+        requestDeleteTask(task.id);
+        setContextMenu(null);
+    };
 
     return (
         <div className="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-white h-screen flex flex-col overflow-hidden font-sans bg-dots transition-colors duration-300">
@@ -806,13 +808,12 @@ const App: React.FC = () => {
                         
                         {!isLoading && !error && (
                             <>
-                                {/* --- NEW TIMELINE WIDGET --- */}
                                 <TimelineGantt 
                                     tasks={filteredTasks} 
                                     onEditTask={handleEditTask}
-                                    onUpdateTask={updateTask} // Pass the updater
+                                    onUpdateTask={updateTask}
                                     isVisible={showTimeline}
-                                    timezone={settings.timezone} // Pass timezone setting
+                                    timezone={settings.timezone}
                                 />
 
                                 {viewMode === 'kanban' && (
@@ -831,7 +832,7 @@ const App: React.FC = () => {
                                             onToggleTimer={handleToggleTimer}
                                             onOpenContextMenu={handleOpenContextMenu}
                                             focusMode={focusMode}
-                                            onDeleteTask={deleteTask}
+                                            onDeleteTask={requestDeleteTask}
                                             isCompactMode={isCompactMode}
                                             isFitToScreen={isFitToScreen}
                                             zoomLevel={zoomLevel}
@@ -855,7 +856,6 @@ const App: React.FC = () => {
                 )}
             </main>
             
-            {/* ... rest of the App component (modals, etc.) ... */}
             {isSheetConfigured && syncStatus !== 'idle' && (
                 <div className="fixed bottom-4 left-4 z-40 flex items-center gap-2 px-3 py-1.5 bg-white/80 dark:bg-gray-800/80 backdrop-blur rounded-full text-xs font-medium shadow-sm border border-gray-200 dark:border-gray-700">
                     {syncStatus === 'syncing' && <i className="fas fa-sync fa-spin text-blue-500"></i>}
@@ -876,7 +876,7 @@ const App: React.FC = () => {
                     task={editingTask}
                     allTasks={tasks}
                     onSave={handleSaveTask}
-                    onDelete={deleteTask}
+                    onDelete={requestDeleteTask}
                     onClose={() => setEditingTask(null)}
                 />
             )}
@@ -922,6 +922,17 @@ const App: React.FC = () => {
                     initialTab={activeSettingsTab}
                 />
             )}
+            
+            <ConfirmModal 
+                isOpen={confirmModalState.isOpen}
+                title={confirmModalState.title}
+                message={confirmModalState.message}
+                isDestructive={confirmModalState.isDestructive}
+                onConfirm={confirmModalState.onConfirm}
+                onCancel={() => setConfirmModalState(prev => ({...prev, isOpen: false}))}
+                confirmLabel="Delete"
+            />
+
             {showLevelUp && (
                 <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 pointer-events-none">
                     <div className="bg-gray-800 rounded-lg shadow-2xl p-8 text-center border-2 border-yellow-400">
@@ -934,12 +945,28 @@ const App: React.FC = () => {
              {contextMenu && (
                 <div
                     style={{ top: contextMenu.y, left: contextMenu.x }}
-                    className="absolute z-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg py-1"
+                    className="absolute z-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg py-1 w-48"
                     onClick={(e) => e.stopPropagation()} 
                     onContextMenu={(e) => e.preventDefault()}
                 >
-                    <div className="px-3 py-1 text-sm font-bold border-b border-gray-200 dark:border-gray-700 mb-1 truncate max-w-xs">{contextMenu.task.title}</div>
-                    <p className="px-3 pb-2 text-xs text-gray-500 dark:text-gray-400">Move to:</p>
+                    <div className="px-3 py-1 text-sm font-bold border-b border-gray-200 dark:border-gray-700 mb-1 truncate">{contextMenu.task.title}</div>
+                    
+                    {/* Action Buttons */}
+                    <button
+                        onClick={() => handleEditFromContextMenu(contextMenu.task)}
+                        className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                    >
+                        <i className="fas fa-edit text-blue-500 w-4"></i> Edit Task
+                    </button>
+                    <button
+                        onClick={() => handleDeleteFromContextMenu(contextMenu.task)}
+                        className="w-full text-left px-3 py-1.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center gap-2 mb-1"
+                    >
+                        <i className="fas fa-trash-alt w-4"></i> Delete
+                    </button>
+
+                    <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
+                    <p className="px-3 py-1 text-xs text-gray-500 dark:text-gray-400 font-semibold uppercase">Move to:</p>
                     {COLUMN_STATUSES.map(status => (
                         <button
                             key={status}
