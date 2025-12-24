@@ -284,12 +284,16 @@ const App: React.FC = () => {
         if (settingsLoaded) {
             const saveSettings = async () => {
                 try {
-                    await storage.set('taskMasterSettings_v2', JSON.stringify(settings));
-                    if (settings.googleAppsScriptUrl) {
-                        setCookie('tm_script_url', settings.googleAppsScriptUrl, 365);
+                    // Fix L-8: Exclude sensitive URLs from localStorage, use Cookie instead
+                    const settingsToSave = { ...settings };
+                    if (settingsToSave.googleAppsScriptUrl) {
+                        setCookie('tm_script_url', settingsToSave.googleAppsScriptUrl, 365);
+                        delete settingsToSave.googleAppsScriptUrl;
                     } else {
                         setCookie('tm_script_url', '', -1);
                     }
+                    
+                    await storage.set('taskMasterSettings_v2', JSON.stringify(settingsToSave));
                     setUserTimeOffset(settings.userTimeOffset);
                 } catch (e) {
                     console.error("Failed to save settings", e);
@@ -424,6 +428,17 @@ const App: React.FC = () => {
         setActiveSettingsTab(tab);
         setShowIntegrationsModal(true);
     };
+
+    const handleSubtaskToggle = useCallback((taskId: string, subtaskId: string) => {
+        const task = tasks.find(t => t.id === taskId);
+        if (!task || !task.subtasks) return;
+        
+        const updatedSubtasks = task.subtasks.map(st => 
+            st.id === subtaskId ? { ...st, isCompleted: !st.isCompleted } : st
+        );
+        
+        updateTask({ ...task, subtasks: updatedSubtasks });
+    }, [tasks, updateTask]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -793,7 +808,8 @@ const App: React.FC = () => {
                 onToggleTimeline={() => setShowTimeline(prev => !prev)}
             />
 
-            <main className="flex-1 overflow-y-auto overflow-x-hidden pl-2 sm:pl-6 pt-4 sm:pt-6 pr-2 pb-2 relative flex flex-col scroll-smooth">
+            {/* Changed from overflow-y-auto overflow-x-hidden to overflow-auto to fix horizontal scrolling issues */}
+            <main className="flex-1 overflow-auto pl-2 sm:pl-6 pt-4 sm:pt-6 pr-2 pb-2 relative flex flex-col scroll-smooth">
                 {!isSheetConfigured ? (
                     <ConnectSheetPlaceholder onConnect={() => handleOpenSettings('sheets')} />
                 ) : (
@@ -833,6 +849,7 @@ const App: React.FC = () => {
                                             onOpenContextMenu={handleOpenContextMenu}
                                             focusMode={focusMode}
                                             onDeleteTask={requestDeleteTask}
+                                            onSubtaskToggle={handleSubtaskToggle}
                                             isCompactMode={isCompactMode}
                                             isFitToScreen={isFitToScreen}
                                             zoomLevel={zoomLevel}

@@ -11,8 +11,9 @@ interface TaskCardProps {
     onToggleTimer: (taskId:string) => void;
     onOpenContextMenu: (e: React.MouseEvent, task: Task) => void;
     onDeleteTask: (taskId: string) => void;
+    onSubtaskToggle: (taskId: string, subtaskId: string) => void; // New prop
     isCompactMode: boolean;
-    onTaskSizeChange?: () => void; // New prop from KanbanColumn
+    onTaskSizeChange?: () => void;
 }
 
 const getTagColor = (tagName: string) => {
@@ -75,7 +76,7 @@ const formatTimeSince = (dateStr: string): string => {
 };
 
 
-export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, onToggleTimer, onOpenContextMenu, onDeleteTask, isCompactMode, onTaskSizeChange }) => {
+export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, onToggleTimer, onOpenContextMenu, onDeleteTask, onSubtaskToggle, isCompactMode, onTaskSizeChange }) => {
     const priorityClasses = PRIORITY_COLORS[task.priority];
     const statusStyle = STATUS_STYLES[task.status] || STATUS_STYLES['To Do'];
     const [currentSessionTime, setCurrentSessionTime] = useState(0);
@@ -171,6 +172,12 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
     const handleButtonMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
         // Essential: Prevents the draggable parent from stealing the event
         e.stopPropagation();
+    };
+
+    const handleSubtaskClick = (e: React.MouseEvent, subtaskId: string) => {
+        e.stopPropagation();
+        e.preventDefault();
+        onSubtaskToggle(task.id, subtaskId);
     };
 
     const cardCursorClass = isBlockedByDep ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing';
@@ -346,10 +353,16 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
                             <div className="bg-green-500 h-1.5 rounded-full transition-all duration-300" style={{ width: `${subtaskProgress}%` }}></div>
                         </div>
                         {/* Interactive Subtask List (Preview) */}
-                        <div className="space-y-1" onClick={e => e.stopPropagation()}>
+                        <div className="space-y-1 cursor-default">
                             {task.subtasks?.slice(0, 3).map(st => (
-                                <div key={st.id} className="flex items-center gap-2 text-xs">
-                                    <i className={`fas ${st.isCompleted ? 'fa-check-square text-green-500' : 'fa-square text-gray-400'}`}></i>
+                                <div 
+                                    key={st.id} 
+                                    className="flex items-center gap-2 text-xs hover:bg-gray-200 dark:hover:bg-gray-700/50 p-1 rounded cursor-pointer transition-colors group/subtask"
+                                    onClick={(e) => handleSubtaskClick(e, st.id)}
+                                >
+                                    <div className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center transition-colors ${st.isCompleted ? 'bg-green-500 border-green-600' : 'bg-white dark:bg-gray-800 border-gray-400 group-hover/subtask:border-indigo-400'}`}>
+                                        {st.isCompleted && <i className="fas fa-check text-white text-[8px]"></i>}
+                                    </div>
                                     <span className={`truncate ${st.isCompleted ? 'line-through text-gray-400' : 'text-gray-600 dark:text-gray-300'}`}>{st.title}</span>
                                 </div>
                             ))}

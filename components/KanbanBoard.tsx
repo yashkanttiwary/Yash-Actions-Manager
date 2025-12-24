@@ -19,6 +19,7 @@ interface KanbanBoardProps {
     onOpenContextMenu: (e: React.MouseEvent, task: Task) => void;
     focusMode: Status | 'None';
     onDeleteTask: (taskId: string) => void;
+    onSubtaskToggle: (taskId: string, subtaskId: string) => void; // New prop
     isCompactMode: boolean;
     isFitToScreen: boolean; 
     zoomLevel: number; 
@@ -59,7 +60,7 @@ const sortTasks = (tasks: Task[], option: SortOption): Task[] => {
     }
 };
 
-export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, columnLayouts, getTasksByStatus, onTaskMove, onEditTask, onAddTask, onQuickAddTask, onUpdateColumnLayout, activeTaskTimer, onToggleTimer, onOpenContextMenu, focusMode, onDeleteTask, isCompactMode, isFitToScreen, zoomLevel }) => {
+export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, columnLayouts, getTasksByStatus, onTaskMove, onEditTask, onAddTask, onQuickAddTask, onUpdateColumnLayout, activeTaskTimer, onToggleTimer, onOpenContextMenu, focusMode, onDeleteTask, onSubtaskToggle, isCompactMode, isFitToScreen, zoomLevel }) => {
     const [collapsedColumns, setCollapsedColumns] = useState<Set<Status>>(new Set());
     const [sortOptions, setSortOptions] = useState<Record<Status, SortOption>>(
         columns.reduce((acc, status) => ({...acc, [status]: 'Default'}), {}) as Record<Status, SortOption>
@@ -298,6 +299,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                         onToggleTimer={onToggleTimer}
                         onOpenContextMenu={onOpenContextMenu}
                         onDeleteTask={onDeleteTask}
+                        onSubtaskToggle={onSubtaskToggle}
                         isCompactMode={isCompactMode}
                         onTaskSizeChange={triggerLayoutUpdate}
                         width={undefined} 
@@ -354,6 +356,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                                 onToggleTimer={onToggleTimer}
                                 onOpenContextMenu={onOpenContextMenu}
                                 onDeleteTask={onDeleteTask}
+                                onSubtaskToggle={onSubtaskToggle}
                                 isCompactMode={isCompactMode}
                                 onTaskSizeChange={triggerLayoutUpdate}
                                 width={width} 
@@ -423,6 +426,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                                 onToggleTimer={onToggleTimer}
                                 onOpenContextMenu={onOpenContextMenu}
                                 onDeleteTask={onDeleteTask}
+                                onSubtaskToggle={onSubtaskToggle}
                                 isCompactMode={isCompactMode}
                                 onTaskSizeChange={triggerLayoutUpdate}
                                 width={layout.w}

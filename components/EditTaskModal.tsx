@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Task, Priority, Status, Subtask, Blocker } from '../types';
 import { COLUMN_STATUSES } from '../constants';
+import { ConfirmModal } from './ConfirmModal';
 
 interface EditTaskModalProps {
     task: Task;
@@ -20,6 +21,9 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
     // Validation State
     const [errors, setErrors] = useState<{ title?: string; timeEstimate?: string }>({});
     const [showBlockerWarning, setShowBlockerWarning] = useState(false);
+    
+    // Subtask Deletion Confirmation State
+    const [subtaskToDelete, setSubtaskToDelete] = useState<string | null>(null);
 
     const isNewTask = task.id.startsWith('new-');
     
@@ -129,19 +133,7 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
     const handleDelete = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        // Uses global ConfirmModal triggered in App.tsx via onDelete callback which should trigger the check
-        // But here we are calling onDelete directly. The audit wants a custom modal.
-        // We will delegate the visual part to the parent App.tsx if it wraps this, but `EditTaskModal` is a child.
-        // To fix properly, we will modify `handleDelete` to accept a callback or use a window.confirm replacement? 
-        // No, the instruction is to replace browser confirm.
-        // We can't render the global ConfirmModal from here easily without context.
-        // We will assume the parent passes a wrapper or we invoke the global modal method if available.
-        // Since we are refactoring, we'll assume `onDelete` handles the confirmation flow or we trigger it.
-        // Actually, let's keep it simple: We call onDelete, and the Parent (App) shows the confirm dialog.
-        // Wait, current `App.tsx` `handleEditTask` -> `EditTaskModal` calls `deleteTask`.
-        // We will change the `onDelete` prop behavior in `App.tsx` to show the modal.
         onDelete(task.id);
-        // We don't close immediately here if the parent handles confirmation.
     }, [onDelete, task.id]);
 
     useEffect(() => {
@@ -193,9 +185,15 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
         handleInputChange('subtasks', updatedSubtasks);
     };
 
-    const handleDeleteSubtask = (subtaskId: string) => {
-        const updatedSubtasks = editedTask.subtasks?.filter(st => st.id !== subtaskId);
+    const requestDeleteSubtask = (subtaskId: string) => {
+        setSubtaskToDelete(subtaskId);
+    };
+
+    const confirmDeleteSubtask = () => {
+        if (!subtaskToDelete) return;
+        const updatedSubtasks = editedTask.subtasks?.filter(st => st.id !== subtaskToDelete);
         handleInputChange('subtasks', updatedSubtasks);
+        setSubtaskToDelete(null);
     };
     
     const handleDependencyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -339,7 +337,7 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
                                         </span>
                                     </div>
                                     <button
-                                        onClick={() => handleDeleteSubtask(subtask.id)}
+                                        onClick={() => requestDeleteSubtask(subtask.id)}
                                         className="text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors ml-3 px-2"
                                         aria-label={`Delete subtask ${subtask.title}`}
                                     >
@@ -417,6 +415,16 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
                     </div>
                 </div>
             </div>
+            
+            <ConfirmModal
+                isOpen={!!subtaskToDelete}
+                title="Delete Subtask?"
+                message="Are you sure you want to remove this subtask?"
+                isDestructive={true}
+                onConfirm={confirmDeleteSubtask}
+                onCancel={() => setSubtaskToDelete(null)}
+                confirmLabel="Delete"
+            />
         </div>
     );
 };
