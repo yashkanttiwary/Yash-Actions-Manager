@@ -37,13 +37,16 @@ interface LineCoordinate {
   isBlocked: boolean;
 }
 
-const ROW_HEIGHT = 42; // Height allocated per row
-const BAR_HEIGHT = 32; // Actual height of the task bar
-const ROW_GAP = 6;     // Vertical spacing
-const HEADER_HEIGHT = 40;
+// Visual Config - FCP Style
+const ROW_HEIGHT = 48; 
+const BAR_HEIGHT = 34; 
+const ROW_GAP = 8;
+const HEADER_HEIGHT = 48; // Taller for ruler ticks
 
 const ZOOM_LEVELS: Record<ViewMode, ZoomConfig[]> = {
     'Day': [
+        { unit: 'minute', step: 1, label: '1m', width: 40 }, // Ultra-granular
+        { unit: 'minute', step: 5, label: '5m', width: 50 },
         { unit: 'minute', step: 15, label: '15m', width: 60 },
         { unit: 'minute', step: 30, label: '30m', width: 60 },
         { unit: 'hour', step: 1, label: '1h', width: 100, default: true },
@@ -291,20 +294,20 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
         let newStart = dragState.originalStart;
         let newEnd = dragState.originalEnd;
 
-        const config = ZOOM_LEVELS[viewMode][zoomIndex];
-        let snapMs = 15 * 60 * 1000; 
-        
-        if (config.unit === 'minute') snapMs = config.step * 60 * 1000;
-        if (config.unit === 'hour') snapMs = config.step * 60 * 60 * 1000;
-        if (config.unit === 'day') snapMs = 24 * 60 * 60 * 1000;
-        if (config.unit === 'day' || config.unit === 'week') snapMs = 60 * 60 * 1000; 
+        // Granular Snapping: 1 Minute by default for precision
+        // If zoomed out significantly (Week/Month), maybe snap to hour?
+        // Let's keep it granular (1 min) unless in month view (1 hour).
+        const snapMs = viewMode === 'Month' ? 60 * 60 * 1000 : 60 * 1000; 
 
         if (dragState.type === 'MOVE') {
-            newStart = Math.round((dragState.originalStart + deltaMs) / snapMs) * snapMs;
+            const rawStart = dragState.originalStart + deltaMs;
+            newStart = Math.round(rawStart / snapMs) * snapMs;
             const duration = dragState.originalEnd - dragState.originalStart;
             newEnd = newStart + duration;
         } else {
-            newEnd = Math.round((dragState.originalEnd + deltaMs) / snapMs) * snapMs;
+            const rawEnd = dragState.originalEnd + deltaMs;
+            newEnd = Math.round(rawEnd / snapMs) * snapMs;
+            // Minimum duration: 15 mins
             if (newEnd - newStart < 15 * 60 * 1000) {
                 newEnd = newStart + (15 * 60 * 1000);
             }
@@ -312,7 +315,7 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
 
         setOptimisticTaskOverride({ id: dragState.taskId, start: newStart, end: newEnd });
 
-    }, [dragState, msPerPixel, viewMode, zoomIndex]);
+    }, [dragState, msPerPixel, viewMode]);
 
     const handleMouseUp = useCallback(() => {
         if (!dragState || !optimisticTaskOverride) {
@@ -461,7 +464,7 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
                         const endX = getBarMetrics(endTask.startMs, endTask.endMs).left;
 
                         // Vertical centers of the bars
-                        const TOP_PADDING = 12; // Matches relative top of bar
+                        const TOP_PADDING = (ROW_HEIGHT - BAR_HEIGHT) / 2;
                         const BAR_CENTER = BAR_HEIGHT / 2;
                         
                         const startY = HEADER_HEIGHT + (startTask.rowIndex * ROW_HEIGHT) + TOP_PADDING + BAR_CENTER;
@@ -528,39 +531,40 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
     if (!isVisible) return null;
 
     return (
-        <div className="w-full bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm transition-all duration-500 ease-in-out animate-slideDown overflow-hidden flex flex-col mb-6 rounded-xl relative z-10 flex-shrink-0 select-none">
-            <div className="flex flex-col xl:flex-row justify-between items-center p-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 gap-3">
+        <div className="w-full bg-gray-900 border-b border-gray-700 shadow-xl transition-all duration-500 ease-in-out animate-slideDown overflow-hidden flex flex-col mb-6 rounded-xl relative z-10 flex-shrink-0 select-none">
+            {/* Control Bar */}
+            <div className="flex flex-col xl:flex-row justify-between items-center p-3 border-b border-gray-700 bg-gray-800 gap-3">
                 <div className="flex flex-wrap items-center gap-4">
-                    <h3 className="text-sm font-bold text-gray-700 dark:text-gray-200 flex items-center gap-2">
-                        <i className="fas fa-stream text-indigo-500"></i> <span className="hidden sm:inline">Timeline View</span>
+                    <h3 className="text-sm font-bold text-gray-200 flex items-center gap-2">
+                        <i className="fas fa-video text-indigo-400"></i> <span className="hidden sm:inline">Timeline</span>
                     </h3>
-                    <div className="flex bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
+                    <div className="flex bg-gray-700 rounded-lg p-1">
                         {(['Day', 'Week', 'Month'] as ViewMode[]).map(m => (
                             <button
                                 key={m}
                                 onClick={() => setViewMode(m)}
-                                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${viewMode === m ? 'bg-white dark:bg-gray-600 shadow text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+                                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${viewMode === m ? 'bg-gray-600 shadow text-indigo-300' : 'text-gray-400 hover:text-gray-200'}`}
                             >
                                 {m}
                             </button>
                         ))}
                     </div>
                     {viewMode === 'Day' && (
-                        <div className="flex items-center gap-1 bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
+                        <div className="flex items-center gap-1 bg-gray-700 rounded-lg p-1">
                             <button 
                                 onClick={handleZoomOut} 
                                 disabled={zoomIndex >= ZOOM_LEVELS[viewMode].length - 1}
-                                className="w-7 h-7 flex items-center justify-center rounded bg-white dark:bg-gray-600 text-gray-600 dark:text-gray-300 hover:text-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm text-xs"
+                                className="w-7 h-7 flex items-center justify-center rounded bg-gray-600 text-gray-300 hover:text-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm text-xs"
                             >
                                 <i className="fas fa-search-minus"></i>
                             </button>
-                            <span className="text-[10px] font-bold px-2 min-w-[30px] text-center text-gray-500 dark:text-gray-400">
+                            <span className="text-[10px] font-bold px-2 min-w-[30px] text-center text-gray-400">
                                 {ZOOM_LEVELS[viewMode][zoomIndex].label}
                             </span>
                             <button 
                                 onClick={handleZoomIn} 
                                 disabled={zoomIndex <= 0}
-                                className="w-7 h-7 flex items-center justify-center rounded bg-white dark:bg-gray-600 text-gray-600 dark:text-gray-300 hover:text-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm text-xs"
+                                className="w-7 h-7 flex items-center justify-center rounded bg-gray-600 text-gray-300 hover:text-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm text-xs"
                             >
                                 <i className="fas fa-search-plus"></i>
                             </button>
@@ -568,34 +572,34 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
                     )}
                 </div>
 
-                <div className="hidden lg:flex items-center px-4 py-1.5 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 rounded-full">
-                    <i className="far fa-clock text-indigo-500 mr-2 animate-pulse"></i>
-                    <span className="text-xs font-mono font-bold text-indigo-800 dark:text-indigo-300 uppercase tracking-wide">
+                <div className="hidden lg:flex items-center px-4 py-1.5 bg-indigo-900/30 border border-indigo-800 rounded-full">
+                    <i className="far fa-clock text-indigo-400 mr-2 animate-pulse"></i>
+                    <span className="text-xs font-mono font-bold text-indigo-300 uppercase tracking-wide">
                         {getFormattedCurrentTime()}
                     </span>
                 </div>
 
                 <div className="flex items-center gap-3">
-                    <div className="flex items-center bg-white dark:bg-gray-700 rounded-md border border-gray-300 dark:border-gray-600 px-2 py-1 shadow-sm">
+                    <div className="flex items-center bg-gray-700 rounded-md border border-gray-600 px-2 py-1 shadow-sm">
                         <input 
                             type={viewMode === 'Month' ? 'month' : 'date'}
                             value={getDateInputValue()}
                             onChange={handleDateChange}
-                            className="bg-transparent border-none text-xs font-bold text-gray-700 dark:text-gray-200 focus:outline-none cursor-pointer"
+                            className="bg-transparent border-none text-xs font-bold text-gray-200 focus:outline-none cursor-pointer"
                         />
                     </div>
 
-                    <span className="text-xs font-bold text-gray-600 dark:text-gray-300 min-w-[140px] text-center hidden sm:block">
+                    <span className="text-xs font-bold text-gray-300 min-w-[140px] text-center hidden sm:block">
                         {getHeaderText()}
                     </span>
                     <div className="flex items-center gap-1">
-                        <button onClick={() => handleNavigate(-1)} className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors">
+                        <button onClick={() => handleNavigate(-1)} className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-700 text-gray-400 transition-colors">
                             <i className="fas fa-chevron-left text-xs"></i>
                         </button>
-                        <button onClick={handleToday} className="px-2 py-1 text-xs font-semibold rounded bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-900/50 transition-colors">
+                        <button onClick={handleToday} className="px-2 py-1 text-xs font-semibold rounded bg-indigo-900/50 text-indigo-400 hover:bg-indigo-900/70 transition-colors">
                             Today
                         </button>
-                        <button onClick={() => handleNavigate(1)} className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors">
+                        <button onClick={() => handleNavigate(1)} className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-700 text-gray-400 transition-colors">
                             <i className="fas fa-chevron-right text-xs"></i>
                         </button>
                     </div>
@@ -604,51 +608,54 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
 
             <div 
                 ref={scrollContainerRef}
-                className="overflow-x-auto relative custom-scrollbar bg-gray-50/50 dark:bg-black/20"
+                className="overflow-x-auto relative custom-scrollbar bg-gray-950"
                 style={{ maxHeight: '450px', minHeight: '200px' }}
             >
                 <div style={{ width: `${totalWidth}px`, minWidth: '100%', height: `${Math.max(200, (totalRows * ROW_HEIGHT) + HEADER_HEIGHT + 20)}px` }} className="relative">
-                    <div className="flex border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 z-40 shadow-sm" style={{ height: `${HEADER_HEIGHT}px` }}>
+                    
+                    {/* Ruler Header */}
+                    <div className="flex border-b border-gray-700 sticky top-0 bg-gray-800 z-40 shadow-md select-none" style={{ height: `${HEADER_HEIGHT}px` }}>
                         {columns.map((col, i) => (
                             <div 
                                 key={i} 
-                                className={`flex-shrink-0 border-r border-gray-200 dark:border-gray-700 p-2 text-center flex flex-col justify-center ${col.isToday ? 'bg-indigo-50 dark:bg-indigo-900/20' : ''}`}
+                                className={`flex-shrink-0 border-r border-gray-700/50 relative ${col.isToday ? 'bg-indigo-900/10' : ''}`}
                                 style={{ width: `${tickWidth}px` }}
                             >
-                                <span className={`text-[10px] font-bold uppercase ${col.isToday ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400'}`}>
-                                    {col.subLabel} {col.label}
-                                </span>
+                                <div className="absolute top-0 left-1 text-[10px] font-bold text-gray-500 uppercase">
+                                    {col.label}
+                                </div>
+                                <div className="absolute bottom-0 left-0 w-px h-2 bg-gray-500"></div>
+                                <div className="absolute bottom-0 left-1/4 w-px h-1 bg-gray-600"></div>
+                                <div className="absolute bottom-0 left-1/2 w-px h-1.5 bg-gray-600"></div>
+                                <div className="absolute bottom-0 left-3/4 w-px h-1 bg-gray-600"></div>
+                                {col.subLabel && <div className="absolute bottom-3 left-1 text-[9px] text-gray-600 font-mono">{col.subLabel}</div>}
                             </div>
                         ))}
                     </div>
 
-                    {/* Vertical Grid Lines - Full Height */}
-                    <div className="absolute bottom-0 left-0 flex pointer-events-none z-0" style={{ top: `${HEADER_HEIGHT}px` }}>
-                        {columns.map((col, i) => (
-                            <div 
-                                key={`grid-${i}`}
-                                className={`flex-shrink-0 border-r border-gray-200/60 dark:border-gray-700/40 h-full ${col.isToday ? 'bg-indigo-50/30 dark:bg-indigo-900/10' : ''}`}
-                                style={{ width: `${tickWidth}px` }}
-                            >
-                                {tickWidth > 100 && (
-                                    <div className="w-px h-full bg-gray-100/50 dark:bg-gray-800/30 mx-auto"></div>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* Horizontal Row Lines */}
+                    {/* Background Tracks (Zebra Striping) */}
                     <div className="absolute left-0 right-0 pointer-events-none z-0" style={{ top: `${HEADER_HEIGHT}px` }}>
                         {Array.from({ length: totalRows }).map((_, i) => (
                             <div 
                                 key={`row-${i}`} 
-                                className="border-b border-gray-100 dark:border-gray-800/50 w-full"
+                                className={`w-full border-b border-gray-800/30 ${i % 2 === 0 ? 'bg-gray-900' : 'bg-gray-900/50'}`}
                                 style={{ height: `${ROW_HEIGHT}px` }}
                             ></div>
                         ))}
                     </div>
 
-                    {/* Current Time Indicator */}
+                    {/* Vertical Time Grid Lines */}
+                    <div className="absolute bottom-0 left-0 flex pointer-events-none z-0 opacity-10" style={{ top: `${HEADER_HEIGHT}px` }}>
+                        {columns.map((col, i) => (
+                            <div 
+                                key={`grid-${i}`}
+                                className="flex-shrink-0 border-r border-white h-full"
+                                style={{ width: `${tickWidth}px` }}
+                            ></div>
+                        ))}
+                    </div>
+
+                    {/* Playhead (Current Time) */}
                     {viewMode !== 'Month' && (() => {
                         const nowMs = accurateNow.getTime();
                         if (nowMs >= viewStartDate.getTime() && nowMs <= viewEndDate.getTime()) {
@@ -656,13 +663,13 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
                             const left = diff / msPerPixel;
                             return (
                                 <div 
-                                    className="absolute bottom-0 border-l-2 border-red-500 z-30 pointer-events-none opacity-80"
-                                    style={{ left: `${left}px`, top: `${HEADER_HEIGHT}px` }}
+                                    className="absolute bottom-0 z-50 pointer-events-none"
+                                    style={{ left: `${left}px`, top: `${HEADER_HEIGHT - 12}px` }}
                                 >
-                                    <div className="w-2.5 h-2.5 bg-red-500 rounded-full -ml-[5.5px] -mt-1 shadow-sm"></div>
-                                    <div className="absolute top-0 ml-1.5 text-[9px] font-bold text-red-500 bg-white/80 dark:bg-black/80 px-1 rounded shadow-sm border border-red-200 dark:border-red-900">
-                                        Now
-                                    </div>
+                                    {/* Playhead Cap */}
+                                    <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-red-500 translate-x-[-6px]"></div>
+                                    {/* Playhead Line */}
+                                    <div className="w-px h-full bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.5)]"></div>
                                 </div>
                             );
                         }
@@ -670,31 +677,33 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
                     })()}
 
                     {/* Dependency Lines */}
-                    <div className="absolute left-0 w-full h-full pointer-events-none z-10 opacity-60" style={{ top: 0 }}>
+                    <div className="absolute left-0 w-full h-full pointer-events-none z-10 opacity-40" style={{ top: 0 }}>
                         <DependencyLines lines={dependencyLines} />
                     </div>
 
                     {/* Tasks Layer */}
-                    <div className="relative w-full h-full" style={{ marginTop: '12px' }}>
+                    <div className="relative w-full h-full z-20">
                         {packedTasks.length === 0 && (
-                            <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-sm italic pointer-events-none">
-                                <i className="far fa-calendar-times mr-2"></i> No tasks in this period.
+                            <div className="absolute inset-0 flex items-center justify-center text-gray-600 text-sm italic pointer-events-none" style={{ top: HEADER_HEIGHT }}>
+                                <i className="fas fa-film mr-2"></i> No timeline clips
                             </div>
                         )}
 
                         {packedTasks.map((task) => {
                             const metrics = getBarMetrics(task.startMs, task.endMs);
                             const statusStyle = STATUS_STYLES[task.status] || STATUS_STYLES['To Do'];
-                            const bgColorClass = statusStyle.header;
                             const priorityConfig = PRIORITY_COLORS[task.priority] || PRIORITY_COLORS['Medium'];
                             
                             // Absolute positioning based on row index
-                            const top = (task.rowIndex * ROW_HEIGHT);
+                            const top = HEADER_HEIGHT + (task.rowIndex * ROW_HEIGHT) + ((ROW_HEIGHT - BAR_HEIGHT) / 2);
 
                             return (
                                 <div 
                                     key={task.id} 
-                                    className={`absolute rounded-md shadow-sm border border-white/20 flex items-center px-2 overflow-hidden transition-all duration-200 ${bgColorClass} ${task.isDragging ? 'opacity-80 ring-2 ring-indigo-400 z-50 shadow-xl' : 'hover:brightness-110 z-20'}`}
+                                    className={`absolute rounded-md shadow-md flex items-center px-2 overflow-hidden transition-all duration-75 group
+                                        ${statusStyle.header} 
+                                        ${task.isDragging ? 'opacity-90 ring-2 ring-yellow-400 z-50 scale-[1.02] shadow-xl' : 'hover:brightness-110 z-20 hover:ring-1 hover:ring-white/50'}
+                                    `}
                                     style={{ 
                                         left: `${Math.max(0, metrics.left)}px`, 
                                         width: `${Math.max(20, metrics.width)}px`,
@@ -706,24 +715,25 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
                                     onClick={(e) => {
                                         if (!task.isDragging) onEditTask(task);
                                     }}
-                                    title={`[${task.priority}] ${task.title} (${new Date(task.startMs).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - ${new Date(task.endMs).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})`}
+                                    title={`[${task.priority}] ${task.title}`}
                                 >
+                                    {/* Left Trim Handle */}
+                                    <div className="absolute left-0 top-0 bottom-0 w-2 cursor-w-resize opacity-0 group-hover:opacity-100 bg-black/20 hover:bg-black/40 z-30"></div>
+
+                                    {/* Content */}
                                     <div className="flex items-center w-full overflow-hidden select-none pointer-events-none">
-                                        <span 
-                                            className={`text-[9px] uppercase font-black mr-1.5 px-1 rounded-sm flex-shrink-0 ${priorityConfig.bg} ${priorityConfig.text} border border-white/20`}
-                                        >
-                                            {task.priority}
-                                        </span>
+                                        <div className={`w-1.5 h-1.5 rounded-full mr-2 flex-shrink-0 ${priorityConfig.text === 'text-red-400' ? 'bg-red-400' : 'bg-white/50'}`}></div>
                                         <span className="text-xs font-bold text-white whitespace-nowrap truncate drop-shadow-md">
                                             {task.title}
                                         </span>
                                     </div>
 
+                                    {/* Right Trim Handle */}
                                     <div 
-                                        className="absolute right-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/20 flex items-center justify-center z-30"
+                                        className="absolute right-0 top-0 bottom-0 w-3 cursor-e-resize flex items-center justify-center z-30 group-hover:bg-black/10 hover:!bg-white/30"
                                         onMouseDown={(e) => handleMouseDown(e, task, 'RESIZE', { start: task.startMs, end: task.endMs })}
                                     >
-                                        <div className="w-0.5 h-3 bg-white/50 rounded-full"></div>
+                                        <div className="w-0.5 h-3 bg-white/30 rounded-full"></div>
                                     </div>
                                 </div>
                             );
