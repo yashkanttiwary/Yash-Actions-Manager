@@ -39,12 +39,14 @@ interface LineCoordinate {
   isBlocked: boolean;
 }
 
-interface Gap {
+interface GapSegment {
+    id: string;
     startMs: number;
     endMs: number;
     rowIndex: number;
     left: number;
     width: number;
+    durationLabel: string;
 }
 
 // Visual Config - FCP Style
@@ -69,6 +71,14 @@ const ZOOM_LEVELS: Record<ViewMode, ZoomConfig[]> = {
     'Month': [
         { unit: 'day', step: 1, label: '1d', width: 45, default: true }
     ]
+};
+
+const formatDuration = (ms: number) => {
+    const minutes = Math.floor(ms / 60000);
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (hours > 0) return `${hours}h ${mins}m`;
+    return `${mins}m`;
 };
 
 const getStartOfDayInZone = (date: Date, timeZone: string): Date => {
@@ -492,8 +502,8 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
         };
     }, [dragState, handleMouseMove, handleMouseUp, activeTool]);
 
-    // PACKING LOGIC
-    const { packedTasks, totalRows, gaps } = useMemo(() => {
+    // PACKING LOGIC - MAGNETIC GAPS
+    const { packedTasks, totalRows, gapSegments } = useMemo(() => {
         const viewStartMs = viewStartDate.getTime();
         const viewEndMs = viewEndDate.getTime();
 
@@ -562,26 +572,57 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
             return { ...task, rowIndex: laneIndex };
         });
 
-        const detectedGaps: Gap[] = [];
+        // Generate Magnetic Gap Segments
+        const calculatedGaps: GapSegment[] = [];
+        
         rowTasks.forEach((tasksInRow, rowIndex) => {
-            tasksInRow.sort((a,b) => a.startMs - b.startMs);
-            for(let i=0; i<tasksInRow.length - 1; i++) {
-                const current = tasksInRow[i];
-                const next = tasksInRow[i+1];
-                if (next.startMs > current.endMs + (1000 * 60 * 5)) { 
-                    const duration = next.startMs - current.endMs;
-                    detectedGaps.push({
-                        startMs: current.endMs,
-                        endMs: next.startMs,
+            // Ensure strictly sorted by time
+            tasksInRow.sort((a, b) => a.startMs - b.startMs);
+            
+            let currentCursor = viewStartMs;
+
+            tasksInRow.forEach(task => {
+                // Gap before task (from current cursor)
+                // Use MAX to ignore tasks that start before current cursor (overlap handling logic usually prevents this but just in case)
+                const gapStart = Math.max(currentCursor, viewStartMs);
+                
+                if (task.startMs > gapStart) {
+                    const gapDuration = task.startMs - gapStart;
+                    // Min duration check to avoid rendering 1px gaps
+                    if (gapDuration > 60000) { 
+                         calculatedGaps.push({
+                            id: `gap-${rowIndex}-${gapStart}`,
+                            startMs: gapStart,
+                            endMs: task.startMs,
+                            rowIndex,
+                            left: (gapStart - viewStartMs) / msPerPixel,
+                            width: gapDuration / msPerPixel,
+                            durationLabel: formatDuration(gapDuration)
+                        });
+                    }
+                }
+                // Advance cursor to end of this task
+                currentCursor = Math.max(currentCursor, task.endMs);
+            });
+
+            // Gap after last task to end of view
+            if (currentCursor < viewEndMs) {
+                const gapDuration = viewEndMs - currentCursor;
+                if (gapDuration > 60000) {
+                    calculatedGaps.push({
+                        id: `gap-${rowIndex}-${currentCursor}`,
+                        startMs: currentCursor,
+                        endMs: viewEndMs,
                         rowIndex,
-                        left: (current.endMs - viewStartMs) / msPerPixel,
-                        width: duration / msPerPixel
+                        left: (currentCursor - viewStartMs) / msPerPixel,
+                        width: gapDuration / msPerPixel,
+                        durationLabel: formatDuration(gapDuration)
                     });
                 }
             }
         });
 
-        return { packedTasks: packed, totalRows: Math.max(5, lanes.length), gaps: detectedGaps };
+        return { packedTasks: packed, totalRows: Math.max(5, lanes.length), gapSegments: calculatedGaps };
     }, [tasks, viewStartDate, viewEndDate, optimisticTaskOverride, msPerPixel, dragState]);
 
     // ... (keep getBarMetrics and dependency effects) ...
@@ -820,15 +861,30 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
                         ))}
                     </div>
 
-                    {/* Gap Indicators */}
-                    {gaps.map((gap, i) => (
-                        <div key={`gap-${i}`} className="absolute z-10 group" style={{ left: `${gap.left}px`, width: `${gap.width}px`, top: `${HEADER_HEIGHT + (gap.rowIndex * ROW_HEIGHT)}px`, height: `${ROW_HEIGHT}px` }}>
-                            <div className="w-full h-full bg-stripes-gray opacity-0 group-hover:opacity-1 transition-opacity border-l border-r border-dashed border-gray-400/30"></div>
-                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-500 bg-white/80 dark:bg-black/80 px-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none">
-                                Gap: {Math.round((gap.endMs - gap.startMs) / 60000)}m
+                    {/* Magnetic Gap Segments */}
+                    {gapSegments.map((gap, i) => {
+                        const top = HEADER_HEIGHT + (gap.rowIndex * ROW_HEIGHT) + ((ROW_HEIGHT - BAR_HEIGHT) / 2);
+                        return (
+                            <div 
+                                key={gap.id} 
+                                className="absolute z-10 flex items-center justify-center overflow-hidden"
+                                style={{ 
+                                    left: `${gap.left}px`, 
+                                    width: `${gap.width}px`, 
+                                    top: `${top}px`, 
+                                    height: `${BAR_HEIGHT}px`
+                                }}
+                            >
+                                <div className={`w-full h-full rounded-md flex items-center justify-center bg-stripes-gray opacity-60 ${isDarkTheme ? 'bg-gray-800 border-gray-700' : 'bg-gray-200 border-gray-300'} border border-dashed`}>
+                                    {gap.width > 40 && (
+                                        <span className={`text-[10px] font-bold uppercase tracking-wider ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'} select-none`}>
+                                            Gap: {gap.durationLabel}
+                                        </span>
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
 
                     {/* Current Time Line */}
                     {viewMode !== 'Month' && (() => {
