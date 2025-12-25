@@ -162,8 +162,8 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
     const [accurateNow, setAccurateNow] = useState(new Date());
     const [dependencyLines, setDependencyLines] = useState<LineCoordinate[]>([]);
     
-    // Theme state for independent control
-    const [isDarkTheme, setIsDarkTheme] = useState(true);
+    // Theme state for independent control - Default to Light as requested
+    const [isDarkTheme, setIsDarkTheme] = useState(false);
     
     const [optimisticTaskOverride, setOptimisticTaskOverride] = useState<{id: string, start: number, end: number} | null>(null);
 
