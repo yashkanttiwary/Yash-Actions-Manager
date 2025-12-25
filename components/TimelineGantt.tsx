@@ -9,15 +9,17 @@ interface TimelineGanttProps {
     tasks: Task[];
     onEditTask: (task: Task) => void;
     onUpdateTask: (task: Task) => void; 
+    addTask: (task: Omit<Task, 'id' | 'createdDate' | 'lastModified' | 'statusChangeDate'>) => void; 
     isVisible: boolean;
     timezone?: string;
 }
 
 type ViewMode = 'Day' | 'Week' | 'Month';
+type ToolType = 'select' | 'blade';
 
 interface DragState {
     taskId: string;
-    type: 'MOVE' | 'RESIZE';
+    type: 'MOVE' | 'RESIZE' | 'DUPLICATE';
     startX: number;
     originalStart: number;
     originalEnd: number;
@@ -37,11 +39,18 @@ interface LineCoordinate {
   isBlocked: boolean;
 }
 
+interface Gap {
+    startMs: number;
+    endMs: number;
+    rowIndex: number;
+    left: number;
+    width: number;
+}
+
 // Visual Config - FCP Style
 const ROW_HEIGHT = 48; 
 const BAR_HEIGHT = 34; 
-const ROW_GAP = 8;
-const HEADER_HEIGHT = 48; // Taller for ruler ticks
+const HEADER_HEIGHT = 48; 
 
 const ZOOM_LEVELS: Record<ViewMode, ZoomConfig[]> = {
     'Day': [
@@ -62,7 +71,6 @@ const ZOOM_LEVELS: Record<ViewMode, ZoomConfig[]> = {
     ]
 };
 
-// Fix M-02: Robust Timezone Calculation
 const getStartOfDayInZone = (date: Date, timeZone: string): Date => {
     try {
         const parts = new Intl.DateTimeFormat('en-US', {
@@ -153,7 +161,7 @@ const getStartOfMonthInZone = (date: Date, timeZone: string): Date => {
 };
 
 
-export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask, onUpdateTask, isVisible, timezone = 'Asia/Kolkata' }) => {
+export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask, onUpdateTask, addTask, isVisible, timezone = 'Asia/Kolkata' }) => {
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const [viewMode, setViewMode] = useState<ViewMode>('Day'); 
     const [zoomIndex, setZoomIndex] = useState(2); 
@@ -162,12 +170,18 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
     const [accurateNow, setAccurateNow] = useState(new Date());
     const [dependencyLines, setDependencyLines] = useState<LineCoordinate[]>([]);
     
-    // Theme state for independent control - Default to Light as requested
+    // Theme state
     const [isDarkTheme, setIsDarkTheme] = useState(false);
+    const [activeTool, setActiveTool] = useState<ToolType>('select');
     
     const [optimisticTaskOverride, setOptimisticTaskOverride] = useState<{id: string, start: number, end: number} | null>(null);
+    
+    // Skimmer Refs
+    const skimmerRef = useRef<HTMLDivElement>(null);
+    const skimmerLabelRef = useRef<HTMLDivElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
 
-    // Dynamic styles based on independent theme state
+    // Style memoization
     const styles = useMemo(() => ({
         container: isDarkTheme ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200',
         header: isDarkTheme ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200',
@@ -185,6 +199,7 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
         gridLine: isDarkTheme ? 'border-gray-700/30' : 'border-gray-200/60',
         todayHighlight: isDarkTheme ? 'bg-indigo-900/10' : 'bg-indigo-50',
         emptyText: isDarkTheme ? 'text-gray-600' : 'text-gray-400',
+        minimapBg: isDarkTheme ? 'bg-gray-900 border-gray-700' : 'bg-gray-100 border-gray-300',
     }), [isDarkTheme]);
 
     useEffect(() => {
@@ -294,10 +309,100 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
         };
     }, [viewMode, referenceDate, zoomIndex, accurateNow, timezone]);
 
+    // Handle Skimmer Movement
+    const handleContainerMouseMove = useCallback((e: React.MouseEvent) => {
+        if (!containerRef.current || !skimmerRef.current || !skimmerLabelRef.current) return;
+        
+        const rect = containerRef.current.getBoundingClientRect();
+        // Offset Calculation Fixed: Remove redundant scroll addition.
+        // rect.left already accounts for horizontal scroll offset of the container.
+        const relativeX = e.clientX - rect.left;
+        
+        // Ensure within bounds
+        if (relativeX < 0 || relativeX > totalWidth) {
+            skimmerRef.current.style.display = 'none';
+            skimmerLabelRef.current.style.opacity = '0';
+            return;
+        }
+
+        // Show Line
+        skimmerRef.current.style.display = 'block';
+        skimmerRef.current.style.left = `${relativeX}px`;
+        
+        // Update Time Label in Header
+        const timeMs = viewStartDate.getTime() + (relativeX * msPerPixel);
+        const timeDate = new Date(timeMs);
+        const timeStr = timeDate.toLocaleTimeString('en-US', { 
+            hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone 
+        });
+
+        skimmerLabelRef.current.textContent = timeStr;
+        skimmerLabelRef.current.style.left = `${relativeX}px`;
+        skimmerLabelRef.current.style.opacity = '1';
+
+    }, [totalWidth, msPerPixel, viewStartDate, timezone]);
+
+    const handleContainerMouseLeave = () => {
+        if (skimmerRef.current) skimmerRef.current.style.display = 'none';
+        if (skimmerLabelRef.current) skimmerLabelRef.current.style.opacity = '0';
+    };
+
     const handleMouseDown = (e: React.MouseEvent, task: Task, type: 'MOVE' | 'RESIZE', metrics: { start: number, end: number }) => {
         e.stopPropagation();
         e.preventDefault(); 
         
+        // Blade Tool Logic
+        if (activeTool === 'blade') {
+            const rect = containerRef.current!.getBoundingClientRect();
+            // FIX: Use e.clientX - rect.left directly. containerRef is the scrolling content div.
+            const clickX = e.clientX - rect.left; 
+            const splitTimeMs = viewStartDate.getTime() + (clickX * msPerPixel);
+            
+            if (splitTimeMs <= metrics.start + 1000 || splitTimeMs >= metrics.end - 1000) {
+                return; // Too close to edge
+            }
+
+            // Create Right Side Task
+            const newDurationMs = metrics.end - splitTimeMs;
+            const newDurationHours = Math.max(0.1, Math.round((newDurationMs / (1000 * 60 * 60)) * 100) / 100);
+            
+            addTask({
+                title: `${task.title} (Part 2)`,
+                status: task.status,
+                priority: task.priority,
+                dueDate: task.dueDate,
+                scheduledStartDateTime: new Date(splitTimeMs).toISOString(),
+                timeEstimate: newDurationHours,
+                description: task.description,
+                tags: task.tags
+            });
+
+            // Update Left Side Task
+            const updatedOldDurationMs = splitTimeMs - metrics.start;
+            const updatedOldDurationHours = Math.max(0.1, Math.round((updatedOldDurationMs / (1000 * 60 * 60)) * 100) / 100);
+            
+            onUpdateTask({
+                ...task,
+                timeEstimate: updatedOldDurationHours
+            });
+            return;
+        }
+
+        // Option+Drag to Duplicate
+        if (type === 'MOVE' && e.altKey) {
+            setDragState({
+                taskId: task.id,
+                type: 'DUPLICATE',
+                startX: e.clientX,
+                originalStart: metrics.start,
+                originalEnd: metrics.end
+            });
+            // Initial render position for duplicate
+            setOptimisticTaskOverride({ id: task.id, start: metrics.start, end: metrics.end });
+            return;
+        }
+
+        // Standard Move/Resize
         setDragState({
             taskId: task.id,
             type,
@@ -314,29 +419,22 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
         const deltaPixels = e.clientX - dragState.startX;
         const deltaMs = deltaPixels * msPerPixel;
 
-        let newStart = dragState.originalStart;
-        let newEnd = dragState.originalEnd;
-
-        // Granular Snapping: 1 Minute by default for precision
-        // If zoomed out significantly (Week/Month), maybe snap to hour?
-        // Let's keep it granular (1 min) unless in month view (1 hour).
         const snapMs = viewMode === 'Month' ? 60 * 60 * 1000 : 60 * 1000; 
 
-        if (dragState.type === 'MOVE') {
+        if (dragState.type === 'MOVE' || dragState.type === 'DUPLICATE') {
             const rawStart = dragState.originalStart + deltaMs;
-            newStart = Math.round(rawStart / snapMs) * snapMs;
+            const newStart = Math.round(rawStart / snapMs) * snapMs;
             const duration = dragState.originalEnd - dragState.originalStart;
-            newEnd = newStart + duration;
+            const newEnd = newStart + duration;
+            setOptimisticTaskOverride({ id: dragState.taskId, start: newStart, end: newEnd });
         } else {
             const rawEnd = dragState.originalEnd + deltaMs;
-            newEnd = Math.round(rawEnd / snapMs) * snapMs;
-            // Minimum duration: 15 mins
-            if (newEnd - newStart < 15 * 60 * 1000) {
-                newEnd = newStart + (15 * 60 * 1000);
+            let newEnd = Math.round(rawEnd / snapMs) * snapMs;
+            if (newEnd - dragState.originalStart < 15 * 60 * 1000) {
+                newEnd = dragState.originalStart + (15 * 60 * 1000);
             }
+            setOptimisticTaskOverride({ id: dragState.taskId, start: dragState.originalStart, end: newEnd });
         }
-
-        setOptimisticTaskOverride({ id: dragState.taskId, start: newStart, end: newEnd });
 
     }, [dragState, msPerPixel, viewMode]);
 
@@ -351,22 +449,33 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
         if (task) {
             const newStartObj = new Date(optimisticTaskOverride.start);
             const newEndObj = new Date(optimisticTaskOverride.end);
-
             const durationMs = optimisticTaskOverride.end - optimisticTaskOverride.start;
             const durationHours = Math.round((durationMs / (1000 * 60 * 60)) * 100) / 100;
 
-            const updatedTask = {
-                ...task,
-                scheduledStartDateTime: newStartObj.toISOString(),
-                timeEstimate: durationHours,
-                dueDate: newEndObj.toISOString().split('T')[0] 
-            };
-            onUpdateTask(updatedTask);
+            if (dragState.type === 'DUPLICATE') {
+                addTask({
+                    title: `${task.title} (Copy)`,
+                    status: task.status,
+                    priority: task.priority,
+                    dueDate: task.dueDate,
+                    scheduledStartDateTime: newStartObj.toISOString(),
+                    timeEstimate: durationHours,
+                    description: task.description,
+                    tags: task.tags
+                });
+            } else {
+                onUpdateTask({
+                    ...task,
+                    scheduledStartDateTime: newStartObj.toISOString(),
+                    timeEstimate: durationHours,
+                    dueDate: newEndObj.toISOString().split('T')[0] 
+                });
+            }
         }
 
         setDragState(null);
         setOptimisticTaskOverride(null);
-    }, [dragState, optimisticTaskOverride, tasks, onUpdateTask]);
+    }, [dragState, optimisticTaskOverride, tasks, onUpdateTask, addTask]);
 
     useEffect(() => {
         if (dragState) {
@@ -374,86 +483,108 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
             window.addEventListener('mouseup', handleMouseUp);
             document.body.style.cursor = dragState.type === 'RESIZE' ? 'ew-resize' : 'grabbing';
         } else {
-            document.body.style.cursor = 'default';
+            document.body.style.cursor = activeTool === 'blade' ? 'text' : 'default'; 
         }
         return () => {
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
             document.body.style.cursor = 'default';
         };
-    }, [dragState, handleMouseMove, handleMouseUp]);
+    }, [dragState, handleMouseMove, handleMouseUp, activeTool]);
 
-    // PACKING LOGIC: Calculate rows to pack tasks without overlap
-    const { packedTasks, totalRows } = useMemo(() => {
+    // PACKING LOGIC
+    const { packedTasks, totalRows, gaps } = useMemo(() => {
         const viewStartMs = viewStartDate.getTime();
         const viewEndMs = viewEndDate.getTime();
 
-        // 1. Filter and prepare raw tasks
-        const rawTasks = tasks
-            .filter(t => t.status !== 'Done' && t.status !== "Won't Complete")
-            .map(task => {
-                if (optimisticTaskOverride && optimisticTaskOverride.id === task.id) {
-                    return { ...task, startMs: optimisticTaskOverride.start, endMs: optimisticTaskOverride.end, isDragging: true };
-                }
+        const rawTasks: any[] = [];
 
-                let startMs = task.scheduledStartDateTime 
-                    ? new Date(task.scheduledStartDateTime).getTime() 
-                    : new Date(task.createdDate).getTime();
-                
-                let endMs = new Date(task.dueDate).getTime();
-                const dueDateObj = new Date(task.dueDate);
-                
-                if (dueDateObj.getHours() === 0 && dueDateObj.getMinutes() === 0) {
-                    endMs += (24 * 60 * 60 * 1000) - 1; 
-                }
+        tasks.forEach(task => {
+            if (task.status === 'Done' || task.status === "Won't Complete") return;
 
-                if (task.scheduledStartDateTime && task.timeEstimate) {
-                     endMs = startMs + (task.timeEstimate * 60 * 60 * 1000);
-                } else if (task.scheduledStartDateTime) {
-                     endMs = startMs + (60 * 60 * 1000); 
-                }
-
-                if (startMs > endMs) startMs = endMs - (60 * 60 * 1000); 
-
-                return { ...task, startMs, endMs, isDragging: false };
-            })
-            .filter(({ startMs, endMs }) => {
-                return startMs < viewEndMs && endMs > viewStartMs;
-            })
-            // Sort by start time for the packing algorithm (Waterfall)
-            .sort((a, b) => a.startMs - b.startMs);
-
-        // 2. Pack tasks into rows (lanes)
-        const lanes: number[] = []; // Stores the end time of the last task in each lane
-        
-        const packed = rawTasks.map(task => {
-            let laneIndex = -1;
+            let startMs = task.scheduledStartDateTime 
+                ? new Date(task.scheduledStartDateTime).getTime() 
+                : new Date(task.createdDate).getTime();
             
-            // Find the first lane where this task fits
+            let endMs = new Date(task.dueDate).getTime();
+            
+            if (task.scheduledStartDateTime && task.timeEstimate) {
+                 endMs = startMs + (task.timeEstimate * 60 * 60 * 1000);
+            } else if (task.scheduledStartDateTime) {
+                 endMs = startMs + (60 * 60 * 1000); 
+            } else {
+                 if (new Date(task.dueDate).getHours() === 0) endMs += 86399000;
+                 if (startMs > endMs) startMs = endMs - 3600000;
+            }
+
+            if (optimisticTaskOverride && optimisticTaskOverride.id === task.id) {
+                if (dragState?.type === 'DUPLICATE') {
+                    rawTasks.push({ ...task, startMs, endMs, isDragging: false });
+                    rawTasks.push({ 
+                        ...task, 
+                        id: 'ghost-duplicate', 
+                        startMs: optimisticTaskOverride.start, 
+                        endMs: optimisticTaskOverride.end, 
+                        isDragging: true,
+                        isGhost: true 
+                    });
+                } else {
+                    rawTasks.push({ ...task, startMs: optimisticTaskOverride.start, endMs: optimisticTaskOverride.end, isDragging: true });
+                }
+            } else {
+                rawTasks.push({ ...task, startMs, endMs, isDragging: false });
+            }
+        });
+
+        const visibleTasks = rawTasks.filter(({ startMs, endMs }) => startMs < viewEndMs && endMs > viewStartMs)
+                                     .sort((a, b) => a.startMs - b.startMs);
+
+        const lanes: number[] = []; 
+        const rowTasks: any[][] = []; 
+
+        const packed = visibleTasks.map(task => {
+            let laneIndex = -1;
             for(let i=0; i<lanes.length; i++) {
-                // Check if lane is free. We add 0 buffer for strict packing, or we could add a small buffer.
-                // We use <= to allow tasks to start exactly when previous ends.
                 if (lanes[i] <= task.startMs) {
                     laneIndex = i;
                     break;
                 }
             }
-
-            // If no lane fits, create a new one
             if (laneIndex === -1) {
                 laneIndex = lanes.length;
                 lanes.push(0);
+                rowTasks[laneIndex] = [];
             }
 
-            // Update the lane's end time
             lanes[laneIndex] = task.endMs;
+            rowTasks[laneIndex].push(task);
 
             return { ...task, rowIndex: laneIndex };
         });
 
-        return { packedTasks: packed, totalRows: Math.max(5, lanes.length) };
-    }, [tasks, viewStartDate, viewEndDate, optimisticTaskOverride]);
+        const detectedGaps: Gap[] = [];
+        rowTasks.forEach((tasksInRow, rowIndex) => {
+            tasksInRow.sort((a,b) => a.startMs - b.startMs);
+            for(let i=0; i<tasksInRow.length - 1; i++) {
+                const current = tasksInRow[i];
+                const next = tasksInRow[i+1];
+                if (next.startMs > current.endMs + (1000 * 60 * 5)) { 
+                    const duration = next.startMs - current.endMs;
+                    detectedGaps.push({
+                        startMs: current.endMs,
+                        endMs: next.startMs,
+                        rowIndex,
+                        left: (current.endMs - viewStartMs) / msPerPixel,
+                        width: duration / msPerPixel
+                    });
+                }
+            }
+        });
 
+        return { packedTasks: packed, totalRows: Math.max(5, lanes.length), gaps: detectedGaps };
+    }, [tasks, viewStartDate, viewEndDate, optimisticTaskOverride, msPerPixel, dragState]);
+
+    // ... (keep getBarMetrics and dependency effects) ...
     const getBarMetrics = (taskStartMs: number, taskEndMs: number) => {
         const viewStartMs = viewStartDate.getTime();
         const msFromStart = taskStartMs - viewStartMs;
@@ -468,7 +599,6 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
             setDependencyLines([]);
             return;
         }
-
         const lines: LineCoordinate[] = [];
         const taskMap = new Map<string, { startMs: number, endMs: number, rowIndex: number }>();
         packedTasks.forEach(t => taskMap.set(t.id, { startMs: t.startMs, endMs: t.endMs, rowIndex: t.rowIndex }));
@@ -479,14 +609,9 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
                     const depInfo = taskMap.get(depId);
                     if (depInfo) {
                         const startTask = depInfo;
-                        const endTask = task; // Current task is the one depending on startTask
-
-                        // Line starts at the end of the dependency
+                        const endTask = task; 
                         const startX = getBarMetrics(startTask.startMs, startTask.endMs).left + getBarMetrics(startTask.startMs, startTask.endMs).width;
-                        // Line ends at the start of the current task
                         const endX = getBarMetrics(endTask.startMs, endTask.endMs).left;
-
-                        // Vertical centers of the bars
                         const TOP_PADDING = (ROW_HEIGHT - BAR_HEIGHT) / 2;
                         const BAR_CENTER = BAR_HEIGHT / 2;
                         
@@ -505,6 +630,7 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
         setDependencyLines(lines);
     }, [packedTasks, viewStartDate, msPerPixel]);
 
+    // ... (keep navigation and minimap handlers) ...
     const handleNavigate = (direction: -1 | 1) => {
         const newDate = new Date(referenceDate);
         if (viewMode === 'Day') newDate.setDate(newDate.getDate() + direction);
@@ -515,6 +641,14 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
 
     const handleToday = () => {
         setReferenceDate(new Date());
+    };
+
+    const handleMiniMapDrag = (e: React.MouseEvent) => {
+        if (!scrollContainerRef.current) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const ratio = x / rect.width;
+        scrollContainerRef.current.scrollLeft = (scrollContainerRef.current.scrollWidth * ratio) - (scrollContainerRef.current.clientWidth / 2);
     };
 
     useEffect(() => {
@@ -561,105 +695,101 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
                     <h3 className={`text-sm font-bold ${styles.textMain} flex items-center gap-2`}>
                         <i className={`fas fa-video ${styles.textAccent}`}></i> <span className="hidden sm:inline">Timeline</span>
                     </h3>
-                    
-                    {/* View Mode Toggle */}
                     <div className={`${isDarkTheme ? 'bg-gray-700' : 'bg-gray-200'} rounded-lg p-1 flex`}>
                         {(['Day', 'Week', 'Month'] as ViewMode[]).map(m => (
-                            <button
-                                key={m}
-                                onClick={() => setViewMode(m)}
-                                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${viewMode === m ? styles.buttonActive : `${styles.textMuted} hover:${styles.textMain}`}`}
-                            >
+                            <button key={m} onClick={() => setViewMode(m)} className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${viewMode === m ? styles.buttonActive : `${styles.textMuted} hover:${styles.textMain}`}`}>
                                 {m}
                             </button>
                         ))}
                     </div>
-
-                    {/* Theme Toggle */}
-                    <button 
-                        onClick={() => setIsDarkTheme(!isDarkTheme)}
-                        className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${styles.button}`}
-                        title={isDarkTheme ? "Switch to Light Mode" : "Switch to Dark Mode"}
-                    >
+                    <div className={`${isDarkTheme ? 'bg-gray-700' : 'bg-gray-200'} rounded-lg p-1 flex`}>
+                        <button onClick={() => setActiveTool('select')} className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${activeTool === 'select' ? styles.buttonActive : `${styles.textMuted} hover:${styles.textMain}`}`} title="Select Tool (V) - Hold Alt to Duplicate">
+                            <i className="fas fa-mouse-pointer mr-1"></i> Select
+                        </button>
+                        <button onClick={() => setActiveTool('blade')} className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${activeTool === 'blade' ? styles.buttonActive : `${styles.textMuted} hover:${styles.textMain}`}`} title="Blade Tool (B) - Click to split clips">
+                            <i className="fas fa-cut mr-1"></i> Blade
+                        </button>
+                    </div>
+                    <button onClick={() => setIsDarkTheme(!isDarkTheme)} className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${styles.button}`}>
                         <i className={`fas ${isDarkTheme ? 'fa-sun' : 'fa-moon'}`}></i>
                     </button>
-
-                    {/* Zoom Controls (Day View Only) */}
                     {viewMode === 'Day' && (
                         <div className={`flex items-center gap-1 ${isDarkTheme ? 'bg-gray-700' : 'bg-gray-200'} rounded-lg p-1`}>
-                            <button 
-                                onClick={handleZoomOut} 
-                                disabled={zoomIndex >= ZOOM_LEVELS[viewMode].length - 1}
-                                className={`w-7 h-7 flex items-center justify-center rounded ${styles.button} disabled:opacity-50 disabled:cursor-not-allowed shadow-sm text-xs`}
-                            >
+                            <button onClick={handleZoomOut} disabled={zoomIndex >= ZOOM_LEVELS[viewMode].length - 1} className={`w-7 h-7 flex items-center justify-center rounded ${styles.button} disabled:opacity-50 disabled:cursor-not-allowed shadow-sm text-xs`}>
                                 <i className="fas fa-search-minus"></i>
                             </button>
-                            <span className={`text-[10px] font-bold px-2 min-w-[30px] text-center ${styles.textMuted}`}>
-                                {ZOOM_LEVELS[viewMode][zoomIndex].label}
-                            </span>
-                            <button 
-                                onClick={handleZoomIn} 
-                                disabled={zoomIndex <= 0}
-                                className={`w-7 h-7 flex items-center justify-center rounded ${styles.button} disabled:opacity-50 disabled:cursor-not-allowed shadow-sm text-xs`}
-                            >
+                            <span className={`text-[10px] font-bold px-2 min-w-[30px] text-center ${styles.textMuted}`}>{ZOOM_LEVELS[viewMode][zoomIndex].label}</span>
+                            <button onClick={handleZoomIn} disabled={zoomIndex <= 0} className={`w-7 h-7 flex items-center justify-center rounded ${styles.button} disabled:opacity-50 disabled:cursor-not-allowed shadow-sm text-xs`}>
                                 <i className="fas fa-search-plus"></i>
                             </button>
                         </div>
                     )}
                 </div>
-
                 <div className={`hidden lg:flex items-center px-4 py-1.5 ${isDarkTheme ? 'bg-indigo-900/30 border-indigo-800' : 'bg-indigo-50 border-indigo-100'} border rounded-full`}>
                     <i className={`far fa-clock ${styles.textAccent} mr-2 animate-pulse`}></i>
-                    <span className={`text-xs font-mono font-bold ${isDarkTheme ? 'text-indigo-300' : 'text-indigo-800'} uppercase tracking-wide`}>
-                        {getFormattedCurrentTime()}
-                    </span>
+                    <span className={`text-xs font-mono font-bold ${isDarkTheme ? 'text-indigo-300' : 'text-indigo-800'} uppercase tracking-wide`}>{getFormattedCurrentTime()}</span>
                 </div>
-
                 <div className="flex items-center gap-3">
                     <div className={`flex items-center ${styles.input} rounded-md px-2 py-1 shadow-sm`}>
-                        <input 
-                            type={viewMode === 'Month' ? 'month' : 'date'}
-                            value={getDateInputValue()}
-                            onChange={handleDateChange}
-                            className={`bg-transparent border-none text-xs font-bold focus:outline-none cursor-pointer ${styles.textMain}`}
-                        />
+                        <input type={viewMode === 'Month' ? 'month' : 'date'} value={getDateInputValue()} onChange={handleDateChange} className={`bg-transparent border-none text-xs font-bold focus:outline-none cursor-pointer ${styles.textMain}`} />
                     </div>
-
-                    <span className={`text-xs font-bold ${styles.textMain} min-w-[140px] text-center hidden sm:block`}>
-                        {getHeaderText()}
-                    </span>
+                    <span className={`text-xs font-bold ${styles.textMain} min-w-[140px] text-center hidden sm:block`}>{getHeaderText()}</span>
                     <div className="flex items-center gap-1">
-                        <button onClick={() => handleNavigate(-1)} className={`w-7 h-7 flex items-center justify-center rounded ${styles.button}`}>
-                            <i className="fas fa-chevron-left text-xs"></i>
-                        </button>
-                        <button onClick={handleToday} className={`px-2 py-1 text-xs font-semibold rounded bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20 transition-colors`}>
-                            Today
-                        </button>
-                        <button onClick={() => handleNavigate(1)} className={`w-7 h-7 flex items-center justify-center rounded ${styles.button}`}>
-                            <i className="fas fa-chevron-right text-xs"></i>
-                        </button>
+                        <button onClick={() => handleNavigate(-1)} className={`w-7 h-7 flex items-center justify-center rounded ${styles.button}`}><i className="fas fa-chevron-left text-xs"></i></button>
+                        <button onClick={handleToday} className={`px-2 py-1 text-xs font-semibold rounded bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20 transition-colors`}>Today</button>
+                        <button onClick={() => handleNavigate(1)} className={`w-7 h-7 flex items-center justify-center rounded ${styles.button}`}><i className="fas fa-chevron-right text-xs"></i></button>
                     </div>
                 </div>
             </div>
 
+            {/* Main Timeline Area */}
             <div 
                 ref={scrollContainerRef}
+                onMouseMove={handleContainerMouseMove}
+                onMouseLeave={handleContainerMouseLeave}
                 className={`overflow-x-auto relative custom-scrollbar ${styles.scrollArea}`}
                 style={{ maxHeight: '450px', minHeight: '200px' }}
             >
-                <div style={{ width: `${totalWidth}px`, minWidth: '100%', height: `${Math.max(200, (totalRows * ROW_HEIGHT) + HEADER_HEIGHT + 20)}px` }} className="relative">
-                    
-                    {/* Ruler Header */}
+                <div 
+                    ref={containerRef}
+                    style={{ width: `${totalWidth}px`, minWidth: '100%', height: `${Math.max(200, (totalRows * ROW_HEIGHT) + HEADER_HEIGHT + 20)}px` }} 
+                    className="relative"
+                >
+                    {/* Ruler Header (Sticky) */}
                     <div className={`flex border-b ${styles.header} sticky top-0 z-40 shadow-md select-none`} style={{ height: `${HEADER_HEIGHT}px` }}>
+                        
+                        {/* 1. Playhead Cap (Current Time) - Static/Time driven */}
+                        {viewMode !== 'Month' && (() => {
+                            const nowMs = accurateNow.getTime();
+                            if (nowMs >= viewStartDate.getTime() && nowMs <= viewEndDate.getTime()) {
+                                const diff = nowMs - viewStartDate.getTime();
+                                const left = diff / msPerPixel;
+                                return (
+                                    <div className="absolute top-0 bottom-0 pointer-events-none z-50 flex flex-col items-center" style={{ left: `${left}px`, transform: 'translateX(-50%)' }}>
+                                        <div className="absolute top-8">
+                                            <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-red-500"></div>
+                                        </div>
+                                    </div>
+                                );
+                            }
+                            return null;
+                        })()}
+
+                        {/* 2. Skimmer Cap (Mouse) - Ref driven */}
+                        <div 
+                            ref={skimmerLabelRef}
+                            className="absolute top-8 pointer-events-none z-50 bg-gray-700 text-white text-[10px] font-bold px-1.5 py-0.5 rounded -translate-x-1/2 opacity-0 hidden"
+                        >
+                            00:00
+                        </div>
+
                         {columns.map((col, i) => (
                             <div 
                                 key={i} 
                                 className={`flex-shrink-0 border-r ${styles.rulerBorder} relative ${col.isToday ? styles.todayHighlight : ''}`}
                                 style={{ width: `${tickWidth}px` }}
                             >
-                                <div className={`absolute top-0 left-1 text-[10px] font-bold ${styles.textMuted} uppercase`}>
-                                    {col.label}
-                                </div>
+                                <div className={`absolute top-0 left-1 text-[10px] font-bold ${styles.textMuted} uppercase`}>{col.label}</div>
                                 <div className={`absolute bottom-0 left-0 w-px h-2 bg-gray-500`}></div>
                                 <div className={`absolute bottom-0 left-1/4 w-px h-1 bg-gray-600`}></div>
                                 <div className={`absolute bottom-0 left-1/2 w-px h-1.5 bg-gray-600`}></div>
@@ -669,42 +799,45 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
                         ))}
                     </div>
 
-                    {/* Background Tracks (Zebra Striping) */}
+                    {/* Skimmer Line (In content area, full height) */}
+                    <div 
+                        ref={skimmerRef}
+                        className="absolute top-0 bottom-0 w-px bg-red-500 z-50 pointer-events-none hidden -translate-x-1/2"
+                        style={{ height: '100%' }}
+                    ></div>
+
+                    {/* Background Tracks */}
                     <div className="absolute left-0 right-0 pointer-events-none z-0" style={{ top: `${HEADER_HEIGHT}px` }}>
                         {Array.from({ length: totalRows }).map((_, i) => (
-                            <div 
-                                key={`row-${i}`} 
-                                className={`w-full border-b ${isDarkTheme ? 'border-gray-800/30' : 'border-gray-100'} ${i % 2 === 0 ? styles.rowEven : styles.rowOdd}`}
-                                style={{ height: `${ROW_HEIGHT}px` }}
-                            ></div>
+                            <div key={`row-${i}`} className={`w-full border-b ${isDarkTheme ? 'border-gray-800/30' : 'border-gray-100'} ${i % 2 === 0 ? styles.rowEven : styles.rowOdd}`} style={{ height: `${ROW_HEIGHT}px` }}></div>
                         ))}
                     </div>
 
                     {/* Vertical Time Grid Lines */}
                     <div className="absolute bottom-0 left-0 flex pointer-events-none z-0 opacity-30" style={{ top: `${HEADER_HEIGHT}px` }}>
                         {columns.map((col, i) => (
-                            <div 
-                                key={`grid-${i}`}
-                                className={`flex-shrink-0 border-r h-full ${styles.gridLine}`}
-                                style={{ width: `${tickWidth}px` }}
-                            ></div>
+                            <div key={`grid-${i}`} className={`flex-shrink-0 border-r h-full ${styles.gridLine}`} style={{ width: `${tickWidth}px` }}></div>
                         ))}
                     </div>
 
-                    {/* Playhead (Current Time) */}
+                    {/* Gap Indicators */}
+                    {gaps.map((gap, i) => (
+                        <div key={`gap-${i}`} className="absolute z-10 group" style={{ left: `${gap.left}px`, width: `${gap.width}px`, top: `${HEADER_HEIGHT + (gap.rowIndex * ROW_HEIGHT)}px`, height: `${ROW_HEIGHT}px` }}>
+                            <div className="w-full h-full bg-stripes-gray opacity-0 group-hover:opacity-1 transition-opacity border-l border-r border-dashed border-gray-400/30"></div>
+                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-500 bg-white/80 dark:bg-black/80 px-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none">
+                                Gap: {Math.round((gap.endMs - gap.startMs) / 60000)}m
+                            </div>
+                        </div>
+                    ))}
+
+                    {/* Current Time Line */}
                     {viewMode !== 'Month' && (() => {
                         const nowMs = accurateNow.getTime();
                         if (nowMs >= viewStartDate.getTime() && nowMs <= viewEndDate.getTime()) {
                             const diff = nowMs - viewStartDate.getTime();
                             const left = diff / msPerPixel;
                             return (
-                                <div 
-                                    className="absolute bottom-0 z-50 pointer-events-none"
-                                    style={{ left: `${left}px`, top: `${HEADER_HEIGHT - 12}px` }}
-                                >
-                                    {/* Playhead Cap */}
-                                    <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-red-500 translate-x-[-6px]"></div>
-                                    {/* Playhead Line */}
+                                <div className="absolute top-0 bottom-0 z-50 pointer-events-none" style={{ left: `${left}px`, transform: 'translateX(-50%)' }}>
                                     <div className="w-px h-full bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.5)]"></div>
                                 </div>
                             );
@@ -719,67 +852,72 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
 
                     {/* Tasks Layer */}
                     <div className="relative w-full h-full z-20">
-                        {packedTasks.length === 0 && (
-                            <div className={`absolute inset-0 flex items-center justify-center ${styles.textMuted} text-sm italic pointer-events-none`} style={{ top: HEADER_HEIGHT }}>
-                                <i className="fas fa-film mr-2"></i> No timeline clips
-                            </div>
-                        )}
-
                         {packedTasks.map((task) => {
                             const metrics = getBarMetrics(task.startMs, task.endMs);
                             const statusStyle = STATUS_STYLES[task.status] || STATUS_STYLES['To Do'];
                             const priorityConfig = PRIORITY_COLORS[task.priority] || PRIORITY_COLORS['Medium'];
-                            
-                            // Absolute positioning based on row index
+                            const isCompound = (task.subtasks?.length || 0) > 0;
                             const top = HEADER_HEIGHT + (task.rowIndex * ROW_HEIGHT) + ((ROW_HEIGHT - BAR_HEIGHT) / 2);
+                            const isGhost = (task as any).isGhost;
 
                             return (
                                 <div 
-                                    key={task.id} 
+                                    key={isGhost ? `ghost-${task.id}` : task.id}
                                     className={`absolute rounded-md shadow-md flex items-center px-2 overflow-hidden transition-all duration-75 group
                                         ${statusStyle.header} 
                                         ${task.isDragging ? 'opacity-90 ring-2 ring-yellow-400 z-50 scale-[1.02] shadow-xl' : 'hover:brightness-110 z-20 hover:ring-1 hover:ring-white/50'}
+                                        ${isGhost ? 'opacity-50 saturate-0 border-2 border-dashed border-white' : ''}
                                     `}
                                     style={{ 
                                         left: `${Math.max(0, metrics.left)}px`, 
                                         width: `${Math.max(20, metrics.width)}px`,
                                         top: `${top}px`,
                                         height: `${BAR_HEIGHT}px`,
-                                        cursor: 'grab' 
+                                        cursor: activeTool === 'blade' ? 'url(https://img.icons8.com/material-sharp/24/FA5252/cut.png) 12 12, crosshair' : 'grab'
                                     }}
                                     onMouseDown={(e) => handleMouseDown(e, task, 'MOVE', { start: task.startMs, end: task.endMs })}
                                     onClick={(e) => {
-                                        if (!task.isDragging) onEditTask(task);
+                                        if (!task.isDragging && activeTool !== 'blade' && !isGhost) onEditTask(task);
                                     }}
                                     title={`[${task.priority}] ${task.title}`}
                                 >
-                                    {/* Left Trim Handle */}
-                                    <div className="absolute left-0 top-0 bottom-0 w-2 cursor-w-resize opacity-0 group-hover:opacity-100 bg-black/20 hover:bg-black/40 z-30"></div>
-
-                                    {/* Content */}
+                                    {activeTool === 'select' && (
+                                        <div className="absolute left-0 top-0 bottom-0 w-2 cursor-w-resize opacity-0 group-hover:opacity-100 bg-black/20 hover:bg-black/40 z-30"></div>
+                                    )}
                                     <div className="flex items-center w-full overflow-hidden select-none pointer-events-none gap-2">
-                                        {/* Priority Badge */}
-                                        <span className={`text-[9px] uppercase font-bold px-1.5 rounded-sm flex-shrink-0 ${priorityConfig.bg} ${priorityConfig.text} bg-opacity-90 border border-white/20 shadow-sm`}>
-                                            {task.priority}
-                                        </span>
-                                        
+                                        <span className={`text-[9px] uppercase font-bold px-1.5 rounded-sm flex-shrink-0 ${priorityConfig.bg} ${priorityConfig.text} bg-opacity-90 border border-white/20 shadow-sm`}>{task.priority}</span>
+                                        {isCompound && <i className="fas fa-layer-group text-white/70 text-xs"></i>}
                                         <span className="text-xs font-bold text-white whitespace-nowrap truncate drop-shadow-md">
-                                            {task.title}
+                                            {isGhost ? `(Copy) ${task.title}` : task.title}
                                         </span>
                                     </div>
-
-                                    {/* Right Trim Handle */}
-                                    <div 
-                                        className="absolute right-0 top-0 bottom-0 w-3 cursor-e-resize flex items-center justify-center z-30 group-hover:bg-black/10 hover:!bg-white/30"
-                                        onMouseDown={(e) => handleMouseDown(e, task, 'RESIZE', { start: task.startMs, end: task.endMs })}
-                                    >
-                                        <div className="w-0.5 h-3 bg-white/30 rounded-full"></div>
-                                    </div>
+                                    {activeTool === 'select' && (
+                                        <div className="absolute right-0 top-0 bottom-0 w-3 cursor-e-resize flex items-center justify-center z-30 group-hover:bg-black/10 hover:!bg-white/30" onMouseDown={(e) => handleMouseDown(e, task, 'RESIZE', { start: task.startMs, end: task.endMs })}>
+                                            <div className="w-0.5 h-3 bg-white/30 rounded-full"></div>
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}
                     </div>
                 </div>
+            </div>
+
+            {/* Mini-Map ... (Same as before) */}
+            <div className={`h-[60px] border-t ${isDarkTheme ? 'border-gray-700 bg-gray-900' : 'border-gray-300 bg-gray-100'} relative overflow-hidden`} onClick={handleMiniMapDrag}>
+                {packedTasks.map((task) => {
+                    if ((task as any).isGhost) return null;
+                    const metrics = getBarMetrics(task.startMs, task.endMs);
+                    const leftPct = (metrics.left / totalWidth) * 100;
+                    const widthPct = (metrics.width / totalWidth) * 100;
+                    const statusColor = STATUS_STYLES[task.status].header.replace('bg-', 'bg-');
+                    return (
+                        <div key={`mini-${task.id}`} className={`absolute h-2 top-2 rounded-full opacity-50 ${statusColor}`} style={{ left: `${leftPct}%`, width: `${Math.max(0.5, widthPct)}%`, top: `${(task.rowIndex * 4) + 2}px` }} />
+                    )
+                })}
+                {scrollContainerRef.current && (
+                    <div className="absolute top-0 bottom-0 border-2 border-yellow-400 bg-yellow-400/10 cursor-grab active:cursor-grabbing" style={{ left: `${(scrollContainerRef.current.scrollLeft / totalWidth) * 100}%`, width: `${(scrollContainerRef.current.clientWidth / totalWidth) * 100}%` }}></div>
+                )}
             </div>
         </div>
     );

@@ -137,7 +137,8 @@ export const useTaskManager = (enableLoading: boolean = true) => {
         }
     }, [tasks, columnLayouts, isLoading, enableLoading]);
 
-    const addTask = useCallback((taskData: Omit<Task, 'id' | 'createdDate' | 'lastModified'>) => {
+    // TYPE FIX: Added statusChangeDate to omitted fields, allowing optional property in input
+    const addTask = useCallback((taskData: Omit<Task, 'id' | 'createdDate' | 'lastModified' | 'statusChangeDate'> & { statusChangeDate?: string }) => {
         const now = new Date().toISOString();
         const newTask: Task = {
             id: `task-${Date.now()}-${Math.random()}`,

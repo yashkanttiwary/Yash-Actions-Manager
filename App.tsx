@@ -828,6 +828,7 @@ const App: React.FC = () => {
                                     tasks={filteredTasks} 
                                     onEditTask={handleEditTask}
                                     onUpdateTask={updateTask}
+                                    addTask={addTask} // Pass Add Task for Blade Tool
                                     isVisible={showTimeline}
                                     timezone={settings.timezone}
                                 />
