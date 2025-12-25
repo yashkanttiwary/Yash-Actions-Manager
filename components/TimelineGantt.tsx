@@ -155,14 +155,37 @@ const getStartOfMonthInZone = (date: Date, timeZone: string): Date => {
 
 export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask, onUpdateTask, isVisible, timezone = 'Asia/Kolkata' }) => {
     const scrollContainerRef = useRef<HTMLDivElement>(null);
-    const [viewMode, setViewMode] = useState<ViewMode>('Week'); 
+    const [viewMode, setViewMode] = useState<ViewMode>('Day'); 
     const [zoomIndex, setZoomIndex] = useState(2); 
     const [referenceDate, setReferenceDate] = useState(new Date());
     const [dragState, setDragState] = useState<DragState | null>(null);
     const [accurateNow, setAccurateNow] = useState(new Date());
     const [dependencyLines, setDependencyLines] = useState<LineCoordinate[]>([]);
     
+    // Theme state for independent control
+    const [isDarkTheme, setIsDarkTheme] = useState(true);
+    
     const [optimisticTaskOverride, setOptimisticTaskOverride] = useState<{id: string, start: number, end: number} | null>(null);
+
+    // Dynamic styles based on independent theme state
+    const styles = useMemo(() => ({
+        container: isDarkTheme ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200',
+        header: isDarkTheme ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200',
+        textMain: isDarkTheme ? 'text-gray-200' : 'text-gray-800',
+        textMuted: isDarkTheme ? 'text-gray-400' : 'text-gray-500',
+        textAccent: isDarkTheme ? 'text-indigo-400' : 'text-indigo-600',
+        input: isDarkTheme ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300 text-gray-800',
+        button: isDarkTheme ? 'bg-gray-700 text-gray-300 hover:text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50',
+        buttonActive: isDarkTheme ? 'bg-gray-600 shadow text-indigo-300' : 'bg-gray-100 shadow text-indigo-600',
+        scrollArea: isDarkTheme ? 'bg-gray-950' : 'bg-gray-50',
+        rulerBorder: isDarkTheme ? 'border-gray-700/50' : 'border-gray-200',
+        rulerTick: isDarkTheme ? 'bg-gray-600' : 'bg-gray-300',
+        rowEven: isDarkTheme ? 'bg-gray-900' : 'bg-white',
+        rowOdd: isDarkTheme ? 'bg-gray-900/50' : 'bg-gray-50',
+        gridLine: isDarkTheme ? 'border-gray-700/30' : 'border-gray-200/60',
+        todayHighlight: isDarkTheme ? 'bg-indigo-900/10' : 'bg-indigo-50',
+        emptyText: isDarkTheme ? 'text-gray-600' : 'text-gray-400',
+    }), [isDarkTheme]);
 
     useEffect(() => {
         initializeTimeSync();
@@ -531,40 +554,53 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
     if (!isVisible) return null;
 
     return (
-        <div className="w-full bg-gray-900 border-b border-gray-700 shadow-xl transition-all duration-500 ease-in-out animate-slideDown overflow-hidden flex flex-col mb-6 rounded-xl relative z-10 flex-shrink-0 select-none">
+        <div className={`w-full ${styles.container} border-b shadow-xl transition-all duration-500 ease-in-out animate-slideDown overflow-hidden flex flex-col mb-6 rounded-xl relative z-10 flex-shrink-0 select-none`}>
             {/* Control Bar */}
-            <div className="flex flex-col xl:flex-row justify-between items-center p-3 border-b border-gray-700 bg-gray-800 gap-3">
+            <div className={`flex flex-col xl:flex-row justify-between items-center p-3 border-b ${styles.header} gap-3`}>
                 <div className="flex flex-wrap items-center gap-4">
-                    <h3 className="text-sm font-bold text-gray-200 flex items-center gap-2">
-                        <i className="fas fa-video text-indigo-400"></i> <span className="hidden sm:inline">Timeline</span>
+                    <h3 className={`text-sm font-bold ${styles.textMain} flex items-center gap-2`}>
+                        <i className={`fas fa-video ${styles.textAccent}`}></i> <span className="hidden sm:inline">Timeline</span>
                     </h3>
-                    <div className="flex bg-gray-700 rounded-lg p-1">
+                    
+                    {/* View Mode Toggle */}
+                    <div className={`${isDarkTheme ? 'bg-gray-700' : 'bg-gray-200'} rounded-lg p-1 flex`}>
                         {(['Day', 'Week', 'Month'] as ViewMode[]).map(m => (
                             <button
                                 key={m}
                                 onClick={() => setViewMode(m)}
-                                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${viewMode === m ? 'bg-gray-600 shadow text-indigo-300' : 'text-gray-400 hover:text-gray-200'}`}
+                                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${viewMode === m ? styles.buttonActive : `${styles.textMuted} hover:${styles.textMain}`}`}
                             >
                                 {m}
                             </button>
                         ))}
                     </div>
+
+                    {/* Theme Toggle */}
+                    <button 
+                        onClick={() => setIsDarkTheme(!isDarkTheme)}
+                        className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${styles.button}`}
+                        title={isDarkTheme ? "Switch to Light Mode" : "Switch to Dark Mode"}
+                    >
+                        <i className={`fas ${isDarkTheme ? 'fa-sun' : 'fa-moon'}`}></i>
+                    </button>
+
+                    {/* Zoom Controls (Day View Only) */}
                     {viewMode === 'Day' && (
-                        <div className="flex items-center gap-1 bg-gray-700 rounded-lg p-1">
+                        <div className={`flex items-center gap-1 ${isDarkTheme ? 'bg-gray-700' : 'bg-gray-200'} rounded-lg p-1`}>
                             <button 
                                 onClick={handleZoomOut} 
                                 disabled={zoomIndex >= ZOOM_LEVELS[viewMode].length - 1}
-                                className="w-7 h-7 flex items-center justify-center rounded bg-gray-600 text-gray-300 hover:text-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm text-xs"
+                                className={`w-7 h-7 flex items-center justify-center rounded ${styles.button} disabled:opacity-50 disabled:cursor-not-allowed shadow-sm text-xs`}
                             >
                                 <i className="fas fa-search-minus"></i>
                             </button>
-                            <span className="text-[10px] font-bold px-2 min-w-[30px] text-center text-gray-400">
+                            <span className={`text-[10px] font-bold px-2 min-w-[30px] text-center ${styles.textMuted}`}>
                                 {ZOOM_LEVELS[viewMode][zoomIndex].label}
                             </span>
                             <button 
                                 onClick={handleZoomIn} 
                                 disabled={zoomIndex <= 0}
-                                className="w-7 h-7 flex items-center justify-center rounded bg-gray-600 text-gray-300 hover:text-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm text-xs"
+                                className={`w-7 h-7 flex items-center justify-center rounded ${styles.button} disabled:opacity-50 disabled:cursor-not-allowed shadow-sm text-xs`}
                             >
                                 <i className="fas fa-search-plus"></i>
                             </button>
@@ -572,34 +608,34 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
                     )}
                 </div>
 
-                <div className="hidden lg:flex items-center px-4 py-1.5 bg-indigo-900/30 border border-indigo-800 rounded-full">
-                    <i className="far fa-clock text-indigo-400 mr-2 animate-pulse"></i>
-                    <span className="text-xs font-mono font-bold text-indigo-300 uppercase tracking-wide">
+                <div className={`hidden lg:flex items-center px-4 py-1.5 ${isDarkTheme ? 'bg-indigo-900/30 border-indigo-800' : 'bg-indigo-50 border-indigo-100'} border rounded-full`}>
+                    <i className={`far fa-clock ${styles.textAccent} mr-2 animate-pulse`}></i>
+                    <span className={`text-xs font-mono font-bold ${isDarkTheme ? 'text-indigo-300' : 'text-indigo-800'} uppercase tracking-wide`}>
                         {getFormattedCurrentTime()}
                     </span>
                 </div>
 
                 <div className="flex items-center gap-3">
-                    <div className="flex items-center bg-gray-700 rounded-md border border-gray-600 px-2 py-1 shadow-sm">
+                    <div className={`flex items-center ${styles.input} rounded-md px-2 py-1 shadow-sm`}>
                         <input 
                             type={viewMode === 'Month' ? 'month' : 'date'}
                             value={getDateInputValue()}
                             onChange={handleDateChange}
-                            className="bg-transparent border-none text-xs font-bold text-gray-200 focus:outline-none cursor-pointer"
+                            className={`bg-transparent border-none text-xs font-bold focus:outline-none cursor-pointer ${styles.textMain}`}
                         />
                     </div>
 
-                    <span className="text-xs font-bold text-gray-300 min-w-[140px] text-center hidden sm:block">
+                    <span className={`text-xs font-bold ${styles.textMain} min-w-[140px] text-center hidden sm:block`}>
                         {getHeaderText()}
                     </span>
                     <div className="flex items-center gap-1">
-                        <button onClick={() => handleNavigate(-1)} className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-700 text-gray-400 transition-colors">
+                        <button onClick={() => handleNavigate(-1)} className={`w-7 h-7 flex items-center justify-center rounded ${styles.button}`}>
                             <i className="fas fa-chevron-left text-xs"></i>
                         </button>
-                        <button onClick={handleToday} className="px-2 py-1 text-xs font-semibold rounded bg-indigo-900/50 text-indigo-400 hover:bg-indigo-900/70 transition-colors">
+                        <button onClick={handleToday} className={`px-2 py-1 text-xs font-semibold rounded bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20 transition-colors`}>
                             Today
                         </button>
-                        <button onClick={() => handleNavigate(1)} className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-700 text-gray-400 transition-colors">
+                        <button onClick={() => handleNavigate(1)} className={`w-7 h-7 flex items-center justify-center rounded ${styles.button}`}>
                             <i className="fas fa-chevron-right text-xs"></i>
                         </button>
                     </div>
@@ -608,27 +644,27 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
 
             <div 
                 ref={scrollContainerRef}
-                className="overflow-x-auto relative custom-scrollbar bg-gray-950"
+                className={`overflow-x-auto relative custom-scrollbar ${styles.scrollArea}`}
                 style={{ maxHeight: '450px', minHeight: '200px' }}
             >
                 <div style={{ width: `${totalWidth}px`, minWidth: '100%', height: `${Math.max(200, (totalRows * ROW_HEIGHT) + HEADER_HEIGHT + 20)}px` }} className="relative">
                     
                     {/* Ruler Header */}
-                    <div className="flex border-b border-gray-700 sticky top-0 bg-gray-800 z-40 shadow-md select-none" style={{ height: `${HEADER_HEIGHT}px` }}>
+                    <div className={`flex border-b ${styles.header} sticky top-0 z-40 shadow-md select-none`} style={{ height: `${HEADER_HEIGHT}px` }}>
                         {columns.map((col, i) => (
                             <div 
                                 key={i} 
-                                className={`flex-shrink-0 border-r border-gray-700/50 relative ${col.isToday ? 'bg-indigo-900/10' : ''}`}
+                                className={`flex-shrink-0 border-r ${styles.rulerBorder} relative ${col.isToday ? styles.todayHighlight : ''}`}
                                 style={{ width: `${tickWidth}px` }}
                             >
-                                <div className="absolute top-0 left-1 text-[10px] font-bold text-gray-500 uppercase">
+                                <div className={`absolute top-0 left-1 text-[10px] font-bold ${styles.textMuted} uppercase`}>
                                     {col.label}
                                 </div>
-                                <div className="absolute bottom-0 left-0 w-px h-2 bg-gray-500"></div>
-                                <div className="absolute bottom-0 left-1/4 w-px h-1 bg-gray-600"></div>
-                                <div className="absolute bottom-0 left-1/2 w-px h-1.5 bg-gray-600"></div>
-                                <div className="absolute bottom-0 left-3/4 w-px h-1 bg-gray-600"></div>
-                                {col.subLabel && <div className="absolute bottom-3 left-1 text-[9px] text-gray-600 font-mono">{col.subLabel}</div>}
+                                <div className={`absolute bottom-0 left-0 w-px h-2 bg-gray-500`}></div>
+                                <div className={`absolute bottom-0 left-1/4 w-px h-1 bg-gray-600`}></div>
+                                <div className={`absolute bottom-0 left-1/2 w-px h-1.5 bg-gray-600`}></div>
+                                <div className={`absolute bottom-0 left-3/4 w-px h-1 bg-gray-600`}></div>
+                                {col.subLabel && <div className={`absolute bottom-3 left-1 text-[9px] ${styles.textMuted} font-mono`}>{col.subLabel}</div>}
                             </div>
                         ))}
                     </div>
@@ -638,18 +674,18 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
                         {Array.from({ length: totalRows }).map((_, i) => (
                             <div 
                                 key={`row-${i}`} 
-                                className={`w-full border-b border-gray-800/30 ${i % 2 === 0 ? 'bg-gray-900' : 'bg-gray-900/50'}`}
+                                className={`w-full border-b ${isDarkTheme ? 'border-gray-800/30' : 'border-gray-100'} ${i % 2 === 0 ? styles.rowEven : styles.rowOdd}`}
                                 style={{ height: `${ROW_HEIGHT}px` }}
                             ></div>
                         ))}
                     </div>
 
                     {/* Vertical Time Grid Lines */}
-                    <div className="absolute bottom-0 left-0 flex pointer-events-none z-0 opacity-10" style={{ top: `${HEADER_HEIGHT}px` }}>
+                    <div className="absolute bottom-0 left-0 flex pointer-events-none z-0 opacity-30" style={{ top: `${HEADER_HEIGHT}px` }}>
                         {columns.map((col, i) => (
                             <div 
                                 key={`grid-${i}`}
-                                className="flex-shrink-0 border-r border-white h-full"
+                                className={`flex-shrink-0 border-r h-full ${styles.gridLine}`}
                                 style={{ width: `${tickWidth}px` }}
                             ></div>
                         ))}
@@ -684,7 +720,7 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
                     {/* Tasks Layer */}
                     <div className="relative w-full h-full z-20">
                         {packedTasks.length === 0 && (
-                            <div className="absolute inset-0 flex items-center justify-center text-gray-600 text-sm italic pointer-events-none" style={{ top: HEADER_HEIGHT }}>
+                            <div className={`absolute inset-0 flex items-center justify-center ${styles.textMuted} text-sm italic pointer-events-none`} style={{ top: HEADER_HEIGHT }}>
                                 <i className="fas fa-film mr-2"></i> No timeline clips
                             </div>
                         )}
@@ -721,8 +757,12 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
                                     <div className="absolute left-0 top-0 bottom-0 w-2 cursor-w-resize opacity-0 group-hover:opacity-100 bg-black/20 hover:bg-black/40 z-30"></div>
 
                                     {/* Content */}
-                                    <div className="flex items-center w-full overflow-hidden select-none pointer-events-none">
-                                        <div className={`w-1.5 h-1.5 rounded-full mr-2 flex-shrink-0 ${priorityConfig.text === 'text-red-400' ? 'bg-red-400' : 'bg-white/50'}`}></div>
+                                    <div className="flex items-center w-full overflow-hidden select-none pointer-events-none gap-2">
+                                        {/* Priority Badge */}
+                                        <span className={`text-[9px] uppercase font-bold px-1.5 rounded-sm flex-shrink-0 ${priorityConfig.bg} ${priorityConfig.text} bg-opacity-90 border border-white/20 shadow-sm`}>
+                                            {task.priority}
+                                        </span>
+                                        
                                         <span className="text-xs font-bold text-white whitespace-nowrap truncate drop-shadow-md">
                                             {task.title}
                                         </span>
