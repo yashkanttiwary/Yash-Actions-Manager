@@ -37,6 +37,11 @@ interface LineCoordinate {
   isBlocked: boolean;
 }
 
+const ROW_HEIGHT = 42; // Height allocated per row
+const BAR_HEIGHT = 32; // Actual height of the task bar
+const ROW_GAP = 6;     // Vertical spacing
+const HEADER_HEIGHT = 40;
+
 const ZOOM_LEVELS: Record<ViewMode, ZoomConfig[]> = {
     'Day': [
         { unit: 'minute', step: 15, label: '15m', width: 60 },
@@ -55,7 +60,6 @@ const ZOOM_LEVELS: Record<ViewMode, ZoomConfig[]> = {
 };
 
 // Fix M-02: Robust Timezone Calculation
-// Instead of iterative rollback, we decompose the time in the target zone and rebuild in UTC.
 const getStartOfDayInZone = (date: Date, timeZone: string): Date => {
     try {
         const parts = new Intl.DateTimeFormat('en-US', {
@@ -353,11 +357,13 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
         };
     }, [dragState, handleMouseMove, handleMouseUp]);
 
-    const visibleTasks = useMemo(() => {
+    // PACKING LOGIC: Calculate rows to pack tasks without overlap
+    const { packedTasks, totalRows } = useMemo(() => {
         const viewStartMs = viewStartDate.getTime();
         const viewEndMs = viewEndDate.getTime();
 
-        return tasks
+        // 1. Filter and prepare raw tasks
+        const rawTasks = tasks
             .filter(t => t.status !== 'Done' && t.status !== "Won't Complete")
             .map(task => {
                 if (optimisticTaskOverride && optimisticTaskOverride.id === task.id) {
@@ -388,7 +394,38 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
             .filter(({ startMs, endMs }) => {
                 return startMs < viewEndMs && endMs > viewStartMs;
             })
-            .sort((a, b) => a.startMs - b.startMs); 
+            // Sort by start time for the packing algorithm (Waterfall)
+            .sort((a, b) => a.startMs - b.startMs);
+
+        // 2. Pack tasks into rows (lanes)
+        const lanes: number[] = []; // Stores the end time of the last task in each lane
+        
+        const packed = rawTasks.map(task => {
+            let laneIndex = -1;
+            
+            // Find the first lane where this task fits
+            for(let i=0; i<lanes.length; i++) {
+                // Check if lane is free. We add 0 buffer for strict packing, or we could add a small buffer.
+                // We use <= to allow tasks to start exactly when previous ends.
+                if (lanes[i] <= task.startMs) {
+                    laneIndex = i;
+                    break;
+                }
+            }
+
+            // If no lane fits, create a new one
+            if (laneIndex === -1) {
+                laneIndex = lanes.length;
+                lanes.push(0);
+            }
+
+            // Update the lane's end time
+            lanes[laneIndex] = task.endMs;
+
+            return { ...task, rowIndex: laneIndex };
+        });
+
+        return { packedTasks: packed, totalRows: Math.max(5, lanes.length) };
     }, [tasks, viewStartDate, viewEndDate, optimisticTaskOverride]);
 
     const getBarMetrics = (taskStartMs: number, taskEndMs: number) => {
@@ -401,30 +438,34 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
     };
 
     useEffect(() => {
-        if (!visibleTasks.length) {
+        if (!packedTasks.length) {
             setDependencyLines([]);
             return;
         }
 
         const lines: LineCoordinate[] = [];
-        const taskMap = new Map<string, { startMs: number, endMs: number, index: number }>();
-        visibleTasks.forEach((t, i) => taskMap.set(t.id, { startMs: t.startMs, endMs: t.endMs, index: i }));
+        const taskMap = new Map<string, { startMs: number, endMs: number, rowIndex: number }>();
+        packedTasks.forEach(t => taskMap.set(t.id, { startMs: t.startMs, endMs: t.endMs, rowIndex: t.rowIndex }));
 
-        visibleTasks.forEach((task, index) => {
+        packedTasks.forEach((task) => {
             if (task.dependencies && task.dependencies.length > 0) {
                 task.dependencies.forEach(depId => {
                     const depInfo = taskMap.get(depId);
                     if (depInfo) {
                         const startTask = depInfo;
-                        const endTask = { startMs: task.startMs, endMs: task.endMs, index: index };
+                        const endTask = task; // Current task is the one depending on startTask
 
+                        // Line starts at the end of the dependency
                         const startX = getBarMetrics(startTask.startMs, startTask.endMs).left + getBarMetrics(startTask.startMs, startTask.endMs).width;
+                        // Line ends at the start of the current task
                         const endX = getBarMetrics(endTask.startMs, endTask.endMs).left;
 
-                        const ROW_HEIGHT = 40; 
-                        const HEADER_OFFSET = 20; 
-                        const startY = (startTask.index * ROW_HEIGHT) + HEADER_OFFSET;
-                        const endY = (endTask.index * ROW_HEIGHT) + HEADER_OFFSET;
+                        // Vertical centers of the bars
+                        const TOP_PADDING = 12; // Matches relative top of bar
+                        const BAR_CENTER = BAR_HEIGHT / 2;
+                        
+                        const startY = HEADER_HEIGHT + (startTask.rowIndex * ROW_HEIGHT) + TOP_PADDING + BAR_CENTER;
+                        const endY = HEADER_HEIGHT + (endTask.rowIndex * ROW_HEIGHT) + TOP_PADDING + BAR_CENTER;
 
                         lines.push({
                             start: { x: startX, y: startY },
@@ -436,7 +477,7 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
             }
         });
         setDependencyLines(lines);
-    }, [visibleTasks, viewStartDate, msPerPixel]);
+    }, [packedTasks, viewStartDate, msPerPixel]);
 
     const handleNavigate = (direction: -1 | 1) => {
         const newDate = new Date(referenceDate);
@@ -564,10 +605,10 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
             <div 
                 ref={scrollContainerRef}
                 className="overflow-x-auto relative custom-scrollbar bg-gray-50/50 dark:bg-black/20"
-                style={{ maxHeight: '350px', minHeight: '200px' }}
+                style={{ maxHeight: '450px', minHeight: '200px' }}
             >
-                <div style={{ width: `${totalWidth}px`, minWidth: '100%' }} className="relative">
-                    <div className="flex border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 z-20 shadow-sm h-10">
+                <div style={{ width: `${totalWidth}px`, minWidth: '100%', height: `${Math.max(200, (totalRows * ROW_HEIGHT) + HEADER_HEIGHT + 20)}px` }} className="relative">
+                    <div className="flex border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 z-40 shadow-sm" style={{ height: `${HEADER_HEIGHT}px` }}>
                         {columns.map((col, i) => (
                             <div 
                                 key={i} 
@@ -581,7 +622,8 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
                         ))}
                     </div>
 
-                    <div className="absolute top-10 bottom-0 left-0 flex pointer-events-none z-0">
+                    {/* Vertical Grid Lines - Full Height */}
+                    <div className="absolute bottom-0 left-0 flex pointer-events-none z-0" style={{ top: `${HEADER_HEIGHT}px` }}>
                         {columns.map((col, i) => (
                             <div 
                                 key={`grid-${i}`}
@@ -595,6 +637,18 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
                         ))}
                     </div>
 
+                    {/* Horizontal Row Lines */}
+                    <div className="absolute left-0 right-0 pointer-events-none z-0" style={{ top: `${HEADER_HEIGHT}px` }}>
+                        {Array.from({ length: totalRows }).map((_, i) => (
+                            <div 
+                                key={`row-${i}`} 
+                                className="border-b border-gray-100 dark:border-gray-800/50 w-full"
+                                style={{ height: `${ROW_HEIGHT}px` }}
+                            ></div>
+                        ))}
+                    </div>
+
+                    {/* Current Time Indicator */}
                     {viewMode !== 'Month' && (() => {
                         const nowMs = accurateNow.getTime();
                         if (nowMs >= viewStartDate.getTime() && nowMs <= viewEndDate.getTime()) {
@@ -602,8 +656,8 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
                             const left = diff / msPerPixel;
                             return (
                                 <div 
-                                    className="absolute top-10 bottom-0 border-l-2 border-red-500 z-30 pointer-events-none opacity-80"
-                                    style={{ left: `${left}px` }}
+                                    className="absolute bottom-0 border-l-2 border-red-500 z-30 pointer-events-none opacity-80"
+                                    style={{ left: `${left}px`, top: `${HEADER_HEIGHT}px` }}
                                 >
                                     <div className="w-2.5 h-2.5 bg-red-500 rounded-full -ml-[5.5px] -mt-1 shadow-sm"></div>
                                     <div className="absolute top-0 ml-1.5 text-[9px] font-bold text-red-500 bg-white/80 dark:bg-black/80 px-1 rounded shadow-sm border border-red-200 dark:border-red-900">
@@ -615,58 +669,61 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
                         return null;
                     })()}
 
-                    <div className="absolute top-10 left-0 w-full h-full pointer-events-none z-10 opacity-60">
+                    {/* Dependency Lines */}
+                    <div className="absolute left-0 w-full h-full pointer-events-none z-10 opacity-60" style={{ top: 0 }}>
                         <DependencyLines lines={dependencyLines} />
                     </div>
 
-                    <div className="relative pt-4 pb-12 z-20 min-h-[200px]">
-                        {visibleTasks.length === 0 && (
+                    {/* Tasks Layer */}
+                    <div className="relative w-full h-full" style={{ marginTop: '12px' }}>
+                        {packedTasks.length === 0 && (
                             <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-sm italic pointer-events-none">
                                 <i className="far fa-calendar-times mr-2"></i> No tasks in this period.
                             </div>
                         )}
 
-                        {visibleTasks.map((task, index) => {
+                        {packedTasks.map((task) => {
                             const metrics = getBarMetrics(task.startMs, task.endMs);
                             const statusStyle = STATUS_STYLES[task.status] || STATUS_STYLES['To Do'];
                             const bgColorClass = statusStyle.header;
                             const priorityConfig = PRIORITY_COLORS[task.priority] || PRIORITY_COLORS['Medium'];
+                            
+                            // Absolute positioning based on row index
+                            const top = (task.rowIndex * ROW_HEIGHT);
 
                             return (
                                 <div 
                                     key={task.id} 
-                                    className="relative h-10 mb-1 group"
+                                    className={`absolute rounded-md shadow-sm border border-white/20 flex items-center px-2 overflow-hidden transition-all duration-200 ${bgColorClass} ${task.isDragging ? 'opacity-80 ring-2 ring-indigo-400 z-50 shadow-xl' : 'hover:brightness-110 z-20'}`}
+                                    style={{ 
+                                        left: `${Math.max(0, metrics.left)}px`, 
+                                        width: `${Math.max(20, metrics.width)}px`,
+                                        top: `${top}px`,
+                                        height: `${BAR_HEIGHT}px`,
+                                        cursor: 'grab' 
+                                    }}
+                                    onMouseDown={(e) => handleMouseDown(e, task, 'MOVE', { start: task.startMs, end: task.endMs })}
+                                    onClick={(e) => {
+                                        if (!task.isDragging) onEditTask(task);
+                                    }}
+                                    title={`[${task.priority}] ${task.title} (${new Date(task.startMs).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - ${new Date(task.endMs).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})`}
                                 >
-                                    <div 
-                                        className={`absolute h-8 top-1 rounded-md shadow-sm border border-white/20 flex items-center px-2 overflow-hidden transition-colors ${bgColorClass} ${task.isDragging ? 'opacity-80 ring-2 ring-indigo-400 z-50 shadow-xl' : 'hover:brightness-110 z-20'}`}
-                                        style={{ 
-                                            left: `${Math.max(0, metrics.left)}px`, 
-                                            width: `${Math.max(20, metrics.width)}px`,
-                                            cursor: 'grab' 
-                                        }}
-                                        onMouseDown={(e) => handleMouseDown(e, task, 'MOVE', { start: task.startMs, end: task.endMs })}
-                                        onClick={(e) => {
-                                            if (!task.isDragging) onEditTask(task);
-                                        }}
-                                        title={`[${task.priority}] ${task.title} (${new Date(task.startMs).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - ${new Date(task.endMs).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})`}
-                                    >
-                                        <div className="flex items-center w-full overflow-hidden select-none pointer-events-none">
-                                            <span 
-                                                className={`text-[9px] uppercase font-black mr-1.5 px-1 rounded-sm flex-shrink-0 ${priorityConfig.bg} ${priorityConfig.text} border border-white/20`}
-                                            >
-                                                {task.priority}
-                                            </span>
-                                            <span className="text-xs font-bold text-white whitespace-nowrap truncate drop-shadow-md">
-                                                {task.title}
-                                            </span>
-                                        </div>
-
-                                        <div 
-                                            className="absolute right-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/20 flex items-center justify-center z-30"
-                                            onMouseDown={(e) => handleMouseDown(e, task, 'RESIZE', { start: task.startMs, end: task.endMs })}
+                                    <div className="flex items-center w-full overflow-hidden select-none pointer-events-none">
+                                        <span 
+                                            className={`text-[9px] uppercase font-black mr-1.5 px-1 rounded-sm flex-shrink-0 ${priorityConfig.bg} ${priorityConfig.text} border border-white/20`}
                                         >
-                                            <div className="w-0.5 h-3 bg-white/50 rounded-full"></div>
-                                        </div>
+                                            {task.priority}
+                                        </span>
+                                        <span className="text-xs font-bold text-white whitespace-nowrap truncate drop-shadow-md">
+                                            {task.title}
+                                        </span>
+                                    </div>
+
+                                    <div 
+                                        className="absolute right-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/20 flex items-center justify-center z-30"
+                                        onMouseDown={(e) => handleMouseDown(e, task, 'RESIZE', { start: task.startMs, end: task.endMs })}
+                                    >
+                                        <div className="w-0.5 h-3 bg-white/50 rounded-full"></div>
                                     </div>
                                 </div>
                             );
