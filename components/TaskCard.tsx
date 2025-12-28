@@ -12,6 +12,7 @@ interface TaskCardProps {
     onOpenContextMenu: (e: React.MouseEvent, task: Task) => void;
     onDeleteTask: (taskId: string) => void;
     onSubtaskToggle: (taskId: string, subtaskId: string) => void; // New prop
+    onBreakDownTask?: (taskId: string) => Promise<void>; // New prop
     isCompactMode: boolean;
     onTaskSizeChange?: () => void;
 }
@@ -76,10 +77,11 @@ const formatTimeSince = (dateStr: string): string => {
 };
 
 
-export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, onToggleTimer, onOpenContextMenu, onDeleteTask, onSubtaskToggle, isCompactMode, onTaskSizeChange }) => {
+export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, onToggleTimer, onOpenContextMenu, onDeleteTask, onSubtaskToggle, onBreakDownTask, isCompactMode, onTaskSizeChange }) => {
     const priorityClasses = PRIORITY_COLORS[task.priority];
     const statusStyle = STATUS_STYLES[task.status] || STATUS_STYLES['To Do'];
     const [currentSessionTime, setCurrentSessionTime] = useState(0);
+    const [isBreakingDown, setIsBreakingDown] = useState(false);
     
     // Local state to handle individual expansion
     const [isExpanded, setIsExpanded] = useState(false);
@@ -94,7 +96,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
         if (onTaskSizeChange) {
             onTaskSizeChange();
         }
-    }, [isExpanded, isCompactMode, onTaskSizeChange]);
+    }, [isExpanded, isCompactMode, onTaskSizeChange, task.subtasks?.length]);
 
     const handleExpandToggle = useCallback((e: React.MouseEvent, expanded: boolean) => {
         e.preventDefault();
@@ -178,6 +180,22 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
         e.stopPropagation();
         e.preventDefault();
         onSubtaskToggle(task.id, subtaskId);
+    };
+    
+    const handleStuckClick = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        e.preventDefault();
+        if (!onBreakDownTask || isBreakingDown) return;
+        
+        setIsBreakingDown(true);
+        try {
+            await onBreakDownTask(task.id);
+            setIsExpanded(true); // Auto-expand on success
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setIsBreakingDown(false);
+        }
     };
 
     const cardCursorClass = isBlockedByDep ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing';
@@ -343,16 +361,36 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
                     ))}
                 </div>
 
-                {totalSubtasks > 0 && (
-                    <div className="mt-3 bg-gray-50 dark:bg-gray-900/50 rounded-md p-2">
-                        <div className="flex justify-between items-center text-xs text-gray-500 dark:text-gray-400 mb-1.5">
-                            <span className="font-semibold">Subtasks</span>
+                {/* Subtasks Section with "I'm Stuck" */}
+                <div className="mt-3 bg-gray-50 dark:bg-gray-900/50 rounded-md p-2 relative">
+                    <div className="flex justify-between items-center text-xs text-gray-500 dark:text-gray-400 mb-1.5">
+                        <span className="font-semibold">Subtasks</span>
+                        <div className="flex items-center gap-2">
                             <span>{completedSubtasks} / {totalSubtasks}</span>
+                            {/* Stuck Button */}
+                            {onBreakDownTask && task.status !== 'Done' && (
+                                <button
+                                    onClick={handleStuckClick}
+                                    disabled={isBreakingDown}
+                                    className={`w-5 h-5 flex items-center justify-center rounded-full transition-all border ${isBreakingDown ? 'border-transparent' : 'border-indigo-200 dark:border-indigo-800 hover:border-indigo-400 bg-white dark:bg-gray-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 text-indigo-500'}`}
+                                    title="I'm Stuck (Break down task)"
+                                >
+                                    {isBreakingDown ? (
+                                        <i className="fas fa-spinner fa-spin text-xs"></i>
+                                    ) : (
+                                        <i className="fas fa-wand-magic-sparkles text-[10px]"></i>
+                                    )}
+                                </button>
+                            )}
                         </div>
+                    </div>
+                    {totalSubtasks > 0 && (
                         <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mb-2">
                             <div className="bg-green-500 h-1.5 rounded-full transition-all duration-300" style={{ width: `${subtaskProgress}%` }}></div>
                         </div>
-                        {/* Interactive Subtask List (Preview) */}
+                    )}
+                    {/* Interactive Subtask List (Preview) */}
+                    {totalSubtasks > 0 && (
                         <div className="space-y-1 cursor-default">
                             {task.subtasks?.slice(0, 3).map(st => (
                                 <div 
@@ -370,8 +408,8 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
                                 <div className="text-[10px] text-gray-400 pl-5">+{totalSubtasks - 3} more...</div>
                             )}
                         </div>
-                    </div>
-                )}
+                    )}
+                </div>
                 
                 <div className="mt-3 flex justify-between items-center text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-700/50 pt-2">
                     <span className={`flex items-center ${isOverdue ? 'text-red-500 dark:text-red-400 font-bold' : ''}`}>

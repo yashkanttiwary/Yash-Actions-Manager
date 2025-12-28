@@ -2,7 +2,7 @@
 export type Status = 'To Do' | 'In Progress' | 'Review' | 'Blocker' | 'Hold' | "Won't Complete" | 'Done';
 export type Priority = 'Critical' | 'High' | 'Medium' | 'Low';
 export type SortOption = 'Default' | 'Priority' | 'Due Date' | 'Created Date';
-export type SettingsTab = 'general' | 'api' | 'sheets' | 'calendar' | 'sounds';
+export type SettingsTab = 'general' | 'ai' | 'api' | 'sheets' | 'calendar' | 'sounds';
 
 export interface Subtask {
   id: string;
@@ -63,6 +63,9 @@ export interface GamificationData {
     longest: number;
     lastCompletionDate: string | null;
   };
+  // Helper fields for UI (calculated on load/update)
+  xpToNextLevel?: number;
+  progressToNextLevel?: number; // 0-100
 }
 
 export interface AudioSettings {
@@ -82,13 +85,17 @@ export interface Settings {
     pomodoroShortBreak: number;
     pomodoroLongBreak: number;
     showPomodoroTimer: boolean;
+    
+    // AI Settings
+    geminiApiKey?: string; // Specific key for Gemini (AI Mode)
+
     // Integration Settings
     googleSheetId?: string; // Legacy/Advanced method
     googleAppsScriptUrl?: string; // New "Easy" method (No Client ID)
     googleCalendarId?: string;
     // Custom API Configuration (for manual setup)
-    googleApiKey?: string;
-    googleClientId?: string;
+    googleApiKey?: string; // GAPI Key (Drive/Calendar)
+    googleClientId?: string; // GAPI Client ID (Drive/Calendar)
     // Audio
     audio: AudioSettings;
 }

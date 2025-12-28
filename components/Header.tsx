@@ -6,6 +6,8 @@ import { ConnectionHealthIndicator } from './ConnectionHealthIndicator';
 import { exportTasksToCSV } from '../utils/exportUtils';
 import { TetrisGameModal } from './TetrisGameModal';
 import { getAccurateCurrentDate, initializeTimeSync } from '../services/timeService';
+import { LiquidGauge } from './LiquidGauge';
+import { calculateProgress } from '../services/gamificationService';
 
 interface GoogleAuthState {
     gapiLoaded: boolean;
@@ -52,8 +54,8 @@ interface HeaderProps {
     zoomLevel: number;
     setZoomLevel: React.Dispatch<React.SetStateAction<number>>;
     audioControls: AudioControls;
-    isTimelineVisible: boolean; // New Prop
-    onToggleTimeline: () => void; // New Prop
+    isTimelineVisible: boolean; 
+    onToggleTimeline: () => void; 
 }
 
 // Helper functions for rocket animation
@@ -71,6 +73,7 @@ export const Header: React.FC<HeaderProps> = ({
     
     // --- CLOCK LOGIC ---
     const [currentTime, setCurrentTime] = useState(new Date());
+    const [isHovered, setIsHovered] = useState(false); // For Notification Shade Logic
 
     useEffect(() => {
         initializeTimeSync(); // Ensure reliable time service is running
@@ -81,17 +84,15 @@ export const Header: React.FC<HeaderProps> = ({
     }, []);
 
     const headerDateStr = currentTime.toLocaleDateString('en-US', { 
-        weekday: 'long', 
+        weekday: 'short', // Shortened for Zen mode
         day: 'numeric', 
-        month: 'long', 
-        year: 'numeric',
+        month: 'short', 
         timeZone: settings.timezone 
     });
     
     const headerTimeStr = currentTime.toLocaleTimeString('en-US', { 
         hour: '2-digit', 
         minute: '2-digit', 
-        second: '2-digit', 
         hour12: true,
         timeZone: settings.timezone 
     });
@@ -223,14 +224,8 @@ export const Header: React.FC<HeaderProps> = ({
 
 
     // --- DATA CALCULATIONS ---
-    const totalTasks = tasks.length;
-    const progress = totalTasks > 0 ? (tasks.filter(t => t.status === 'Done').length / totalTasks) * 100 : 0;
     
-    const { xp, level, streak } = gamification;
-    const xpForCurrentLevel = (level - 1) * 100;
-    const xpForNextLevel = level * 100;
-    const xpProgress = xpForNextLevel > xpForCurrentLevel ? ((xp - xpForCurrentLevel) / (xpForNextLevel - xpForCurrentLevel)) * 100 : 0;
-
+    // 1. Time Budget (Fuel)
     const todaysBudgetedTime = useMemo(() => {
         try {
             const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: settings.timezone });
@@ -239,7 +234,9 @@ export const Header: React.FC<HeaderProps> = ({
             return tasks
                 .filter(task => {
                     if (task.status === 'Done' || task.status === "Won't Complete") return false;
-                    if (task.status === 'In Progress') return true;
+                    // Count "To Do" and "In Progress" towards the load
+                    if (task.status === 'To Do' || task.status === 'In Progress') return true;
+                    // Or if it's scheduled for today
                     if (task.scheduledStartDateTime) {
                         const taskScheduleStr = formatter.format(new Date(task.scheduledStartDateTime));
                         return taskScheduleStr === todayStr;
@@ -254,7 +251,11 @@ export const Header: React.FC<HeaderProps> = ({
         }
     }, [tasks, settings.timezone]);
 
-    const budgetProgress = settings.dailyBudget > 0 ? (todaysBudgetedTime / settings.dailyBudget) * 100 : 0;
+    // 2. XP Progress (Reward)
+    const xpProgressData = useMemo(() => {
+        return calculateProgress(gamification.xp, gamification.level);
+    }, [gamification.xp, gamification.level]);
+
     
     const isSheetConnected = connectionHealth.sheet.status === 'connected';
     const isSyncing = connectionHealth.sheet.message?.toLowerCase().includes('syncing');
@@ -269,56 +270,86 @@ export const Header: React.FC<HeaderProps> = ({
     };
 
     return (
-        <header className="p-4 sm:p-3 bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm border-b border-gray-300 dark:border-gray-700/50 relative z-30 flex-shrink-0 transition-all">
-            <div className="max-w-screen-2xl mx-auto flex flex-col gap-3">
-                <div className="flex flex-wrap items-center justify-between gap-y-2">
-                     <div className="flex items-center">
+        <header 
+            className={`
+                fixed top-0 left-0 right-0 z-50 bg-white/90 dark:bg-gray-900/90 backdrop-blur-md 
+                border-b border-gray-200 dark:border-gray-700/50 shadow-lg 
+                transition-all duration-300 ease-in-out
+                ${isHovered ? 'translate-y-0 opacity-100' : '-translate-y-[calc(100%-48px)] opacity-95'}
+            `}
+            style={{ 
+                // Ensure it can be pulled down
+                minHeight: '48px'
+            }}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+        >
+            {/* DRAG HANDLE / VISIBLE BAR (Always visible at bottom of header block) */}
+            <div className="absolute bottom-0 left-0 right-0 h-12 flex items-center justify-between px-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                
+                {/* Left: Rocket & Clock (Always Visible) */}
+                <div className="flex items-center gap-4">
+                    <div 
+                        ref={rocketRef}
+                        className={`rocket-wrapper cursor-pointer flex items-center justify-center ${isFlying ? 'rocket-flying' : 'rocket-idle'}`}
+                        onMouseEnter={flyRocket} 
+                        onClick={handleRocketClick} 
+                        title="Click to play Tetris!"
+                        style={{ width: '32px', height: '32px' }} 
+                    >
+                        <i 
+                            className="fas fa-rocket text-2xl text-indigo-500 dark:text-indigo-400 relative z-10" 
+                            style={{ transform: 'rotate(-45deg)', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.1))' }}
+                        ></i>
+                        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 translate-y-2 z-0">
+                            <div className="flame-element"></div>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-col leading-tight">
+                        <div className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            {headerDateStr}
+                        </div>
+                        <div className="text-base font-black text-indigo-600 dark:text-indigo-400 font-mono">
+                            {headerTimeStr}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Center: Pull Down Indicator */}
+                <div className="flex flex-col items-center opacity-50 group-hover:opacity-100 transition-opacity">
+                    <div className="w-12 h-1 bg-gray-300 dark:bg-gray-600 rounded-full mb-1"></div>
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{isHovered ? 'Menu Open' : 'Menu'}</span>
+                </div>
+
+                {/* Right: Essential Status (AI & Sync) */}
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onOpenAIAssistant(); }}
+                        className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors"
+                        title="AI Assistant"
+                    >
+                        <i className="fas fa-magic"></i>
+                    </button>
+                    <ConnectionHealthIndicator 
+                        health={connectionHealth} 
+                        onOpenSettings={onOpenSettings}
+                        onManualPull={onManualPull}
+                        onManualPush={onManualPush}
+                    />
+                </div>
+            </div>
+
+            {/* EXPANDED CONTENT (Hidden when collapsed) */}
+            <div className={`p-4 pb-16 transition-opacity duration-200 ${isHovered ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+                <div className="max-w-screen-2xl mx-auto flex flex-col gap-4">
+                    
+                    {/* Top Row: Title & Controls */}
+                    <div className="flex flex-wrap items-center justify-between gap-y-2">
+                        <h1 className="text-xl font-bold tracking-wider hidden sm:block">Task Manager</h1>
                         
-                        {/* ROCKET COMPONENT */}
-                        <div 
-                            ref={rocketRef}
-                            className={`rocket-wrapper mr-2 cursor-pointer relative flex items-center justify-center ${isFlying ? 'rocket-flying' : 'rocket-idle'}`}
-                            onMouseEnter={flyRocket} 
-                            onClick={handleRocketClick} 
-                            title="Click to play Tetris!"
-                            style={{ width: '40px', height: '40px' }} 
-                        >
-                            <i 
-                                className="fas fa-rocket text-3xl text-indigo-500 dark:text-indigo-400 relative z-10" 
-                                style={{ transform: 'rotate(-45deg)', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.1))' }}
-                            ></i>
-                            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 translate-y-2 z-0">
-                                <div className="flame-element"></div>
-                            </div>
-                        </div>
-                        {/* END ROCKET */}
-
-                        <h1 className="text-xl font-bold tracking-wider">Task Manager</h1>
-
-                        {/* --- MOVED CLOCK (TITLE SECTION) --- */}
-                        <span className="hidden lg:block text-gray-300 dark:text-gray-600 text-2xl mx-3 font-thin">|</span>
-                        <div className="hidden lg:flex flex-col justify-center">
-                             <div className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider leading-tight">
-                                 {headerDateStr}
-                             </div>
-                             <div className="text-lg font-black text-indigo-600 dark:text-indigo-400 font-mono leading-none">
-                                 {headerTimeStr}
-                             </div>
-                        </div>
-                     </div>
-                     <div className="flex items-center space-x-2 sm:space-x-3 flex-wrap gap-y-2">
-                         
-                         {/* Old Clock Removed Here */}
-
-                         {/* System Health Indicator & Sync Button */}
-                         <div className="mr-2 flex items-center gap-2">
-                            <ConnectionHealthIndicator 
-                                health={connectionHealth} 
-                                onOpenSettings={onOpenSettings}
-                                onManualPull={onManualPull}
-                                onManualPush={onManualPush}
-                            />
-                            
+                        <div className="flex items-center space-x-2 sm:space-x-3 flex-wrap gap-y-2">
+                            {/* Sync Button */}
                             {isSheetConnected && (
                                 <button
                                     onClick={onManualPull}
@@ -328,20 +359,16 @@ export const Header: React.FC<HeaderProps> = ({
                                             ? 'bg-blue-100 text-blue-700 border-blue-200 cursor-wait' 
                                             : 'bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-gray-700 hover:border-indigo-300'
                                     }`}
-                                    title="Pull latest changes from Google Sheet"
                                 >
                                     <i className={`fas fa-cloud-download-alt ${isSyncing ? 'fa-bounce' : ''}`}></i>
-                                    <span className="hidden lg:inline">{isSyncing ? 'Syncing...' : 'Sync from Sheet'}</span>
+                                    <span className="hidden lg:inline">{isSyncing ? 'Syncing...' : 'Sync Now'}</span>
                                 </button>
                             )}
-                         </div>
 
-                         {/* Focus Mode Selector */}
-                         <div className="flex items-center mr-2">
-                             <div className="flex items-center bg-gray-200 dark:bg-gray-700 rounded-md px-3 py-1.5 transition-all hover:bg-gray-300 dark:hover:bg-gray-600">
-                                <label htmlFor="focus-mode" className="text-xs font-semibold text-gray-600 dark:text-gray-400 mr-2 cursor-pointer whitespace-nowrap">
-                                    <span className="hidden sm:inline">Focus:</span>
-                                    <span className="sm:hidden"><i className="fas fa-filter"></i></span>
+                            {/* Focus Mode Selector */}
+                            <div className="flex items-center bg-gray-200 dark:bg-gray-700 rounded-md px-3 py-1.5">
+                                <label htmlFor="focus-mode" className="text-xs font-semibold text-gray-600 dark:text-gray-400 mr-2 cursor-pointer">
+                                    Focus:
                                 </label>
                                 <div className="relative">
                                     <select
@@ -350,176 +377,101 @@ export const Header: React.FC<HeaderProps> = ({
                                         onChange={(e) => setFocusMode(e.target.value as Status | 'None')}
                                         className="appearance-none bg-transparent border-none text-xs font-semibold text-gray-800 dark:text-white focus:ring-0 cursor-pointer pr-5 py-0 pl-1 focus:outline-none"
                                     >
-                                        <option value="None" className="bg-gray-100 dark:bg-gray-800">None</option>
+                                        <option value="None">None</option>
                                         {COLUMN_STATUSES.map(status => (
-                                            <option key={status} value={status} className="bg-gray-100 dark:bg-gray-800">{status}</option>
+                                            <option key={status} value={status}>{status}</option>
                                         ))}
                                     </select>
-                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center text-gray-600 dark:text-gray-400">
-                                         <i className="fas fa-chevron-down text-[10px]"></i>
-                                    </div>
-                                </div>
-                             </div>
-                        </div>
-
-                         <div className="bg-gray-200 dark:bg-gray-700 p-0.5 rounded-lg flex items-center">
-                            <button onClick={() => onViewModeChange('kanban')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${currentViewMode === 'kanban' ? 'bg-white dark:bg-gray-800 shadow' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50 dark:hover:bg-gray-600/50'}`}>
-                                <i className="fas fa-columns sm:mr-2"></i><span className="hidden sm:inline">Board</span>
-                            </button>
-                             <button onClick={() => onViewModeChange('calendar')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${currentViewMode === 'calendar' ? 'bg-white dark:bg-gray-800 shadow' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50 dark:hover:bg-gray-600/50'}`}>
-                                <i className="fas fa-calendar-day sm:mr-2"></i><span className="hidden sm:inline">Calendar</span>
-                            </button>
-                         </div>
-                         
-                         {/* Zoom Controls */}
-                        <div className="bg-gray-200 dark:bg-gray-700 p-0.5 rounded-lg flex items-center gap-0.5">
-                            <button onClick={handleZoomOut} className="w-6 h-6 flex items-center justify-center rounded-md text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-600 transition-all text-xs" title="Zoom Out">
-                                <i className="fas fa-minus"></i>
-                            </button>
-                            <button onClick={handleResetZoom} className="px-2 h-6 flex items-center justify-center rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 transition-all text-[10px] font-bold min-w-[36px]" title="Reset Zoom">
-                                {Math.round(zoomLevel * 100)}%
-                            </button>
-                            <button onClick={handleZoomIn} className="w-6 h-6 flex items-center justify-center rounded-md text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-600 transition-all text-xs" title="Zoom In">
-                                <i className="fas fa-plus"></i>
-                            </button>
-                        </div>
-
-
-                         <button
-                            onClick={onResetLayout}
-                            className="px-3 py-1.5 rounded-md text-xs font-semibold transition-all bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
-                            title="Reset column positions"
-                        >
-                            <i className="fas fa-th-large sm:mr-2"></i>
-                            <span className="hidden sm:inline">Reset</span>
-                        </button>
-                        
-                        <div className="bg-gray-200 dark:bg-gray-700 p-0.5 rounded-lg flex items-center gap-1">
-                            <button
-                                onClick={onToggleCompactMode}
-                                className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
-                                    isCompactMode 
-                                        ? 'bg-white dark:bg-gray-800 shadow text-indigo-600 dark:text-indigo-400' 
-                                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-600'
-                                }`}
-                                title={isCompactMode ? "Switch to Full View" : "Switch to Compact View"}
-                            >
-                                <i className={`fas ${isCompactMode ? 'fa-expand' : 'fa-compress'} sm:mr-2`}></i>
-                                <span className="hidden sm:inline">{isCompactMode ? 'Full' : 'Compact'}</span>
-                            </button>
-                            
-                             <button
-                                onClick={onToggleFitToScreen}
-                                className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
-                                    isFitToScreen 
-                                        ? 'bg-white dark:bg-gray-800 shadow text-indigo-600 dark:text-indigo-400' 
-                                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-600'
-                                }`}
-                                title={isFitToScreen ? "Switch to Scrollable View" : "Fit all columns to screen"}
-                            >
-                                <i className={`fas ${isFitToScreen ? 'fa-expand-arrows-alt' : 'fa-compress-arrows-alt'} sm:mr-2`}></i>
-                                <span className="hidden sm:inline">Fit</span>
-                            </button>
-                        </div>
-
-                        {/* NEW: Timeline Toggle */}
-                        <button
-                            onClick={onToggleTimeline}
-                            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                                isTimelineVisible ? 'bg-indigo-600 text-white shadow-lg' : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600'
-                            }`}
-                            title="Toggle Timeline View"
-                        >
-                            <i className={`fas fa-stream sm:mr-2`}></i>
-                            <span className="hidden sm:inline">Timeline</span>
-                        </button>
-
-                        <button
-                            onClick={() => exportTasksToCSV(tasks)}
-                            className="px-3 py-1.5 rounded-md text-xs font-semibold transition-all bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
-                            title="Download tasks as CSV"
-                        >
-                            <i className="fas fa-file-csv sm:mr-2"></i>
-                            <span className="hidden sm:inline">Export</span>
-                        </button>
-                         <button
-                            onClick={() => setIsTodayView(!isTodayView)}
-                            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                                isTodayView ? 'bg-green-500 text-white shadow-lg' : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600'
-                            }`}
-                        >
-                            <i className={`far fa-calendar-check sm:mr-2 ${isTodayView ? 'fa-beat' : ''}`}></i>
-                            <span className="hidden sm:inline">Today</span>
-                        </button>
-                        <button
-                            onClick={onOpenAIAssistant}
-                            className="px-3 py-1.5 rounded-md text-xs font-semibold transition-all bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg flex items-center"
-                        >
-                            <i className="fas fa-magic-sparkles sm:mr-2"></i>
-                            <span className="hidden sm:inline">AI</span>
-                        </button>
-                        <div className="relative">
-                            <button onClick={() => onOpenSettings('general')} className="w-8 h-8 rounded-lg flex items-center justify-center bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors" aria-label="Open settings">
-                                <i className="fas fa-cog"></i>
-                            </button>
-                        </div>
-                        <button onClick={onToggleTheme} className="w-8 h-8 rounded-lg flex items-center justify-center bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors" aria-label="Toggle theme">
-                            <i className={`fas ${currentTheme === 'dark' ? 'fa-sun text-yellow-400' : 'fa-moon text-indigo-500'}`}></i>
-                        </button>
-                        
-                        <button
-                            onClick={() => onOpenSettings('sounds')}
-                            className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all shadow-sm border border-transparent ${
-                                audioControls.isPlaying
-                                    ? 'bg-indigo-100 text-indigo-600 border-indigo-200 dark:bg-indigo-900/50 dark:text-indigo-400 dark:border-indigo-800'
-                                    : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-400'
-                            }`}
-                            title={audioControls.isPlaying ? `Playing: ${audioControls.currentTrackName}` : "Audio Settings"}
-                        >
-                            <i className={`fas ${audioControls.isPlaying ? 'fa-volume-up' : 'fa-music'}`}></i>
-                        </button>
-
-                        <button onClick={onOpenShortcutsModal} className="w-8 h-8 rounded-lg flex items-center justify-center bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors" aria-label="View keyboard shortcuts">
-                            <i className="fas fa-keyboard"></i>
-                        </button>
-
-                        <div className="flex-grow flex items-center gap-2 sm:gap-4 ml-2 border-l border-gray-300 dark:border-gray-600 pl-2">
-                            <div className="flex items-center gap-2" title={`Level ${level}`}>
-                                <span className="font-bold text-indigo-500 dark:text-indigo-400 text-sm">Lvl {level}</span>
-                                <div className="w-16 sm:w-24 bg-gray-200 dark:bg-gray-700 rounded-full h-2" title={`${xp}/${xpForNextLevel} XP`}>
-                                    <div className="bg-gradient-to-r from-indigo-400 to-purple-500 h-2 rounded-full" style={{ width: `${xpProgress}%` }}></div>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-1 text-orange-500 dark:text-orange-400 font-bold text-sm" title={`Current Streak: ${streak.current} days, Longest: ${streak.longest} days`}>
-                                <i className="fas fa-fire"></i>
-                                <span>{streak.current}</span>
+
+                            {/* View Toggles & Today */}
+                            <div className="flex items-center gap-2">
+                                <div className="bg-gray-200 dark:bg-gray-700 p-0.5 rounded-lg flex items-center">
+                                    <button onClick={() => onViewModeChange('kanban')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${currentViewMode === 'kanban' ? 'bg-white dark:bg-gray-800 shadow' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50'}`}>Board</button>
+                                    <button onClick={() => onViewModeChange('calendar')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${currentViewMode === 'calendar' ? 'bg-white dark:bg-gray-800 shadow' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50'}`}>Calendar</button>
+                                </div>
+                                <button
+                                    onClick={() => setIsTodayView(!isTodayView)}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                                        isTodayView
+                                            ? 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800 shadow-sm'
+                                            : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                    }`}
+                                    title="Show tasks due today only"
+                                >
+                                    <i className="far fa-calendar-check mr-1.5"></i>
+                                    Today
+                                </button>
+                            </div>
+
+                            {/* Zoom */}
+                            <div className="bg-gray-200 dark:bg-gray-700 p-0.5 rounded-lg flex items-center gap-0.5">
+                                <button onClick={handleZoomOut} className="w-6 h-6 flex items-center justify-center rounded-md text-xs hover:bg-gray-300 dark:hover:bg-gray-600"><i className="fas fa-minus"></i></button>
+                                <span className="text-[10px] font-bold px-1 min-w-[30px] text-center">{Math.round(zoomLevel * 100)}%</span>
+                                <button onClick={handleZoomIn} className="w-6 h-6 flex items-center justify-center rounded-md text-xs hover:bg-gray-300 dark:hover:bg-gray-600"><i className="fas fa-plus"></i></button>
+                            </div>
+
+                            {/* Compact/Fit */}
+                            <div className="bg-gray-200 dark:bg-gray-700 p-0.5 rounded-lg flex items-center gap-1">
+                                <button onClick={onToggleCompactMode} className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${isCompactMode ? 'bg-white dark:bg-gray-800 shadow' : 'hover:bg-gray-300'}`}>
+                                    <i className={`fas ${isCompactMode ? 'fa-expand' : 'fa-compress'}`}></i>
+                                </button>
+                                <button onClick={onToggleFitToScreen} className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${isFitToScreen ? 'bg-white dark:bg-gray-800 shadow' : 'hover:bg-gray-300'}`}>
+                                    <i className={`fas ${isFitToScreen ? 'fa-expand-arrows-alt' : 'fa-compress-arrows-alt'}`}></i>
+                                </button>
+                            </div>
+
+                            {/* Timeline Toggle */}
+                            <button onClick={onToggleTimeline} className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${isTimelineVisible ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>
+                                Timeline
+                            </button>
+
+                            {/* Utility Buttons (Theme, Reset, Export, Settings) */}
+                            <div className="flex items-center gap-1">
+                                <button onClick={onToggleTheme} className="w-8 h-8 rounded-lg flex items-center justify-center bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 transition-colors">
+                                    <i className={`fas ${currentTheme === 'dark' ? 'fa-sun text-yellow-400' : 'fa-moon text-indigo-500'}`}></i>
+                                </button>
+                                
+                                <button onClick={onResetLayout} className="w-8 h-8 rounded-lg flex items-center justify-center bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 transition-colors" title="Reset Board Layout">
+                                    <i className="fas fa-undo"></i>
+                                </button>
+
+                                <button onClick={() => exportTasksToCSV(tasks)} className="w-8 h-8 rounded-lg flex items-center justify-center bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 transition-colors" title="Export All Tasks to CSV">
+                                    <i className="fas fa-file-export"></i>
+                                </button>
+
+                                <button onClick={() => onOpenSettings('general')} className="w-8 h-8 rounded-lg flex items-center justify-center bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 transition-colors">
+                                    <i className="fas fa-cog"></i>
+                                </button>
                             </div>
                         </div>
-
                     </div>
-                </div>
 
-                 <div className="flex flex-col sm:flex-row gap-4">
-                    <div className="w-full">
-                        <div className="flex justify-between text-xs mb-1">
-                            <span>Overall Progress</span>
-                            <span className="font-semibold">{Math.round(progress)}%</span>
+                    {/* Gauges Row: Fuel and XP */}
+                    <div className="flex flex-col sm:flex-row gap-4">
+                        {/* 1. Time Budget (Fuel) */}
+                        <div className="w-full">
+                            <LiquidGauge 
+                                type="fuel"
+                                label="Time Fuel"
+                                value={todaysBudgetedTime}
+                                max={settings.dailyBudget}
+                            />
                         </div>
-                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                            <div className="bg-gradient-to-r from-green-400 to-blue-500 h-2 rounded-full" style={{ width: `${progress}%` }}></div>
-                        </div>
-                    </div>
-                     <div className="w-full">
-                        <div className="flex justify-between text-xs mb-1">
-                            <span>Today's Time Budget</span>
-                            <span className="font-semibold">{todaysBudgetedTime.toFixed(1)}h / {settings.dailyBudget}h</span>
-                        </div>
-                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                            <div className={`h-2 rounded-full ${budgetProgress > 100 ? 'bg-red-500' : 'bg-yellow-500'}`} style={{ width: `${Math.min(budgetProgress, 100)}%` }}></div>
+                        
+                        {/* 2. XP Tank (Reward) */}
+                        <div className="w-full">
+                            <LiquidGauge 
+                                type="xp"
+                                label={`Level ${gamification.level}`}
+                                subLabel={`Streak: ${gamification.streak.current}🔥`}
+                                value={xpProgressData.currentLevelXp}
+                                max={xpProgressData.levelWidth}
+                            />
                         </div>
                     </div>
                 </div>
-
             </div>
             
             {showGame && <TetrisGameModal onClose={() => setShowGame(false)} />}

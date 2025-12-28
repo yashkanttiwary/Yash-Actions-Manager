@@ -10,7 +10,8 @@ import { ResolveBlockerModal } from './components/ResolveBlockerModal';
 import { AIAssistantModal } from './components/AIAssistantModal';
 import { CalendarView } from './components/CalendarView';
 import { TimelineGantt } from './components/TimelineGantt';
-import { manageTasksWithAI, generateTaskSummary } from './services/geminiService';
+import { manageTasksWithAI, generateTaskSummary, breakDownTask } from './services/geminiService';
+import { calculateTaskXP, checkLevelUp } from './services/gamificationService'; // IMPORT NEW SERVICE
 import { PomodoroTimer } from './components/PomodoroTimer';
 import { initGoogleClient, signIn, signOut } from './services/googleAuthService';
 import { COLUMN_STATUSES } from './constants';
@@ -23,6 +24,7 @@ import { storage } from './utils/storage';
 import { useBackgroundAudio } from './hooks/useBackgroundAudio';
 import { setUserTimeOffset } from './services/timeService';
 import { ConfirmModal } from './components/ConfirmModal';
+import { getEnvVar } from './utils/env';
 
 declare const confetti: any;
 
@@ -93,6 +95,7 @@ const App: React.FC = () => {
         googleSheetId: '',
         googleAppsScriptUrl: '',
         googleCalendarId: 'primary',
+        geminiApiKey: '', // New field for user-provided key
         audio: {
             enabled: true,
             mode: 'brown_noise',
@@ -106,6 +109,11 @@ const App: React.FC = () => {
     const isSheetConfigured = useMemo(() => {
         return !!(settings.googleSheetId || settings.googleAppsScriptUrl);
     }, [settings.googleSheetId, settings.googleAppsScriptUrl]);
+
+    // Check if API key exists (either user provided or env var)
+    const hasApiKey = useMemo(() => {
+        return !!settings.geminiApiKey || !!getEnvVar('VITE_GEMINI_API_KEY');
+    }, [settings.geminiApiKey]);
 
     const {
         tasks,
@@ -440,6 +448,31 @@ const App: React.FC = () => {
         updateTask({ ...task, subtasks: updatedSubtasks });
     }, [tasks, updateTask]);
 
+    // FEATURE: "I'm Stuck" Breakdown Handler
+    const handleBreakDownTask = useCallback(async (taskId: string) => {
+        const task = tasks.find(t => t.id === taskId);
+        if (!task) return;
+
+        try {
+            // Pass the user-configured API key if available
+            const steps = await breakDownTask(task.title, settings.geminiApiKey);
+            const currentSubtasks = task.subtasks || [];
+            
+            // Append new steps, avoiding duplicates by title if possible (simple check)
+            const newSubtasks = [...currentSubtasks];
+            steps.forEach(step => {
+                if (!newSubtasks.some(s => s.title === step.title)) {
+                    newSubtasks.push(step);
+                }
+            });
+
+            updateTask({ ...task, subtasks: newSubtasks });
+        } catch (error) {
+            console.error("Failed to break down task:", error);
+            // Optional: Show toast error here
+        }
+    }, [tasks, updateTask, settings.geminiApiKey]);
+
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             const target = e.target as HTMLElement;
@@ -526,20 +559,41 @@ const App: React.FC = () => {
         });
     };
 
-    const xpForPriority: Record<Priority, number> = { 'Critical': 50, 'High': 30, 'Medium': 20, 'Low': 10 };
-
     const handleTaskCompletion = useCallback((task: Task) => {
         setGamification(prev => {
-            let earnedXp = xpForPriority[task.priority] || 10;
-            if (task.timeEstimate) earnedXp += Math.round(task.timeEstimate * 5);
+            // 1. Calculate XP for this specific task
+            const { xp: earnedXp, bonuses } = calculateTaskXP(task);
+            console.log(`[Gamification] Task "${task.title}" completed. Earned ${earnedXp} XP. Bonuses:`, bonuses);
 
-            const newXp = prev.xp + earnedXp;
-            let newLevel = prev.level;
-            let xpForNextLevel = newLevel * 100;
+            // 2. Handle Streak
+            // Logic: Check if lastCompletionDate is "yesterday" or "today".
+            // If yesterday -> streak++, update date
+            // If today -> streak same, update date
+            // If older -> streak = 1, update date
+            let newStreak = { ...prev.streak };
+            const today = new Date().toISOString().split('T')[0];
             
-            if (newXp >= xpForNextLevel) {
-                newLevel++;
-                setLeveledUpTo(newLevel);
+            if (prev.streak.lastCompletionDate !== today) {
+                const yesterday = new Date();
+                yesterday.setDate(yesterday.getDate() - 1);
+                const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+                if (prev.streak.lastCompletionDate === yesterdayStr) {
+                    newStreak.current++;
+                } else {
+                    newStreak.current = 1;
+                }
+                newStreak.lastCompletionDate = today;
+                if (newStreak.current > newStreak.longest) {
+                    newStreak.longest = newStreak.current;
+                }
+            }
+
+            // 3. Update Level & XP
+            const nextState = checkLevelUp({ ...prev, streak: newStreak }, earnedXp);
+            
+            if (nextState.level > prev.level) {
+                setLeveledUpTo(nextState.level);
                 setShowLevelUp(true);
                 setTimeout(() => setShowLevelUp(false), 4000);
                  confetti({
@@ -550,24 +604,9 @@ const App: React.FC = () => {
                 });
             }
 
-            let newStreak = { ...prev.streak };
-            const today = new Date().toISOString().split('T')[0];
-            if (prev.streak.lastCompletionDate !== today) {
-                const yesterday = new Date();
-                yesterday.setDate(yesterday.getDate() - 1);
-                if (prev.streak.lastCompletionDate === yesterday.toISOString().split('T')[0]) {
-                    newStreak.current++;
-                } else {
-                    newStreak.current = 1;
-                }
-                newStreak.lastCompletionDate = today;
-                if (newStreak.current > newStreak.longest) {
-                    newStreak.longest = newStreak.current;
-                }
-            }
-            return { xp: newXp, level: newLevel, streak: newStreak };
+            return nextState;
         });
-    }, [xpForPriority]);
+    }, []);
 
     const handleToggleTimer = (taskId: string) => {
         const now = Date.now();
@@ -640,7 +679,7 @@ const App: React.FC = () => {
     const handleSetBlocker = (task: Task, reason: string) => {
         const newBlocker: Blocker = {
             id: `blocker-${Date.now()}-${Math.random()}`,
-            reason,
+            reason: reason,
             createdDate: new Date().toISOString(),
             resolved: false,
         };
@@ -687,7 +726,8 @@ const App: React.FC = () => {
         setAiError(null);
         setAiSummary(null);
         try {
-            const updatedTasks = await manageTasksWithAI(command, tasks);
+            // Pass API Key
+            const updatedTasks = await manageTasksWithAI(command, tasks, settings.geminiApiKey);
             setAllTasks(updatedTasks);
             setShowAIModal(false);
         } catch (error: any) {
@@ -702,7 +742,8 @@ const App: React.FC = () => {
         setAiError(null);
         setAiSummary(null);
         try {
-            const summary = await generateTaskSummary(tasks);
+            // Pass API Key
+            const summary = await generateTaskSummary(tasks, settings.geminiApiKey);
             setAiSummary(summary);
         } catch (error: any) {
             setAiError(error.message || 'An unknown error occurred while generating summary.');
@@ -711,15 +752,31 @@ const App: React.FC = () => {
         }
     };
     
-    const filteredTasks = isTodayView
-        ? tasks.filter(task => {
-              const today = new Date();
-              today.setHours(0, 0, 0, 0);
-              const dueDate = new Date(task.dueDate);
-              dueDate.setHours(0, 0, 0, 0);
-              return dueDate.getTime() === today.getTime();
-          })
-        : tasks;
+    // Filter Tasks Logic: Today + Done Cleanup (2 Day Rule)
+    const filteredTasks = useMemo(() => {
+        return tasks.filter(task => {
+            // Rule 1: Today View
+            if (isTodayView) {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const dueDate = new Date(task.dueDate);
+                dueDate.setHours(0, 0, 0, 0);
+                if (dueDate.getTime() !== today.getTime()) return false;
+            }
+
+            // Rule 2: Done Task Cleanup (Hide tasks completed > 48h ago)
+            if (task.status === 'Done' && task.completionDate) {
+                const completedTime = new Date(task.completionDate).getTime();
+                const now = new Date().getTime();
+                const hoursSinceCompletion = (now - completedTime) / (1000 * 60 * 60);
+                if (hoursSinceCompletion > 48) {
+                    return false; // Hide from view (but remains in DB/Sheet)
+                }
+            }
+
+            return true;
+        });
+    }, [tasks, isTodayView]);
 
     const handleGoogleSignIn = async () => {
         try {
@@ -808,8 +865,7 @@ const App: React.FC = () => {
                 onToggleTimeline={() => setShowTimeline(prev => !prev)}
             />
 
-            {/* Changed from overflow-y-auto overflow-x-hidden to overflow-auto to fix horizontal scrolling issues */}
-            <main className="flex-1 overflow-auto pl-2 sm:pl-6 pt-4 sm:pt-6 pr-2 pb-2 relative flex flex-col scroll-smooth">
+            <main className="flex-1 overflow-auto pl-2 sm:pl-6 pt-16 sm:pt-20 pr-2 pb-2 relative flex flex-col scroll-smooth">
                 {!isSheetConfigured ? (
                     <ConnectSheetPlaceholder onConnect={() => handleOpenSettings('sheets')} />
                 ) : (
@@ -851,6 +907,7 @@ const App: React.FC = () => {
                                             focusMode={focusMode}
                                             onDeleteTask={requestDeleteTask}
                                             onSubtaskToggle={handleSubtaskToggle}
+                                            onBreakDownTask={handleBreakDownTask}
                                             isCompactMode={isCompactMode}
                                             isFitToScreen={isFitToScreen}
                                             zoomLevel={zoomLevel}
@@ -924,6 +981,8 @@ const App: React.FC = () => {
                     error={aiError}
                     onGenerateSummary={handleGenerateSummary}
                     summary={aiSummary}
+                    hasApiKey={hasApiKey}
+                    onSaveApiKey={(key) => setSettings(prev => ({ ...prev, geminiApiKey: key }))}
                 />
             )}
             {showShortcutsModal && (

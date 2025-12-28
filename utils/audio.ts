@@ -97,7 +97,7 @@ const getNoiseBuffer = (ctx: AudioContext) => {
     return noiseBuffer;
 };
 
-export const playRetroSound = (type: 'thrust' | 'shoot' | 'explosion' | 'score') => {
+export const playRetroSound = (type: 'thrust' | 'shoot' | 'explosion' | 'score' | 'hit' | 'shield') => {
     try {
         const ctx = getAudioContext();
         const t = ctx.currentTime;
@@ -165,6 +165,34 @@ export const playRetroSound = (type: 'thrust' | 'shoot' | 'explosion' | 'score')
             
             masterGain.gain.setValueAtTime(0.05, t);
             masterGain.gain.linearRampToValueAtTime(0, t + 0.3);
+            
+            osc.connect(masterGain);
+            osc.start(t);
+            osc.stop(t + 0.3);
+        } else if (type === 'hit') {
+            // Short thud for damage
+            const noise = ctx.createBufferSource();
+            noise.buffer = getNoiseBuffer(ctx);
+            const filter = ctx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(300, t);
+            
+            masterGain.gain.setValueAtTime(0.1, t);
+            masterGain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+            
+            noise.connect(filter);
+            filter.connect(masterGain);
+            noise.start(t);
+            noise.stop(t + 0.1);
+        } else if (type === 'shield') {
+            // Rising tone for healing/buff
+            const osc = ctx.createOscillator();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(220, t);
+            osc.frequency.linearRampToValueAtTime(440, t + 0.3);
+            
+            masterGain.gain.setValueAtTime(0.05, t);
+            masterGain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
             
             osc.connect(masterGain);
             osc.start(t);

@@ -502,10 +502,11 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
         };
     }, [dragState, handleMouseMove, handleMouseUp, activeTool]);
 
-    // PACKING LOGIC - MAGNETIC GAPS
+    // PACKING LOGIC - MAGNETIC GAPS & RIPPLE
     const { packedTasks, totalRows, gapSegments } = useMemo(() => {
         const viewStartMs = viewStartDate.getTime();
         const viewEndMs = viewEndDate.getTime();
+        const nowMs = accurateNow.getTime();
 
         const rawTasks: any[] = [];
 
@@ -527,6 +528,17 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
                  if (startMs > endMs) startMs = endMs - 3600000;
             }
 
+            // --- MAGNETIC RIPPLE LOGIC (Visual Only) ---
+            // If task is supposed to be in past but not done/in-progress, push to NOW
+            // Only apply if we are NOT dragging this specific task
+            const isBeingDragged = optimisticTaskOverride && optimisticTaskOverride.id === task.id;
+            
+            if (!isBeingDragged && startMs < nowMs && task.status === 'To Do') {
+                const duration = endMs - startMs;
+                startMs = nowMs;
+                endMs = startMs + duration;
+            }
+
             if (optimisticTaskOverride && optimisticTaskOverride.id === task.id) {
                 if (dragState?.type === 'DUPLICATE') {
                     rawTasks.push({ ...task, startMs, endMs, isDragging: false });
@@ -546,9 +558,11 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
             }
         });
 
+        // Filter visible
         const visibleTasks = rawTasks.filter(({ startMs, endMs }) => startMs < viewEndMs && endMs > viewStartMs)
                                      .sort((a, b) => a.startMs - b.startMs);
 
+        // Simple packing (Lane allocation)
         const lanes: number[] = []; 
         const rowTasks: any[][] = []; 
 
@@ -566,29 +580,38 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
                 rowTasks[laneIndex] = [];
             }
 
+            // Ripple Check within lane: Ensure no overlap if we pushed a task
+            // Since we sorted by start time, if previous task ends after this task starts, push this task
+            if (rowTasks[laneIndex].length > 0) {
+                const prevTask = rowTasks[laneIndex][rowTasks[laneIndex].length - 1];
+                if (prevTask.endMs > task.startMs) {
+                    const duration = task.endMs - task.startMs;
+                    task.startMs = prevTask.endMs;
+                    task.endMs = task.startMs + duration;
+                }
+            }
+
             lanes[laneIndex] = task.endMs;
             rowTasks[laneIndex].push(task);
 
             return { ...task, rowIndex: laneIndex };
         });
 
-        // Generate Magnetic Gap Segments
+        // Generate Magnetic Gap Segments with labels
         const calculatedGaps: GapSegment[] = [];
         
         rowTasks.forEach((tasksInRow, rowIndex) => {
-            // Ensure strictly sorted by time
+            // Tasks are already somewhat sorted and rippled by the packing logic above
+            // But let's be safe
             tasksInRow.sort((a, b) => a.startMs - b.startMs);
             
             let currentCursor = viewStartMs;
 
             tasksInRow.forEach(task => {
-                // Gap before task (from current cursor)
-                // Use MAX to ignore tasks that start before current cursor (overlap handling logic usually prevents this but just in case)
                 const gapStart = Math.max(currentCursor, viewStartMs);
                 
                 if (task.startMs > gapStart) {
                     const gapDuration = task.startMs - gapStart;
-                    // Min duration check to avoid rendering 1px gaps
                     if (gapDuration > 60000) { 
                          calculatedGaps.push({
                             id: `gap-${rowIndex}-${gapStart}`,
@@ -597,15 +620,13 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
                             rowIndex,
                             left: (gapStart - viewStartMs) / msPerPixel,
                             width: gapDuration / msPerPixel,
-                            durationLabel: formatDuration(gapDuration)
+                            durationLabel: `⚡ ${formatDuration(gapDuration)} Free`
                         });
                     }
                 }
-                // Advance cursor to end of this task
                 currentCursor = Math.max(currentCursor, task.endMs);
             });
 
-            // Gap after last task to end of view
             if (currentCursor < viewEndMs) {
                 const gapDuration = viewEndMs - currentCursor;
                 if (gapDuration > 60000) {
@@ -616,14 +637,14 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
                         rowIndex,
                         left: (currentCursor - viewStartMs) / msPerPixel,
                         width: gapDuration / msPerPixel,
-                        durationLabel: formatDuration(gapDuration)
+                        durationLabel: `⚡ ${formatDuration(gapDuration)} Free`
                     });
                 }
             }
         });
 
         return { packedTasks: packed, totalRows: Math.max(5, lanes.length), gapSegments: calculatedGaps };
-    }, [tasks, viewStartDate, viewEndDate, optimisticTaskOverride, msPerPixel, dragState]);
+    }, [tasks, viewStartDate, viewEndDate, optimisticTaskOverride, msPerPixel, dragState, accurateNow]); // Added accurateNow dependency for ripple
 
     // ... (keep getBarMetrics and dependency effects) ...
     const getBarMetrics = (taskStartMs: number, taskEndMs: number) => {
@@ -875,10 +896,10 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
                                     height: `${BAR_HEIGHT}px`
                                 }}
                             >
-                                <div className={`w-full h-full rounded-md flex items-center justify-center bg-stripes-gray opacity-60 ${isDarkTheme ? 'bg-gray-800 border-gray-700' : 'bg-gray-200 border-gray-300'} border border-dashed`}>
+                                <div className={`w-full h-full rounded-md flex items-center justify-center bg-stripes-gray opacity-60 ${isDarkTheme ? 'bg-gray-800 border-gray-700' : 'bg-green-50 border-green-200'} border border-dashed transition-all hover:bg-green-100 dark:hover:bg-green-900/30`}>
                                     {gap.width > 40 && (
-                                        <span className={`text-[10px] font-bold uppercase tracking-wider ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'} select-none`}>
-                                            Gap: {gap.durationLabel}
+                                        <span className={`text-[10px] font-bold uppercase tracking-wider ${isDarkTheme ? 'text-gray-500' : 'text-green-600'} select-none`}>
+                                            {gap.durationLabel}
                                         </span>
                                     )}
                                 </div>

@@ -8,6 +8,8 @@ interface AIAssistantModalProps {
     error: string | null;
     onGenerateSummary: () => void;
     summary: string | null;
+    hasApiKey: boolean;
+    onSaveApiKey: (key: string) => void;
 }
 
 // A global type definition for SpeechRecognition which may be vendor-prefixed
@@ -80,11 +82,17 @@ const commandCategories = {
     "🚫 Set Blocker": "Add a blocker to 'Deploy to production' with reason 'Waiting for approval'.",
 };
 
-export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({ onClose, onProcessCommand, isLoading, error, onGenerateSummary, summary }) => {
+export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({ 
+    onClose, onProcessCommand, isLoading, error, onGenerateSummary, summary,
+    hasApiKey, onSaveApiKey
+}) => {
     const [command, setCommand] = useState('');
     const [isListening, setIsListening] = useState(false);
     const [speechError, setSpeechError] = useState<string | null>(null);
     const recognitionRef = useRef<any>(null);
+    
+    // State for No-Key Setup
+    const [tempKey, setTempKey] = useState('');
 
     // Setup Speech Recognition
     useEffect(() => {
@@ -152,6 +160,14 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({ onClose, onP
         handleSubmitLogic();
     };
     
+    const handleKeySave = () => {
+        if (tempKey.trim().length > 10) {
+            onSaveApiKey(tempKey.trim());
+        } else {
+            alert("Please enter a valid API Key.");
+        }
+    };
+    
     // Shortcut for submitting the command
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -180,6 +196,78 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({ onClose, onP
     const handleExampleClick = (exampleCommand: string) => {
         setCommand(exampleCommand);
     };
+
+    // --- NO API KEY STATE ---
+    if (!hasApiKey) {
+        return (
+            <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in zoom-in-95 duration-200" onClick={onClose}>
+                <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden" onClick={e => e.stopPropagation()}>
+                    <div className="p-8">
+                        <div className="w-16 h-16 bg-indigo-100 dark:bg-indigo-900/50 rounded-full flex items-center justify-center mx-auto mb-6 text-indigo-600 dark:text-indigo-400">
+                            <i className="fas fa-key text-3xl"></i>
+                        </div>
+                        <h2 className="text-2xl font-bold text-center text-gray-900 dark:text-white mb-2">Enable AI Intelligence</h2>
+                        <p className="text-center text-gray-600 dark:text-gray-300 mb-8 text-sm">
+                            To use features like <strong>Task Breakdown</strong>, <strong>Chat</strong>, and <strong>Board Summaries</strong>, you need to connect an AI provider.
+                        </p>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-1.5">1. Get Your Free Key</label>
+                                <a 
+                                    href="https://aistudio.google.com/app/apikey" 
+                                    target="_blank" 
+                                    rel="noreferrer"
+                                    className="flex items-center justify-between p-3 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors group"
+                                >
+                                    <div className="flex flex-col">
+                                        <span className="font-semibold text-indigo-700 dark:text-indigo-300 text-sm">Get Gemini Key (Free)</span>
+                                        <span className="text-[10px] text-gray-500">Recommended for this app</span>
+                                    </div>
+                                    <i className="fas fa-external-link-alt text-indigo-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-300"></i>
+                                </a>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-1.5">2. Paste Key Here</label>
+                                <input 
+                                    type="password"
+                                    value={tempKey}
+                                    onChange={(e) => setTempKey(e.target.value)}
+                                    placeholder="AIzaSy... or sk-..."
+                                    className="w-full p-3 bg-gray-100 dark:bg-gray-900 rounded-xl border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-indigo-500 focus:outline-none dark:text-white transition-all font-mono text-sm"
+                                    autoFocus
+                                />
+                                <p className="text-[10px] text-gray-500 mt-1">
+                                    Supported: Google Gemini (AIza...), OpenAI (sk-...).
+                                </p>
+                            </div>
+
+                            <button 
+                                onClick={handleKeySave}
+                                disabled={tempKey.length < 10}
+                                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg hover:shadow-indigo-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+                            >
+                                Save & Activate AI
+                            </button>
+                        </div>
+
+                        <div className="mt-6 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg flex gap-3 items-start">
+                            <i className="fas fa-shield-alt text-green-500 mt-0.5"></i>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                                <strong>Privacy Assurance:</strong> Your API Key is stored locally in your browser. We do not have servers, and your key is never sent anywhere except directly to the AI provider (Google or OpenAI) to process your requests.
+                            </p>
+                        </div>
+                    </div>
+                    <div className="bg-gray-50 dark:bg-gray-900/50 p-4 border-t border-gray-200 dark:border-gray-700 text-center">
+                        <button onClick={onClose} className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 text-sm font-medium">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4" onClick={onClose}>

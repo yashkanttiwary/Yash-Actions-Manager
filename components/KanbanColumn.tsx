@@ -21,7 +21,8 @@ interface KanbanColumnProps {
     onToggleTimer: (taskId: string) => void;
     onOpenContextMenu: (e: React.MouseEvent, task: Task) => void;
     onDeleteTask: (taskId: string) => void;
-    onSubtaskToggle: (taskId: string, subtaskId: string) => void; // New prop
+    onSubtaskToggle: (taskId: string, subtaskId: string) => void; 
+    onBreakDownTask?: (taskId: string) => Promise<void>; // New Prop
     isCompactMode: boolean;
     onTaskSizeChange?: () => void; 
     width?: number; 
@@ -33,7 +34,7 @@ interface KanbanColumnProps {
 export const KanbanColumn: React.FC<KanbanColumnProps> = ({ 
     status, tasks, allTasks, onTaskMove, onEditTask, onAddTask, onQuickAddTask,
     isCollapsed, onToggleCollapse, sortOption, onSortChange, onMouseDown, 
-    activeTaskTimer, onToggleTimer, onOpenContextMenu, onDeleteTask, onSubtaskToggle,
+    activeTaskTimer, onToggleTimer, onOpenContextMenu, onDeleteTask, onSubtaskToggle, onBreakDownTask,
     isCompactMode, onTaskSizeChange, width, height, onResize, zoomLevel = 1 
 }) => {
     const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -264,6 +265,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                                     onOpenContextMenu={onOpenContextMenu}
                                     onDeleteTask={onDeleteTask}
                                     onSubtaskToggle={onSubtaskToggle}
+                                    onBreakDownTask={onBreakDownTask}
                                     isCompactMode={isCompactMode}
                                     onTaskSizeChange={onTaskSizeChange}
                                 />

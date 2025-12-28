@@ -19,7 +19,8 @@ interface KanbanBoardProps {
     onOpenContextMenu: (e: React.MouseEvent, task: Task) => void;
     focusMode: Status | 'None';
     onDeleteTask: (taskId: string) => void;
-    onSubtaskToggle: (taskId: string, subtaskId: string) => void; // New prop
+    onSubtaskToggle: (taskId: string, subtaskId: string) => void; 
+    onBreakDownTask?: (taskId: string) => Promise<void>; // New prop
     isCompactMode: boolean;
     isFitToScreen: boolean; 
     zoomLevel: number; 
@@ -60,7 +61,7 @@ const sortTasks = (tasks: Task[], option: SortOption): Task[] => {
     }
 };
 
-export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, columnLayouts, getTasksByStatus, onTaskMove, onEditTask, onAddTask, onQuickAddTask, onUpdateColumnLayout, activeTaskTimer, onToggleTimer, onOpenContextMenu, focusMode, onDeleteTask, onSubtaskToggle, isCompactMode, isFitToScreen, zoomLevel }) => {
+export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, columnLayouts, getTasksByStatus, onTaskMove, onEditTask, onAddTask, onQuickAddTask, onUpdateColumnLayout, activeTaskTimer, onToggleTimer, onOpenContextMenu, focusMode, onDeleteTask, onSubtaskToggle, onBreakDownTask, isCompactMode, isFitToScreen, zoomLevel }) => {
     const [collapsedColumns, setCollapsedColumns] = useState<Set<Status>>(new Set());
     const [sortOptions, setSortOptions] = useState<Record<Status, SortOption>>(
         columns.reduce((acc, status) => ({...acc, [status]: 'Default'}), {}) as Record<Status, SortOption>
@@ -190,9 +191,6 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
     
     const handleTaskMoveWithSortReset = (taskId: string, newStatus: Status, newIndex: number) => {
         onTaskMove(taskId, newStatus, newIndex);
-        // We only reset sort if dropping into a new column to allow custom ordering,
-        // but if it's already sorted, custom order doesn't apply anyway.
-        // Keeping reset for consistency or maybe remove it? Audit didn't complain about reset specifically.
         if (sortOptions[newStatus] !== 'Default') {
             handleSortChange(newStatus, 'Default');
         }
@@ -268,6 +266,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
         return maxRight + 100;
     }, [columnLayouts, collapsedColumns]);
 
+    // FOCUS MODE: Simple Centered Render
     if (focusMode !== 'None') {
         const tasksForColumn = getTasksByStatus(focusMode);
         const sortedTasks = sortTasks(tasksForColumn, sortOptions[focusMode] || 'Default');
@@ -300,6 +299,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                         onOpenContextMenu={onOpenContextMenu}
                         onDeleteTask={onDeleteTask}
                         onSubtaskToggle={onSubtaskToggle}
+                        onBreakDownTask={onBreakDownTask}
                         isCompactMode={isCompactMode}
                         onTaskSizeChange={triggerLayoutUpdate}
                         width={undefined} 
@@ -357,6 +357,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                                 onOpenContextMenu={onOpenContextMenu}
                                 onDeleteTask={onDeleteTask}
                                 onSubtaskToggle={onSubtaskToggle}
+                                onBreakDownTask={onBreakDownTask}
                                 isCompactMode={isCompactMode}
                                 onTaskSizeChange={triggerLayoutUpdate}
                                 width={width} 
@@ -427,6 +428,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                                 onOpenContextMenu={onOpenContextMenu}
                                 onDeleteTask={onDeleteTask}
                                 onSubtaskToggle={onSubtaskToggle}
+                                onBreakDownTask={onBreakDownTask}
                                 isCompactMode={isCompactMode}
                                 onTaskSizeChange={triggerLayoutUpdate}
                                 width={layout.w}

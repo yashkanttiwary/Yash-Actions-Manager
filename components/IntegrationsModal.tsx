@@ -313,6 +313,9 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
         clientId: settings.googleClientId || ''
     });
     
+    // Gemini API Key State
+    const [geminiKeyInput, setGeminiKeyInput] = useState(settings.geminiApiKey || '');
+
     // Sheet ID Local State
     const [sheetIdInput, setSheetIdInput] = useState(settings.googleSheetId || '');
     const [scriptUrlInput, setScriptUrlInput] = useState(settings.googleAppsScriptUrl || '');
@@ -389,6 +392,11 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                 alert("⚠️ Saved, but failed to initialize. Please check if the keys are correct.");
             }
         }
+    };
+    
+    const handleSaveGeminiKey = () => {
+        onUpdateSettings({ geminiApiKey: geminiKeyInput });
+        alert("✅ Gemini API Key saved. AI features are ready!");
     };
 
     const handleDisconnect = () => {
@@ -559,6 +567,40 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                         </span>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            
+            case 'ai':
+                return (
+                    <div className="space-y-6 animate-fadeIn">
+                        <div className={sectionClass}>
+                            <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-gray-900 dark:text-white">
+                                <i className="fas fa-magic text-indigo-500"></i> AI & Intelligence
+                            </h3>
+                            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+                                Power the "I'm Stuck" button, task breakdowns, and chat features. 
+                                <br /><strong>Note:</strong> You only need a Gemini API Key for this. You do <strong>not</strong> need a Google Client ID.
+                            </p>
+
+                            <div className="grid gap-6">
+                                <div>
+                                    <label className={labelClass}>Gemini API Key</label>
+                                    <input 
+                                        type="password" 
+                                        value={geminiKeyInput} 
+                                        onChange={(e) => setGeminiKeyInput(e.target.value)} 
+                                        placeholder="AIzaSy..." 
+                                        className={inputClass} 
+                                    />
+                                    <p className="text-xs text-gray-500 mt-2">
+                                        Don't have one? <ExternalLink href="https://aistudio.google.com/app/apikey">Get a free key here</ExternalLink>.
+                                    </p>
+                                </div>
+                                <button onClick={handleSaveGeminiKey} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold w-full sm:w-auto">
+                                    Save AI Key
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -904,47 +946,28 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                         <div className={sectionClass}>
                              <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                                    API Configuration 
-                                    {/* Comparison Tooltip in API Tab */}
-                                    <ModeComparisonTooltip />
+                                    Google Workspace / Sync
                                 </h3>
                             </div>
                             
-                            <p className="text-sm text-gray-500 mb-4">
-                                <strong>Only needed for Advanced Mode.</strong> 
-                                If you use Easy Mode for Sheets, you can leave this blank.
-                            </p>
-                            
-                             <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800 mb-6">
-                                <h4 className="text-sm font-bold text-blue-800 dark:text-blue-300 mb-2">
-                                    <i className="fas fa-star mr-2"></i> Features Enabled by Advanced Mode:
-                                </h4>
-                                <ul className="text-xs text-gray-700 dark:text-gray-300 space-y-1.5 ml-1">
-                                    <li className="flex items-start gap-2">
-                                        <i className="fas fa-check-circle text-green-500 mt-0.5"></i>
-                                        <span><strong>Google Calendar Sync:</strong> Push tasks to your real calendar.</span>
-                                    </li>
-                                    <li className="flex items-start gap-2">
-                                        <i className="fas fa-check-circle text-green-500 mt-0.5"></i>
-                                        <span><strong>Smart Sheet Polling:</strong> Detects changes made in the sheet instantly via Drive API.</span>
-                                    </li>
-                                     <li className="flex items-start gap-2">
-                                        <i className="fas fa-check-circle text-green-500 mt-0.5"></i>
-                                        <span><strong>Secure OAuth:</strong> Authenticate directly with Google.</span>
-                                    </li>
-                                </ul>
+                            <div className="p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-100 dark:border-indigo-800 mb-6">
+                                <p className="text-sm text-indigo-800 dark:text-indigo-300">
+                                    <i className="fas fa-info-circle mr-2"></i>
+                                    <strong>AI features do NOT require this.</strong> You only need these keys if you want to sync with Google Calendar or use Advanced Sheets mode.
+                                </p>
                             </div>
 
                             <div className="grid gap-4">
                                 <div>
-                                    <label className={labelClass}>Google API Key</label>
+                                    <label className={labelClass}>Google API Key (GAPI)</label>
                                     <input type="password" value={apiKeys.apiKey} onChange={(e) => setApiKeys({ ...apiKeys, apiKey: e.target.value })} className={inputClass} />
                                 </div>
                                 <div>
-                                    <label className={labelClass}>Google Client ID</label>
+                                    <label className={labelClass}>Google Client ID (OAuth)</label>
                                     <input type="text" value={apiKeys.clientId} onChange={(e) => setApiKeys({ ...apiKeys, clientId: e.target.value })} className={inputClass} />
+                                    <p className="text-xs text-gray-500 mt-1">Required for Calendar Sync.</p>
                                 </div>
-                                <button onClick={handleSaveApiKeys} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold w-full sm:w-auto">Save Keys</button>
+                                <button onClick={handleSaveApiKeys} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold w-full sm:w-auto">Save Sync Keys</button>
                             </div>
                         </div>
                     </div>
@@ -958,7 +981,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                             <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg mb-4">
                                 <p className="text-sm text-yellow-800 dark:text-yellow-200">
                                     <i className="fas fa-exclamation-triangle mr-2"></i>
-                                    Calendar integration requires <strong>Advanced Mode</strong> (Client ID & API Key).
+                                    Calendar integration requires a <strong>Google Client ID</strong> (in the "Workspace / Sync" tab).
                                 </p>
                             </div>
                              <div className="flex justify-between items-center mb-4">
@@ -1010,10 +1033,11 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                     <nav className="flex md:flex-col p-2 md:p-4 gap-1 md:gap-2 overflow-x-auto md:overflow-visible no-scrollbar">
                         {[
                             { id: 'general', icon: 'fas fa-sliders-h', label: 'General' },
+                            { id: 'ai', icon: 'fas fa-magic', label: 'AI' }, // New AI Tab
                             { id: 'sounds', icon: 'fas fa-music', label: 'Sounds' },
                             { id: 'sheets', icon: 'fas fa-table', label: 'Sheets' },
                             { id: 'calendar', icon: 'far fa-calendar-alt', label: 'Calendar' },
-                            { id: 'api', icon: 'fas fa-code', label: 'API & Keys' },
+                            { id: 'api', icon: 'fas fa-server', label: 'Workspace / Sync' },
                         ].map(item => (
                             <button
                                 key={item.id}
@@ -1036,7 +1060,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                 <div className="flex-grow flex flex-col bg-gray-100/50 dark:bg-black/20 min-h-0 min-w-0">
                     <div className="flex justify-between items-center p-4 md:p-6 pb-2 flex-shrink-0">
                         <h2 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white capitalize truncate pr-4">
-                             {activeTab === 'api' ? 'API Configuration' : activeTab} <span className="md:hidden">Settings</span>
+                             {activeTab === 'api' ? 'Workspace Configuration' : activeTab === 'ai' ? 'AI Intelligence' : activeTab} <span className="md:hidden">Settings</span>
                         </h2>
                         <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors flex-shrink-0">
                             <i className="fas fa-times text-gray-600 dark:text-gray-300"></i>
