@@ -3,13 +3,14 @@ import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { KanbanBoard } from './components/KanbanBoard';
 import { Header } from './components/Header';
 import { useTaskManager } from './hooks/useTaskManager';
-import { Task, Status, Priority, GamificationData, Settings, Blocker, ConnectionHealth, SettingsTab } from './types';
+import { Task, Status, Priority, GamificationData, Settings, Blocker, ConnectionHealth, SettingsTab, Goal } from './types';
 import { EditTaskModal } from './components/EditTaskModal';
 import { BlockerModal } from './components/BlockerModal';
 import { ResolveBlockerModal } from './components/ResolveBlockerModal';
 import { AIAssistantModal } from './components/AIAssistantModal';
 import { CalendarView } from './components/CalendarView';
 import { TimelineGantt } from './components/TimelineGantt';
+import { GoalBoard } from './components/GoalBoard'; 
 import { manageTasksWithAI, generateTaskSummary, breakDownTask, parseTaskFromVoice } from './services/geminiService';
 import { calculateTaskXP, checkLevelUp } from './services/gamificationService'; 
 import { PomodoroTimer } from './components/PomodoroTimer';
@@ -137,6 +138,7 @@ const App: React.FC = () => {
 
     const {
         tasks,
+        goals, // New State
         columns,
         columnLayouts,
         addTask,
@@ -144,6 +146,10 @@ const App: React.FC = () => {
         deleteTask,
         moveTask,
         setAllTasks,
+        setAllData, // New Setter
+        addGoal, // New Action
+        updateGoal, // New Action
+        deleteGoal, // New Action
         getTasksByStatus,
         updateColumnLayout,
         resetColumnLayouts,
@@ -165,7 +171,8 @@ const App: React.FC = () => {
     const [showIntegrationsModal, setShowIntegrationsModal] = useState(false);
     const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>('general');
     
-    const [viewMode, setViewMode] = useState<'kanban' | 'calendar'>('kanban');
+    // Updated View Mode State
+    const [viewMode, setViewMode] = useState<'kanban' | 'calendar' | 'goals'>('kanban');
     const [focusMode, setFocusMode] = useState<Status | 'None'>('None');
     
     // Confirmation Modal State
@@ -364,13 +371,14 @@ const App: React.FC = () => {
     const { status: syncStatus, errorMsg: syncError, syncMethod, manualPull, manualPush } = useGoogleSheetSync(
         shouldSync ? settings.googleSheetId : undefined,
         tasks,
-        setAllTasks,
+        setAllData, // Updated to unified setter
         googleAuth.isSignedIn,
         shouldSync ? settings.googleAppsScriptUrl : undefined,
         gamification,
         settings,
         setGamification,
-        setSettings
+        setSettings,
+        goals // Pass Goals
     );
 
     useEffect(() => {
@@ -463,6 +471,7 @@ const App: React.FC = () => {
             dependencies: [],
             blockers: [],
             currentSessionStartTime: null,
+            goalId: undefined, // Explicit
         });
     }, []);
 
@@ -743,6 +752,13 @@ const App: React.FC = () => {
         performActualTaskMove(task, newStatus, newIndex);
     };
     
+    const handleTaskGoalMove = (taskId: string, newGoalId: string) => {
+        const task = tasks.find(t => t.id === taskId);
+        if (task) {
+            updateTask({ ...task, goalId: newGoalId });
+        }
+    };
+
     const handleSetBlocker = (task: Task, reason: string) => {
         const newBlocker: Blocker = {
             id: `blocker-${Date.now()}-${Math.random()}`,
@@ -996,6 +1012,7 @@ const App: React.FC = () => {
                                             isFitToScreen={isFitToScreen}
                                             zoomLevel={zoomLevel}
                                             isSpaceMode={isSpaceModeActive} // Pass calculated active mode
+                                            goals={goals} // Pass goals to KanbanBoard
                                         />
                                     </div>
                                 )}
@@ -1007,6 +1024,26 @@ const App: React.FC = () => {
                                             onEditTask={handleEditTask}
                                             onAddTask={handleOpenAddTaskModal}
                                             timezone={settings.timezone}
+                                        />
+                                    </div>
+                                )}
+                                {viewMode === 'goals' && (
+                                    <div className="flex-grow h-full">
+                                        <GoalBoard
+                                            tasks={filteredTasks}
+                                            goals={goals}
+                                            onTaskMove={handleTaskGoalMove}
+                                            onEditTask={handleEditTask}
+                                            onDeleteTask={requestDeleteTask}
+                                            onAddGoal={addGoal}
+                                            onEditGoal={updateGoal}
+                                            onDeleteGoal={deleteGoal}
+                                            activeTaskTimer={activeTaskTimer}
+                                            onToggleTimer={handleToggleTimer}
+                                            onSubtaskToggle={handleSubtaskToggle}
+                                            isCompactMode={isCompactMode}
+                                            isSpaceMode={isSpaceModeActive}
+                                            zoomLevel={zoomLevel}
                                         />
                                     </div>
                                 )}

@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Task, GamificationData, Settings } from '../types';
+import { Task, GamificationData, Settings, Goal } from '../types';
 import * as sheetService from '../services/googleSheetService';
 
 const POLL_INTERVAL = 5000;
@@ -9,13 +9,14 @@ const DEBOUNCE_DELAY = 1500;
 export const useGoogleSheetSync = (
     sheetId: string | undefined, 
     localTasks: Task[], 
-    setLocalTasks: (tasks: Task[]) => void,
+    setAllData: (tasks: Task[], goals: Goal[]) => void,
     isSignedIn: boolean,
     appsScriptUrl?: string,
     gamification?: GamificationData,
     settings?: Settings,
     setGamification?: (data: GamificationData) => void,
-    setSettings?: (settings: Settings) => void
+    setSettings?: (settings: Settings) => void,
+    localGoals: Goal[] = [] // New Parameter
 ) => {
     const [status, setStatus] = useState<'idle' | 'syncing' | 'error' | 'success'>('idle');
     const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
@@ -24,6 +25,7 @@ export const useGoogleSheetSync = (
     
     // Refs to track state inside timers
     const localTasksRef = useRef(localTasks);
+    const localGoalsRef = useRef(localGoals);
     const gamificationRef = useRef(gamification);
     const settingsRef = useRef(settings);
     const isDirtyRef = useRef(false);
@@ -38,9 +40,10 @@ export const useGoogleSheetSync = (
 
     useEffect(() => {
         localTasksRef.current = localTasks;
+        localGoalsRef.current = localGoals;
         gamificationRef.current = gamification;
         settingsRef.current = settings;
-    }, [localTasks, gamification, settings]);
+    }, [localTasks, localGoals, gamification, settings]);
 
     // Reset safety lock when connection details change
     useEffect(() => {
@@ -61,23 +64,26 @@ export const useGoogleSheetSync = (
     const executeStrictPull = useCallback(async (method: 'script' | 'api', idOrUrl: string) => {
         console.log(`[Sync] Executing Strict Pull via ${method}...`);
         let remoteTasks: Task[] = [];
+        let remoteGoals: Goal[] = [];
         let remoteMetadata: any = null;
         
         if (method === 'api') {
             const data = await sheetService.syncDataFromSheet(idOrUrl);
             remoteTasks = data.tasks;
+            remoteGoals = data.goals;
             remoteMetadata = data.metadata;
         } else {
             const data = await sheetService.syncDataFromAppsScript(idOrUrl);
             remoteTasks = data.tasks;
+            remoteGoals = data.goals;
             remoteMetadata = data.metadata;
         }
 
-        console.log(`[Sync] Pulled ${remoteTasks.length} tasks. Metadata present: ${!!remoteMetadata}`);
+        console.log(`[Sync] Pulled ${remoteTasks.length} tasks and ${remoteGoals.length} goals.`);
         
         isRemoteUpdate.current = true;
         
-        setLocalTasks(remoteTasks);
+        setAllData(remoteTasks, remoteGoals);
         
         // Restore Metadata if present
         if (remoteMetadata) {
@@ -95,7 +101,7 @@ export const useGoogleSheetSync = (
         initialPullComplete.current = true;
         
         setStatus('success');
-    }, [setLocalTasks, setGamification, setSettings]);
+    }, [setAllData, setGamification, setSettings]);
 
     const manualPull = useCallback(async () => {
         if (!syncMethod) return;
@@ -135,9 +141,9 @@ export const useGoogleSheetSync = (
             };
 
             if (syncMethod === 'api' && sheetId) {
-                await sheetService.syncDataToSheet(sheetId, localTasksRef.current, metadata);
+                await sheetService.syncDataToSheet(sheetId, localTasksRef.current, localGoalsRef.current, metadata);
             } else if (syncMethod === 'script' && appsScriptUrl) {
-                await sheetService.syncDataToAppsScript(appsScriptUrl, localTasksRef.current, metadata);
+                await sheetService.syncDataToAppsScript(appsScriptUrl, localTasksRef.current, localGoalsRef.current, metadata);
             }
             setLastSyncTime(new Date().toISOString());
             setStatus('success');
@@ -172,7 +178,7 @@ export const useGoogleSheetSync = (
         }
     }, [syncMethod, sheetId, appsScriptUrl, executeStrictPull]); 
 
-    // Auto-Push Watcher (Tasks, Gamification, Settings)
+    // Auto-Push Watcher (Tasks, Goals, Gamification, Settings)
     useEffect(() => {
         if (!syncMethod) return;
 
@@ -202,7 +208,7 @@ export const useGoogleSheetSync = (
         return () => {
             if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
         };
-    }, [localTasks, gamification, settings, syncMethod, manualPush, status]);
+    }, [localTasks, localGoals, gamification, settings, syncMethod, manualPush, status]);
 
     // Polling
     useEffect(() => {
@@ -225,27 +231,36 @@ export const useGoogleSheetSync = (
 
                 if (shouldSync) {
                     let remoteTasks: Task[] = [];
+                    let remoteGoals: Goal[] = [];
                     let remoteMetadata: any = null;
 
                     if (syncMethod === 'api' && sheetId) {
                          const data = await sheetService.syncDataFromSheet(sheetId);
                          remoteTasks = data.tasks;
+                         remoteGoals = data.goals;
                          remoteMetadata = data.metadata;
                     } else if (syncMethod === 'script' && appsScriptUrl) {
                          const data = await sheetService.syncDataFromAppsScript(appsScriptUrl);
                          remoteTasks = data.tasks;
+                         remoteGoals = data.goals;
                          remoteMetadata = data.metadata;
                     }
 
+                    // Simple merge for Goals (Remote wins for simplicity in this version, or do we merge?)
+                    // Let's trust remote for now to avoid complexity in Goal conflict res.
+                    
                     const mergedTasks = mergeTasks(localTasksRef.current, remoteTasks, lastSyncTime);
                     
+                    // Detect changes
                     const metadataChanged = JSON.stringify(remoteMetadata) !== JSON.stringify({gamification: gamificationRef.current, settings: settingsRef.current});
                     const tasksChanged = JSON.stringify(mergedTasks) !== JSON.stringify(localTasksRef.current);
+                    const goalsChanged = JSON.stringify(remoteGoals) !== JSON.stringify(localGoalsRef.current);
 
-                    if (tasksChanged || (metadataChanged && remoteMetadata)) {
+                    if (tasksChanged || goalsChanged || (metadataChanged && remoteMetadata)) {
                         console.log("[Sync] Background update found.");
                         isRemoteUpdate.current = true;
-                        if(tasksChanged) setLocalTasks(mergedTasks);
+                        
+                        setAllData(mergedTasks, remoteGoals); // Update both
                         
                         if (remoteMetadata) {
                             if(setGamification) setGamification(remoteMetadata.gamification);
@@ -262,7 +277,7 @@ export const useGoogleSheetSync = (
         }, POLL_INTERVAL);
 
         return () => clearInterval(pollInterval);
-    }, [syncMethod, sheetId, appsScriptUrl, lastSyncTime, status, setLocalTasks, setGamification, setSettings]);
+    }, [syncMethod, sheetId, appsScriptUrl, lastSyncTime, status, setAllData, setGamification, setSettings]);
 
     return { status, lastSyncTime, errorMsg, syncMethod, manualPull, manualPush };
 };

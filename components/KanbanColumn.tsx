@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { TaskCard } from './TaskCard';
-import { Task, Status, SortOption } from '../types';
+import { Task, Status, SortOption, Goal } from '../types';
 import { STATUS_STYLES } from '../constants';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 
@@ -9,6 +9,7 @@ interface KanbanColumnProps {
     status: Status;
     tasks: Task[]; // Tasks for this specific column (potentially sorted)
     allTasks: Task[]; // All tasks for context (e.g., dependencies)
+    goals?: Goal[]; // New Prop
     onTaskMove: (taskId: string, newStatus: Status, newIndex: number) => void;
     onEditTask: (task: Task) => void;
     onAddTask: (status: Status) => void;
@@ -31,7 +32,7 @@ interface KanbanColumnProps {
     height?: number; 
     onResize?: (width: number, height: number) => void;
     zoomLevel?: number;
-    isSpaceMode?: boolean; // New Prop
+    isSpaceMode?: boolean; 
 }
 
 // Define specific tints for Space Mode to retain color identity while keeping the space aesthetic
@@ -46,7 +47,7 @@ const SPACE_TINTS: Record<Status, { body: string, header: string, border: string
 };
 
 export const KanbanColumn: React.FC<KanbanColumnProps> = ({ 
-    status, tasks, allTasks, onTaskMove, onEditTask, onAddTask, onQuickAddTask, onSmartAddTask,
+    status, tasks, allTasks, goals, onTaskMove, onEditTask, onAddTask, onQuickAddTask, onSmartAddTask,
     isCollapsed, onToggleCollapse, sortOption, onSortChange, onMouseDown, 
     activeTaskTimer, onToggleTimer, onOpenContextMenu, onDeleteTask, onSubtaskToggle, onBreakDownTask,
     isCompactMode, onTaskSizeChange, width, height, onResize, zoomLevel = 1, isSpaceMode = false
@@ -351,6 +352,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                                     key={task.id}
                                     task={task}
                                     allTasks={allTasks}
+                                    goals={goals} // Pass goals down
                                     onEditTask={onEditTask}
                                     activeTaskTimer={activeTaskTimer}
                                     onToggleTimer={onToggleTimer}

@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Task, Status, ColumnLayout } from '../types';
+import { Task, Status, ColumnLayout, Goal } from '../types';
 import { COLUMN_STATUSES } from '../constants';
 import { storage } from '../utils/storage';
 
@@ -9,6 +9,7 @@ const COLUMN_GAP = 24; // Increased gap for better visual separation
 
 export const useTaskManager = (enableLoading: boolean = true) => {
     const [tasks, setTasks] = useState<Task[]>([]);
+    const [goals, setGoals] = useState<Goal[]>([]);
     const [columnLayouts, setColumnLayouts] = useState<ColumnLayout[]>([]);
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
@@ -41,11 +42,23 @@ export const useTaskManager = (enableLoading: boolean = true) => {
         });
     }, [tasks]);
 
+    // Calculate Goal Progress automatically
+    const processedGoals = useMemo(() => {
+        return goals.map(goal => {
+            const goalTasks = tasks.filter(t => t.goalId === goal.id);
+            const total = goalTasks.length;
+            const completed = goalTasks.filter(t => t.status === 'Done').length;
+            const progress = total === 0 ? 0 : Math.round((completed / total) * 100);
+            return { ...goal, progress };
+        });
+    }, [goals, tasks]);
+
     useEffect(() => {
         // Strict Guard: If loading is not enabled (i.e. not connected), do nothing.
         // However, we MUST ensure layouts are initialized if we are going to show anything later.
         if (!enableLoading) {
-            setTasks([]); 
+            setTasks([]);
+            setGoals([]);
             // We intentionally don't set layouts here to avoid flashing default layout before checking storage
             setIsLoading(false);
             return;
@@ -83,6 +96,7 @@ export const useTaskManager = (enableLoading: boolean = true) => {
                                 dependencies: task.dependencies || [],
                                 blockers: blockers,
                                 currentSessionStartTime: task.currentSessionStartTime || null,
+                                goalId: task.goalId || undefined, // New Field
                             };
                         });
                         loadedTasks = parsedTasks;
@@ -92,6 +106,18 @@ export const useTaskManager = (enableLoading: boolean = true) => {
                     }
                 }
                 setTasks(loadedTasks);
+
+                // LOAD GOALS
+                const savedGoals = await storage.get('goals');
+                if (savedGoals && savedGoals !== '[]') {
+                    try {
+                        const parsedGoals = JSON.parse(savedGoals);
+                        setGoals(parsedGoals);
+                    } catch (e) {
+                        console.error("Failed to parse goals", e);
+                        setGoals([]);
+                    }
+                }
 
                 // FIX CRIT-001: Load Column Layouts from centralized storage
                 const savedLayouts = await storage.get('columnLayouts_v5');
@@ -119,6 +145,7 @@ export const useTaskManager = (enableLoading: boolean = true) => {
                 console.error(err);
                 setError('Failed to load local data.');
                 setTasks([]);
+                setGoals([]);
                 setColumnLayouts(getDefaultLayout());
             } finally {
                 setIsLoading(false);
@@ -133,9 +160,10 @@ export const useTaskManager = (enableLoading: boolean = true) => {
         // This prevents overwriting storage with empty arrays during initialization phases.
         if (!isLoading && enableLoading) {
             storage.set('tasks', JSON.stringify(tasks));
+            storage.set('goals', JSON.stringify(goals));
             storage.set('columnLayouts_v5', JSON.stringify(columnLayouts));
         }
-    }, [tasks, columnLayouts, isLoading, enableLoading]);
+    }, [tasks, goals, columnLayouts, isLoading, enableLoading]);
 
     // TYPE FIX: Added statusChangeDate to omitted fields, allowing optional property in input
     const addTask = useCallback((taskData: Omit<Task, 'id' | 'createdDate' | 'lastModified' | 'statusChangeDate'> & { statusChangeDate?: string }) => {
@@ -204,11 +232,49 @@ export const useTaskManager = (enableLoading: boolean = true) => {
         });
     }, []);
     
+    // --- GOAL OPERATIONS ---
+    const addGoal = useCallback((goalData: Omit<Goal, 'id' | 'createdDate'>) => {
+        const now = new Date().toISOString();
+        const newGoal: Goal = {
+            id: `goal-${Date.now()}-${Math.random()}`,
+            createdDate: now,
+            ...goalData
+        };
+        setGoals(prev => [...prev, newGoal]);
+    }, []);
+
+    const updateGoal = useCallback((updatedGoal: Goal) => {
+        setGoals(prev => prev.map(g => g.id === updatedGoal.id ? updatedGoal : g));
+    }, []);
+
+    const deleteGoal = useCallback((goalId: string) => {
+        setGoals(prev => prev.filter(g => g.id !== goalId));
+        // Optional: Remove goalId from tasks? Or let them stay orphaned or auto-unassign?
+        // Let's auto-unassign to be safe
+        setTasks(prev => prev.map(t => t.goalId === goalId ? { ...t, goalId: undefined } : t));
+    }, []);
+
+    const setAllData = useCallback((newTasks: Task[], newGoals: Goal[]) => {
+        const tasksWithDefaults = newTasks.map(task => ({
+            ...task,
+            statusChangeDate: task.statusChangeDate || task.lastModified,
+            actualTimeSpent: task.actualTimeSpent || 0,
+            xpAwarded: task.xpAwarded || (task.status === 'Done'),
+            scheduledStartDateTime: task.scheduledStartDateTime,
+            dependencies: task.dependencies || [],
+            blockers: task.blockers || [],
+            currentSessionStartTime: task.currentSessionStartTime || null,
+        }));
+        setTasks(tasksWithDefaults);
+        setGoals(newGoals);
+    }, []);
+
     const getTasksByStatus = (status: Status, taskList: Task[] = processedTasks) => {
         return taskList.filter(task => task.status === status);
     };
     
     const setAllTasks = useCallback((newTasks: Task[]) => {
+        // Legacy support wrapper, assumes no goal changes
         const tasksWithDefaults = newTasks.map(task => ({
             ...task,
             statusChangeDate: task.statusChangeDate || task.lastModified,
@@ -237,6 +303,7 @@ export const useTaskManager = (enableLoading: boolean = true) => {
 
     return {
         tasks: processedTasks,
+        goals: processedGoals,
         columns: COLUMN_STATUSES,
         columnLayouts,
         addTask,
@@ -245,6 +312,10 @@ export const useTaskManager = (enableLoading: boolean = true) => {
         moveTask,
         getTasksByStatus,
         setAllTasks,
+        setAllData, // New unified setter
+        addGoal,
+        updateGoal,
+        deleteGoal,
         updateColumnLayout,
         resetColumnLayouts,
         isLoading,

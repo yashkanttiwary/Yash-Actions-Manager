@@ -4,6 +4,15 @@ export type Priority = 'Critical' | 'High' | 'Medium' | 'Low';
 export type SortOption = 'Default' | 'Priority' | 'Due Date' | 'Created Date';
 export type SettingsTab = 'general' | 'ai' | 'api' | 'sheets' | 'calendar' | 'sounds';
 
+export interface Goal {
+    id: string;
+    title: string;
+    color: string; // Hex code
+    description?: string;
+    createdDate: string;
+    progress?: number; // Calculated field (0-100)
+}
+
 export interface Subtask {
   id: string;
   title: string;
@@ -44,6 +53,8 @@ export interface Task {
   blockers?: Blocker[];
   // Fix HIGH-002: Persist timer state on the task itself
   currentSessionStartTime?: number | null; 
+  // Strategic Goal Architecture
+  goalId?: string;
 }
 
 export interface ColumnLayout {

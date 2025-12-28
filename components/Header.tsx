@@ -35,8 +35,8 @@ interface HeaderProps {
     gamification: GamificationData;
     settings: Settings;
     onUpdateSettings: (newSettings: Partial<Settings>) => void;
-    currentViewMode: 'kanban' | 'calendar';
-    onViewModeChange: (mode: 'kanban' | 'calendar') => void;
+    currentViewMode: 'kanban' | 'calendar' | 'goals';
+    onViewModeChange: (mode: 'kanban' | 'calendar' | 'goals') => void;
     googleAuthState: GoogleAuthState;
     onGoogleSignIn: () => void;
     onGoogleSignOut: () => void;
@@ -407,32 +407,15 @@ export const Header: React.FC<HeaderProps> = ({
                                 </button>
                             )}
 
-                            {/* Focus Mode Selector */}
-                            <div className={`flex items-center rounded-md px-3 py-1.5 transition-colors ${isSpaceVisualsActive ? 'bg-white/10 text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>
-                                <label htmlFor="focus-mode" className={`text-xs font-semibold mr-2 cursor-pointer ${isSpaceVisualsActive ? 'text-white/80' : 'text-gray-600 dark:text-gray-400'}`}>
-                                    Focus:
-                                </label>
-                                <div className="relative">
-                                    <select
-                                        id="focus-mode"
-                                        value={focusMode}
-                                        onChange={(e) => setFocusMode(e.target.value as Status | 'None')}
-                                        className={`appearance-none bg-transparent border-none text-xs font-semibold focus:ring-0 cursor-pointer pr-5 py-0 pl-1 focus:outline-none ${isSpaceVisualsActive ? 'text-white option-black' : 'text-gray-800 dark:text-white'}`}
-                                    >
-                                        <option value="None" className="text-black">None</option>
-                                        {COLUMN_STATUSES.map(status => (
-                                            <option key={status} value={status} className="text-black">{status}</option>
-                                        ))}
-                                    </select>
-                                </div>
+                            {/* View Toggles - UPDATED WITH GOALS */}
+                            <div className={`${isSpaceVisualsActive ? 'bg-white/10' : 'bg-gray-200 dark:bg-gray-700'} p-0.5 rounded-lg flex items-center`}>
+                                <button onClick={() => onViewModeChange('kanban')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${currentViewMode === 'kanban' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>Board</button>
+                                <button onClick={() => onViewModeChange('goals')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${currentViewMode === 'goals' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>Goals</button>
+                                <button onClick={() => onViewModeChange('calendar')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${currentViewMode === 'calendar' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>Calendar</button>
                             </div>
 
-                            {/* View Toggles & Today */}
-                            <div className="flex items-center gap-2">
-                                <div className={`${isSpaceVisualsActive ? 'bg-white/10' : 'bg-gray-200 dark:bg-gray-700'} p-0.5 rounded-lg flex items-center`}>
-                                    <button onClick={() => onViewModeChange('kanban')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${currentViewMode === 'kanban' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>Board</button>
-                                    <button onClick={() => onViewModeChange('calendar')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${currentViewMode === 'calendar' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>Calendar</button>
-                                </div>
+                            {/* Today Toggle (Only for Board/Calendar) */}
+                            {currentViewMode !== 'goals' && (
                                 <button
                                     onClick={() => setIsTodayView(!isTodayView)}
                                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
@@ -447,7 +430,7 @@ export const Header: React.FC<HeaderProps> = ({
                                     <i className="far fa-calendar-check mr-1.5"></i>
                                     Today
                                 </button>
-                            </div>
+                            )}
 
                             {/* Zoom */}
                             <div className={`${isSpaceVisualsActive ? 'bg-white/10 text-white' : 'bg-gray-200 dark:bg-gray-700'} p-0.5 rounded-lg flex items-center gap-0.5`}>

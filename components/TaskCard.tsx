@@ -1,18 +1,18 @@
-
 import React, { useState, useEffect, useLayoutEffect, useCallback } from 'react';
-import { Task, Status } from '../types';
+import { Task, Status, Goal } from '../types';
 import { PRIORITY_COLORS, TAG_COLORS, STATUS_STYLES } from '../constants';
 
 interface TaskCardProps {
     task: Task;
     allTasks: Task[]; // All tasks needed for dependency tooltips
+    goals?: Goal[]; // New Prop: Pass all goals to find color/title
     onEditTask: (task: Task) => void;
     activeTaskTimer: any; // Kept for interface compatibility but ignored
     onToggleTimer: (taskId:string) => void;
     onOpenContextMenu: (e: React.MouseEvent, task: Task) => void;
     onDeleteTask: (taskId: string) => void;
-    onSubtaskToggle: (taskId: string, subtaskId: string) => void; // New prop
-    onBreakDownTask?: (taskId: string) => Promise<void>; // New prop
+    onSubtaskToggle: (taskId: string, subtaskId: string) => void;
+    onBreakDownTask?: (taskId: string) => Promise<void>;
     isCompactMode: boolean;
     onTaskSizeChange?: () => void;
 }
@@ -77,11 +77,14 @@ const formatTimeSince = (dateStr: string): string => {
 };
 
 
-export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, onToggleTimer, onOpenContextMenu, onDeleteTask, onSubtaskToggle, onBreakDownTask, isCompactMode, onTaskSizeChange }) => {
+export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], onEditTask, onToggleTimer, onOpenContextMenu, onDeleteTask, onSubtaskToggle, onBreakDownTask, isCompactMode, onTaskSizeChange }) => {
     const priorityClasses = PRIORITY_COLORS[task.priority];
     const statusStyle = STATUS_STYLES[task.status] || STATUS_STYLES['To Do'];
     const [currentSessionTime, setCurrentSessionTime] = useState(0);
     const [isBreakingDown, setIsBreakingDown] = useState(false);
+    
+    // Derived Goal Data
+    const assignedGoal = goals.find(g => g.id === task.goalId);
     
     // Local state to handle individual expansion
     const [isExpanded, setIsExpanded] = useState(false);
@@ -228,6 +231,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
                 onDragEnd={handleDragEnd}
                 data-task-id={task.id}
                 className={`group task-card relative bg-white dark:bg-gray-800 rounded-md p-2 border border-gray-200 dark:border-gray-700 shadow-sm ${cardCursorClass} hover:shadow-md ${statusStyle.cardBorder} ${isBlockedByDep ? 'opacity-60 saturate-50' : ''}`}
+                style={{ borderLeftColor: assignedGoal?.color || undefined, borderLeftWidth: assignedGoal?.color ? '6px' : undefined }}
                 onClick={handleCardClick}
                 onContextMenu={handleContextMenu}
                 title={agingMessage || `${task.title} (Priority: ${task.priority})`}
@@ -244,6 +248,14 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
                              <div className="md:hidden text-gray-400 cursor-move">
                                  <i className="fas fa-grip-vertical text-xs"></i>
                              </div>
+                         )}
+                         
+                         {assignedGoal && (
+                             <div 
+                                className="flex-shrink-0 w-2.5 h-2.5 rounded-full" 
+                                style={{ backgroundColor: assignedGoal.color }}
+                                title={`Goal: ${assignedGoal.title}`}
+                             ></div>
                          )}
                          
                          <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded flex-shrink-0 uppercase ${priorityClasses.bg} ${priorityClasses.text} border ${priorityClasses.text.replace('text-', 'border-')} border-opacity-30`} title={`Priority: ${task.priority}`}>
@@ -298,6 +310,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
             onDragEnd={handleDragEnd}
             data-task-id={task.id}
             className={`group task-card task-card-tilt relative bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700 shadow-md ${cardCursorClass} ${priorityClasses.glow} hover:shadow-2xl ${statusStyle.cardBorder} ${isBlockedByDep ? 'opacity-60 saturate-50' : ''}`}
+            style={{ borderLeftColor: assignedGoal?.color || undefined, borderLeftWidth: assignedGoal?.color ? '6px' : undefined }}
             onClick={handleCardClick}
             onContextMenu={handleContextMenu}
             title={agingMessage || `Priority: ${task.priority} | Due: ${new Date(task.dueDate).toLocaleDateString()}`}
@@ -321,6 +334,16 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, onEditTask, 
                     </h3>
                     
                     <div className="flex items-center gap-1 flex-shrink-0 relative z-20">
+                        {assignedGoal && (
+                            <span 
+                                className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white whitespace-nowrap shadow-sm truncate max-w-[80px]"
+                                style={{ backgroundColor: assignedGoal.color }}
+                                title={`Goal: ${assignedGoal.title}`}
+                            >
+                                {assignedGoal.title}
+                            </span>
+                        )}
+
                         <span className={`text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap ${priorityClasses.bg} ${priorityClasses.text}`}>
                             {task.priority}
                         </span>

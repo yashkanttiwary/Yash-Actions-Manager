@@ -2,7 +2,7 @@
 import React, { useState, useRef, useLayoutEffect, useCallback, useMemo } from 'react';
 import { KanbanColumn } from './KanbanColumn';
 import { DependencyLines } from './DependencyLines';
-import { Task, Status, SortOption, Priority, ColumnLayout } from '../types';
+import { Task, Status, SortOption, Priority, ColumnLayout, Goal } from '../types';
 
 interface KanbanBoardProps {
     tasks: Task[];
@@ -13,7 +13,7 @@ interface KanbanBoardProps {
     onEditTask: (task: Task) => void;
     onAddTask: (status: Status) => void;
     onQuickAddTask: (title: string, status: Status) => void; 
-    onSmartAddTask: (transcript: string, status: Status) => Promise<void>; // Updated to Promise
+    onSmartAddTask: (transcript: string, status: Status) => Promise<void>; 
     onUpdateColumnLayout: (id: Status, newLayout: Omit<ColumnLayout, 'id'>) => void;
     activeTaskTimer: {taskId: string, startTime: number} | null;
     onToggleTimer: (taskId: string) => void;
@@ -25,7 +25,8 @@ interface KanbanBoardProps {
     isCompactMode: boolean;
     isFitToScreen: boolean; 
     zoomLevel: number; 
-    isSpaceMode?: boolean; // New prop for theme override
+    isSpaceMode?: boolean; 
+    goals?: Goal[]; // New Prop
 }
 
 interface LineCoordinate {
@@ -63,7 +64,7 @@ const sortTasks = (tasks: Task[], option: SortOption): Task[] => {
     }
 };
 
-export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, columnLayouts, getTasksByStatus, onTaskMove, onEditTask, onAddTask, onQuickAddTask, onSmartAddTask, onUpdateColumnLayout, activeTaskTimer, onToggleTimer, onOpenContextMenu, focusMode, onDeleteTask, onSubtaskToggle, onBreakDownTask, isCompactMode, isFitToScreen, zoomLevel, isSpaceMode = false }) => {
+export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, columnLayouts, getTasksByStatus, onTaskMove, onEditTask, onAddTask, onQuickAddTask, onSmartAddTask, onUpdateColumnLayout, activeTaskTimer, onToggleTimer, onOpenContextMenu, focusMode, onDeleteTask, onSubtaskToggle, onBreakDownTask, isCompactMode, isFitToScreen, zoomLevel, isSpaceMode = false, goals }) => {
     const [collapsedColumns, setCollapsedColumns] = useState<Set<Status>>(new Set());
     const [sortOptions, setSortOptions] = useState<Record<Status, SortOption>>(
         columns.reduce((acc, status) => ({...acc, [status]: 'Default'}), {}) as Record<Status, SortOption>
@@ -287,6 +288,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                         status={focusMode}
                         tasks={sortedTasks}
                         allTasks={tasks}
+                        goals={goals} // Pass goals
                         onTaskMove={handleTaskMoveWithSortReset}
                         onEditTask={onEditTask}
                         onAddTask={onAddTask}
@@ -347,6 +349,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                                 status={status}
                                 tasks={sortedTasks}
                                 allTasks={tasks}
+                                goals={goals} // Pass goals
                                 onTaskMove={handleTaskMoveWithSortReset}
                                 onEditTask={onEditTask}
                                 onAddTask={onAddTask}
@@ -420,6 +423,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                                 status={status}
                                 tasks={sortedTasks}
                                 allTasks={tasks}
+                                goals={goals} // Pass goals
                                 onTaskMove={handleTaskMoveWithSortReset}
                                 onEditTask={onEditTask}
                                 onAddTask={onAddTask}

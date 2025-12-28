@@ -45,6 +45,7 @@ const CopyButton: React.FC<{ text: string; label?: string }> = ({ text, label })
 
     return (
         <button 
+            type="button"
             onClick={handleCopy}
             className="group flex items-center gap-2 px-3 py-1.5 text-xs font-semibold bg-gray-100 dark:bg-gray-800 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-gray-700 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg border border-gray-200 dark:border-gray-700 transition-all"
             title="Copy to clipboard"
@@ -152,7 +153,7 @@ const ModeComparisonTooltip: React.FC = () => {
             >
                 <div className="bg-gray-50 dark:bg-gray-800 p-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
                     <h4 className="font-bold text-gray-800 dark:text-white text-sm">Integration Modes Compared</h4>
-                    <button onClick={() => setIsOpen(false)} className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"><i className="fas fa-times"></i></button>
+                    <button type="button" onClick={() => setIsOpen(false)} className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"><i className="fas fa-times"></i></button>
                 </div>
                 
                 <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
@@ -219,6 +220,7 @@ const ModeComparisonTooltip: React.FC = () => {
     return (
         <>
             <button
+                type="button"
                 ref={buttonRef}
                 onClick={() => setIsOpen(true)}
                 className="ml-2 text-indigo-500 hover:text-indigo-600 transition-colors focus:outline-none"
@@ -234,64 +236,94 @@ const ModeComparisonTooltip: React.FC = () => {
 // --- Content Constants ---
 
 const APPS_SCRIPT_CODE = `
-// 🚀 TASK MANAGER DATABASE SCRIPT (ULTIMATE EDITION v7)
-// ... (Script content remains same) ...
+// 🚀 TASK MANAGER DATABASE SCRIPT (ULTIMATE EDITION v9 - GOAL NAMES)
 function doGet(e) { return handleRequest(e); }
 function doPost(e) { return handleRequest(e); }
+
 function handleRequest(e) {
   var lock = LockService.getScriptLock();
   lock.tryLock(10000); 
   try {
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
     var params = e.parameter || {};
     var postData = e.postData ? JSON.parse(e.postData.contents) : {};
     var action = params.action || postData.action || 'sync_down';
+
     if (action === 'check') { return jsonResponse({status: 'ok'}); }
+
     if (action === 'sync_up') {
-      sheet.clear(); 
-      var headers = ['ID', 'Title', 'Status', 'Priority', 'Due Date', 'Time Est (h)', 'Actual Time (s)', 'Tags', 'Scheduled Start', 'Blockers', 'Dependencies', 'Subtasks', 'Description', 'Last Modified', 'JSON_DATA'];
-      sheet.appendRow(headers);
-      var rows = postData.rows;
-      if (rows && rows.length > 0) { sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows); }
-      try { applyFormatting(sheet); } catch (fmtError) { console.error("Formatting failed: " + fmtError); }
-      return jsonResponse({status: 'success', written: rows ? rows.length : 0});
+      // 1. SYNC TASKS
+      var taskSheet = getOrCreateSheet(ss, 'Sheet1');
+      taskSheet.clear();
+      // UPDATED HEADERS: Added 'Goal Title' at col 16 (index 15)
+      var taskHeaders = ['ID', 'Title', 'Status', 'Priority', 'Due Date', 'Time Est (h)', 'Actual Time (s)', 'Tags', 'Scheduled Start', 'Blockers', 'Dependencies', 'Subtasks', 'Description', 'Last Modified', 'Goal ID', 'Goal Title', 'JSON_DATA'];
+      taskSheet.appendRow(taskHeaders);
+      var taskRows = postData.rows;
+      if (taskRows && taskRows.length > 0) { 
+        taskSheet.getRange(2, 1, taskRows.length, taskRows[0].length).setValues(taskRows); 
+      }
+      formatTaskSheet(taskSheet);
+
+      // 2. SYNC GOALS
+      var goalSheet = getOrCreateSheet(ss, 'Goals');
+      goalSheet.clear();
+      var goalHeaders = ['ID', 'Title', 'Color', 'Description', 'Created Date'];
+      goalSheet.appendRow(goalHeaders);
+      var goalRows = postData.goals;
+      if (goalRows && goalRows.length > 0) {
+        goalSheet.getRange(2, 1, goalRows.length, goalRows[0].length).setValues(goalRows);
+      }
+      formatGoalSheet(goalSheet);
+
+      return jsonResponse({status: 'success', tasksWritten: taskRows ? taskRows.length : 0, goalsWritten: goalRows ? goalRows.length : 0});
     }
-    var data = sheet.getDataRange().getValues();
-    if (data.length > 0 && data[0][0] === 'ID') { data.shift(); }
-    return jsonResponse(data);
+
+    // SYNC DOWN
+    var taskSheet = getOrCreateSheet(ss, 'Sheet1');
+    var taskData = taskSheet.getDataRange().getValues();
+    if (taskData.length > 0 && taskData[0][0] === 'ID') { taskData.shift(); }
+
+    var goalSheet = getOrCreateSheet(ss, 'Goals');
+    var goalData = goalSheet.getDataRange().getValues();
+    if (goalData.length > 0 && goalData[0][0] === 'ID') { goalData.shift(); }
+
+    return jsonResponse({
+        tasks: taskData,
+        goals: goalData
+    });
+
   } catch (err) { return jsonResponse({status: 'error', message: err.toString()}); } finally { lock.releaseLock(); }
 }
-function jsonResponse(data) { return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON); }
-function applyFormatting(sheet) {
-  var requiredRows = Math.max(sheet.getLastRow(), 50); 
-  if (sheet.getMaxRows() < requiredRows) { sheet.insertRowsAfter(sheet.getMaxRows(), requiredRows - sheet.getMaxRows()); }
-  var lastRow = sheet.getMaxRows();
-  var headerRange = sheet.getRange(1, 1, 1, 15);
-  headerRange.setBackground("#1e293b").setFontColor("#f8fafc").setFontWeight("bold").setHorizontalAlignment("center").setVerticalAlignment("middle").setWrap(true);
-  sheet.setFrozenRows(1); sheet.setRowHeight(1, 45); 
-  if (lastRow > 1) {
-      var statusRange = sheet.getRange(2, 3, lastRow - 1, 1);
-      var statusRule = SpreadsheetApp.newDataValidation().requireValueInList(['To Do', 'In Progress', 'Review', 'Blocker', 'Hold', "Won't Complete", 'Done']).setAllowInvalid(true).build();
-      statusRange.setDataValidation(statusRule);
-      var priorityRange = sheet.getRange(2, 4, lastRow - 1, 1);
-      var priorityRule = SpreadsheetApp.newDataValidation().requireValueInList(['Critical', 'High', 'Medium', 'Low']).setAllowInvalid(true).build();
-      priorityRange.setDataValidation(priorityRule);
-      sheet.clearConditionalFormatRules(); 
-      var rules = [];
-      function addColorRule(text, bg, color, range) { rules.push(SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo(text).setBackground(bg).setFontColor(color).setRanges([range]).build()); }
-      addColorRule("Done", "#dcfce7", "#14532d", statusRange); addColorRule("In Progress", "#dbeafe", "#1e3a8a", statusRange); addColorRule("Blocker", "#fee2e2", "#7f1d1d", statusRange); addColorRule("To Do", "#f1f5f9", "#334155", statusRange); addColorRule("Review", "#f3e8ff", "#581c87", statusRange);
-      addColorRule("Critical", "#fee2e2", "#7f1d1d", priorityRange); addColorRule("High", "#ffedd5", "#7c2d12", priorityRange); addColorRule("Medium", "#fef9c3", "#713f12", priorityRange);
-      sheet.setConditionalFormatRules(rules);
-  }
-  sheet.setColumnWidth(1, 100); sheet.setColumnWidth(2, 250); sheet.setColumnWidth(3, 130); sheet.setColumnWidth(4, 100); sheet.setColumnWidth(5, 100); sheet.setColumnWidth(6, 80); sheet.setColumnWidth(7, 80); sheet.setColumnWidth(8, 150); sheet.setColumnWidth(9, 140); sheet.setColumnWidth(10, 200); sheet.setColumnWidth(11, 150); sheet.setColumnWidth(12, 200); sheet.setColumnWidth(13, 300); sheet.setColumnWidth(14, 140); sheet.setColumnWidth(15, 50);
-  sheet.hideColumns(15); 
-  var range = sheet.getRange(2, 1, Math.max(1, lastRow - 1), 14);
-  if (range.getNumRows() > 0) { try { range.getBandings().forEach(b => b.remove()); } catch(e) {} try { range.applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY); } catch(e) {} }
+
+function getOrCreateSheet(ss, name) {
+  var sheet = ss.getSheetByName(name);
+  if (!sheet) { sheet = ss.insertSheet(name); }
+  return sheet;
 }
-function onEdit(e) {
-  var sheet = e.source.getActiveSheet(); var range = e.range; var row = range.getRow(); var col = range.getColumn();
-  if (row <= 1) return; if (col === 14 || col === 15) return; 
-  var timestamp = new Date().toISOString(); sheet.getRange(row, 14).setValue(timestamp);
+
+function jsonResponse(data) { return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON); }
+
+function formatTaskSheet(sheet) {
+  try {
+    var lastRow = sheet.getLastRow();
+    var headerRange = sheet.getRange(1, 1, 1, 17); // Updated range for new column
+    headerRange.setBackground("#1e293b").setFontColor("#f8fafc").setFontWeight("bold").setHorizontalAlignment("center").setVerticalAlignment("middle").setWrap(true);
+    sheet.setFrozenRows(1);
+    if (lastRow > 1) {
+       var range = sheet.getRange(2, 1, lastRow - 1, 17);
+       range.applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY);
+    }
+  } catch(e) {}
+}
+
+function formatGoalSheet(sheet) {
+  try {
+    var lastRow = sheet.getLastRow();
+    var headerRange = sheet.getRange(1, 1, 1, 5);
+    headerRange.setBackground("#4f46e5").setFontColor("#ffffff").setFontWeight("bold");
+    sheet.setFrozenRows(1);
+    sheet.setColumnWidth(1, 150); sheet.setColumnWidth(2, 200); sheet.setColumnWidth(4, 300);
+  } catch(e) {}
 }
 `;
 
@@ -374,6 +406,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
         } else if (sheetMethod === 'api' && settings.googleSheetId) {
             setSheetStatus('success');
         } else {
+            // Only force idle if we strictly don't have settings for the current mode
             setSheetStatus('idle');
         }
     }, [sheetMethod, settings.googleAppsScriptUrl, settings.googleSheetId]);
@@ -401,6 +434,9 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
 
     const handleDisconnect = () => {
         if (window.confirm("Are you sure you want to disconnect? This will stop syncing, but your data on the sheet remains safe.")) {
+            // FIX: Rely on useEffect to update status based on props clearing
+            // Do NOT manually set sheetStatus to 'idle' here to avoid race conditions with effects
+            
             if (sheetMethod === 'script') {
                  onUpdateSettings({ googleAppsScriptUrl: '' });
                  setScriptUrlInput('');
@@ -408,7 +444,6 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                  onUpdateSettings({ googleSheetId: '' });
                  setSheetIdInput('');
             }
-            setSheetStatus('idle');
         }
     };
     
@@ -431,7 +466,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
             try {
                 await initializeSheetHeaders(sheetIdInput.trim());
                 onUpdateSettings({ googleSheetId: sheetIdInput.trim(), googleAppsScriptUrl: '' }); // Clear other method
-                setSheetStatus('success');
+                // Status will update via effect when props change
             } catch (error: any) {
                 console.error("Sheet connection failed:", error);
                 setSheetStatus('error');
@@ -449,7 +484,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                 const isValid = await testAppsScriptConnection(scriptUrlInput.trim());
                 if (isValid) {
                     onUpdateSettings({ googleAppsScriptUrl: scriptUrlInput.trim(), googleSheetId: '' }); // Clear other method
-                    setSheetStatus('success');
+                    // Status will update via effect when props change
                 } else {
                     setSheetStatus('error');
                     setSheetErrorDetail("Script test failed. Ensure 'Who has access' is 'Anyone'.");
@@ -598,7 +633,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                         Don't have one? <ExternalLink href="https://aistudio.google.com/app/apikey">Get a free key here</ExternalLink>.
                                     </p>
                                 </div>
-                                <button onClick={handleSaveGeminiKey} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold w-full sm:w-auto">
+                                <button type="button" onClick={handleSaveGeminiKey} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold w-full sm:w-auto">
                                     Save AI Key
                                 </button>
                             </div>
@@ -618,6 +653,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                 <div className="flex items-center gap-2">
                                     <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Enable</span>
                                     <button 
+                                        type="button"
                                         onClick={() => onUpdateSettings({ audio: { ...settings.audio, enabled: !settings.audio.enabled } })}
                                         className={`w-12 h-6 rounded-full p-1 transition-colors ${settings.audio.enabled ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}
                                     >
@@ -630,12 +666,14 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                 <label className={labelClass}>Sound Source</label>
                                 <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
                                     <button
+                                        type="button"
                                         onClick={() => onUpdateSettings({ audio: { ...settings.audio, mode: 'brown_noise' } })}
                                         className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${settings.audio.mode === 'brown_noise' ? 'bg-white dark:bg-gray-700 shadow text-indigo-600 dark:text-indigo-400' : 'text-gray-500'}`}
                                     >
                                         <i className="fas fa-wave-square mr-2"></i> Brown Noise (Focus)
                                     </button>
                                     <button
+                                        type="button"
                                         onClick={() => onUpdateSettings({ audio: { ...settings.audio, mode: 'playlist' } })}
                                         className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${settings.audio.mode === 'playlist' ? 'bg-white dark:bg-gray-700 shadow text-indigo-600 dark:text-indigo-400' : 'text-gray-500'}`}
                                     >
@@ -695,6 +733,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                                                 <span className="text-xs text-gray-400">{(track.size / 1024 / 1024).toFixed(1)} MB</span>
                                                             </div>
                                                             <button 
+                                                                type="button"
                                                                 onClick={() => handleDeleteTrack(track.id)}
                                                                 className="text-red-400 hover:text-red-600 transition-colors px-2"
                                                                 title="Delete track"
@@ -723,12 +762,14 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                         <div className="flex items-center gap-2 mb-2">
                              <div className="flex-grow flex p-1 bg-gray-200 dark:bg-gray-800 rounded-lg">
                                 <button
+                                    type="button"
                                     onClick={() => { setSheetMethod('script'); setSheetStatus('idle'); }}
                                     className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${sheetMethod === 'script' ? 'bg-white dark:bg-gray-700 shadow text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400'}`}
                                 >
                                     <i className="fas fa-magic mr-2"></i> Easy Mode
                                 </button>
                                 <button
+                                    type="button"
                                     onClick={() => { setSheetMethod('api'); setSheetStatus('idle'); }}
                                     className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${sheetMethod === 'api' ? 'bg-white dark:bg-gray-700 shadow text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400'}`}
                                 >
@@ -750,10 +791,9 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                         <i className="fas fa-exclamation-triangle text-amber-500 text-xl animate-pulse"></i>
                                     </div>
                                     <div>
-                                        <h4 className="font-bold text-gray-900 dark:text-white">Action Required: Update Script! (v7)</h4>
+                                        <h4 className="font-bold text-gray-900 dark:text-white">Action Required: Update Script! (v9 - Goal Names)</h4>
                                         <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
-                                            If your sheet columns are mismatched or look weird, you MUST re-deploy the script. 
-                                            We updated the code to fix column alignment issues.
+                                            The data structure has changed to include Goal Titles in the sheet. You MUST update your Google Apps Script code.
                                         </p>
                                     </div>
                                 </div>
@@ -785,6 +825,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                                      </div>
                                                 </div>
                                                 <button 
+                                                    type="button"
                                                     onClick={handleDisconnect}
                                                     className="px-4 py-2 bg-white dark:bg-gray-800 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-sm font-bold rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors shadow-sm"
                                                 >
@@ -805,6 +846,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                                         />
                                                     </div>
                                                     <button 
+                                                        type="button"
                                                         onClick={handleConnectSheet}
                                                         disabled={sheetStatus === 'testing' || !scriptUrlInput.trim()}
                                                         className={`w-full sm:w-auto px-6 py-2.5 rounded-lg font-medium transition-colors whitespace-nowrap text-white shadow-md flex items-center justify-center gap-2 ${
@@ -906,6 +948,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                                  </div>
                                             </div>
                                             <button 
+                                                type="button"
                                                 onClick={handleDisconnect}
                                                 className="px-4 py-2 bg-white dark:bg-gray-800 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-sm font-bold rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors shadow-sm"
                                             >
@@ -925,6 +968,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                                     />
                                                 </div>
                                                 <button 
+                                                    type="button"
                                                     onClick={handleConnectSheet}
                                                     className="w-full sm:w-auto px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold flex items-center justify-center"
                                                 >
@@ -967,7 +1011,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                     <input type="text" value={apiKeys.clientId} onChange={(e) => setApiKeys({ ...apiKeys, clientId: e.target.value })} className={inputClass} />
                                     <p className="text-xs text-gray-500 mt-1">Required for Calendar Sync.</p>
                                 </div>
-                                <button onClick={handleSaveApiKeys} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold w-full sm:w-auto">Save Sync Keys</button>
+                                <button type="button" onClick={handleSaveApiKeys} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold w-full sm:w-auto">Save Sync Keys</button>
                             </div>
                         </div>
                     </div>
@@ -1006,13 +1050,13 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
         
         if (googleAuthState.isSignedIn) {
             return (
-                <button onClick={onGoogleSignOut} className="px-3 py-1.5 text-xs font-bold bg-red-100 text-red-600 rounded-lg">
+                <button type="button" onClick={onGoogleSignOut} className="px-3 py-1.5 text-xs font-bold bg-red-100 text-red-600 rounded-lg">
                     Sign Out
                 </button>
             );
         }
         return (
-            <button onClick={onGoogleSignIn} className="px-3 py-1.5 text-xs font-bold bg-blue-600 text-white rounded-lg">
+            <button type="button" onClick={onGoogleSignIn} className="px-3 py-1.5 text-xs font-bold bg-blue-600 text-white rounded-lg">
                 Connect Google Account
             </button>
         );
@@ -1040,6 +1084,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                             { id: 'api', icon: 'fas fa-server', label: 'Workspace / Sync' },
                         ].map(item => (
                             <button
+                                type="button"
                                 key={item.id}
                                 onClick={() => setActiveTab(item.id as SettingsTab)}
                                 className={`flex items-center gap-3 px-4 py-2 md:py-3 text-sm font-medium rounded-xl transition-all whitespace-nowrap flex-shrink-0 ${
@@ -1056,13 +1101,12 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                 </div>
 
                 {/* Content Area */}
-                {/* Added min-w-0 to prevent overflow caused by large flex items inside (like CodeBlock) */}
                 <div className="flex-grow flex flex-col bg-gray-100/50 dark:bg-black/20 min-h-0 min-w-0">
                     <div className="flex justify-between items-center p-4 md:p-6 pb-2 flex-shrink-0">
                         <h2 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white capitalize truncate pr-4">
                              {activeTab === 'api' ? 'Workspace Configuration' : activeTab === 'ai' ? 'AI Intelligence' : activeTab} <span className="md:hidden">Settings</span>
                         </h2>
-                        <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors flex-shrink-0">
+                        <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors flex-shrink-0">
                             <i className="fas fa-times text-gray-600 dark:text-gray-300"></i>
                         </button>
                     </div>

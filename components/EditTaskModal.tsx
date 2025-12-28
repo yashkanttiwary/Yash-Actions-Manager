@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Task, Priority, Status, Subtask, Blocker } from '../types';
+import { Task, Priority, Status, Subtask, Blocker, Goal } from '../types';
 import { COLUMN_STATUSES } from '../constants';
 import { ConfirmModal } from './ConfirmModal';
+import { storage } from '../utils/storage';
 
 interface EditTaskModalProps {
     task: Task;
@@ -17,6 +18,7 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
     const [tagsInput, setTagsInput] = useState(task.tags?.join(', ') || '');
     const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
     const [activeBlockerReason, setActiveBlockerReason] = useState('');
+    const [availableGoals, setAvailableGoals] = useState<Goal[]>([]);
     
     // Validation State
     const [errors, setErrors] = useState<{ title?: string; timeEstimate?: string }>({});
@@ -27,6 +29,20 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
 
     const isNewTask = task.id.startsWith('new-');
     
+    useEffect(() => {
+        const loadGoals = async () => {
+            const saved = await storage.get('goals');
+            if (saved) {
+                try {
+                    setAvailableGoals(JSON.parse(saved));
+                } catch (e) {
+                    console.error("Failed to load goals for modal", e);
+                }
+            }
+        };
+        loadGoals();
+    }, []);
+
     useEffect(() => {
         const currentActiveBlocker = task.blockers?.find(b => !b.resolved);
         setEditedTask(task);
@@ -264,6 +280,33 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
                             {errors.timeEstimate && <p className="text-red-500 text-xs mt-1">{errors.timeEstimate}</p>}
                          </div>
                     </div>
+                    
+                    {/* Goal Selector */}
+                    <div>
+                        <label htmlFor="task-goal" className={labelClasses}>Assigned Goal (Strategy)</label>
+                        <div className="relative">
+                            <select 
+                                id="task-goal" 
+                                value={editedTask.goalId || ''} 
+                                onChange={e => handleInputChange('goalId', e.target.value || undefined)} 
+                                className={inputClasses}
+                            >
+                                <option value="">Unassigned</option>
+                                {availableGoals.map(g => (
+                                    <option key={g.id} value={g.id}>{g.title}</option>
+                                ))}
+                            </select>
+                            <div className="absolute inset-y-0 right-8 flex items-center pointer-events-none">
+                                {editedTask.goalId && (
+                                    <div 
+                                        className="w-3 h-3 rounded-full mr-2"
+                                        style={{ backgroundColor: availableGoals.find(g => g.id === editedTask.goalId)?.color || 'transparent' }}
+                                    ></div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
                      <div>
                         <label htmlFor="task-tags" className={labelClasses}>Tags</label>
                         <input id="task-tags" type="text" value={tagsInput} onChange={e => setTagsInput(e.target.value)} placeholder="Tags (comma separated)" className={inputClasses}/>
