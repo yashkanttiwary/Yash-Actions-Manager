@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 
 interface AIAssistantModalProps {
     onClose: () => void;
@@ -11,13 +12,6 @@ interface AIAssistantModalProps {
     hasApiKey: boolean;
     onSaveApiKey: (key: string) => void;
 }
-
-// A global type definition for SpeechRecognition which may be vendor-prefixed
-interface IWindow extends Window {
-  SpeechRecognition: any;
-  webkitSpeechRecognition: any;
-}
-declare const window: IWindow;
 
 // Safe markdown renderer to avoid XSS (Fix MED-001)
 const SafeSummaryRenderer: React.FC<{ text: string }> = ({ text }) => {
@@ -87,73 +81,33 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
     hasApiKey, onSaveApiKey
 }) => {
     const [command, setCommand] = useState('');
-    const [isListening, setIsListening] = useState(false);
-    const [speechError, setSpeechError] = useState<string | null>(null);
-    const recognitionRef = useRef<any>(null);
-    
-    // State for No-Key Setup
     const [tempKey, setTempKey] = useState('');
 
-    // Setup Speech Recognition
+    const { 
+        isListening, 
+        transcript, 
+        error: speechError, 
+        startListening, 
+        stopListening, 
+        resetTranscript 
+    } = useSpeechRecognition({
+        continuous: true
+    });
+
+    // Sync hook transcript to local state
     useEffect(() => {
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) {
-            setSpeechError("Voice recognition is not supported in this browser.");
-            return;
-        }
-
-        const recognition = new SpeechRecognition();
-        recognition.continuous = true; // Prevents cutting off on pauses
-        recognition.lang = 'en-US';
-        recognition.interimResults = true; // Show results as they are spoken
-
-        recognition.onstart = () => {
-            setIsListening(true);
-            setSpeechError(null);
-        };
-
-        // Update text input with live transcript
-        recognition.onresult = (event: any) => {
-            const transcript = Array.from(event.results)
-                .map((result: any) => result[0])
-                .map((result: any) => result.transcript)
-                .join('');
+        if (isListening && transcript) {
             setCommand(transcript);
-        };
-
-        recognition.onerror = (event: any) => {
-            if (event.error === 'no-speech') {
-                setSpeechError('No speech was detected. Please try again.');
-            } else if (event.error === 'audio-capture') {
-                setSpeechError('Microphone not found. Please ensure it is enabled.');
-            } else if (event.error === 'not-allowed') {
-                setSpeechError('Permission to use microphone was denied.');
-            } else {
-                 setSpeechError(`An error occurred: ${event.error}`);
-            }
-        };
-        
-        // Simply update listening state on end
-        recognition.onend = () => {
-            setIsListening(false);
-        };
-
-        recognitionRef.current = recognition;
-        
-        // Cleanup on unmount
-        return () => {
-            if (recognitionRef.current) {
-                recognitionRef.current.stop();
-            }
-        };
-    }, []);
+        }
+    }, [transcript, isListening]);
     
     const handleSubmitLogic = useCallback(() => {
         if (command.trim() && !isLoading) {
             onProcessCommand(command);
             setCommand('');
+            resetTranscript();
         }
-    }, [command, isLoading, onProcessCommand]);
+    }, [command, isLoading, onProcessCommand, resetTranscript]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -182,14 +136,11 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
 
 
     const handleToggleListening = () => {
-        if (!recognitionRef.current) return;
-
         if (isListening) {
-            recognitionRef.current.stop();
+            stopListening();
         } else {
-            setCommand(''); // Clear previous command before starting
-            setSpeechError(null);
-            recognitionRef.current.start();
+            setCommand('');
+            startListening();
         }
     };
     
@@ -369,7 +320,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                                         ? 'bg-red-600 hover:bg-red-700 text-white animate-pulse' 
                                         : 'bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300'
                                 } disabled:opacity-50 disabled:cursor-not-allowed`}
-                                disabled={!recognitionRef.current || isLoading}
+                                disabled={isLoading}
                                 title={isListening ? "Stop listening" : "Start listening"}
                                 aria-label={isListening ? "Stop voice input" : "Start voice input"}
                             >

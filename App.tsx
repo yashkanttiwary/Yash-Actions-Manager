@@ -10,8 +10,8 @@ import { ResolveBlockerModal } from './components/ResolveBlockerModal';
 import { AIAssistantModal } from './components/AIAssistantModal';
 import { CalendarView } from './components/CalendarView';
 import { TimelineGantt } from './components/TimelineGantt';
-import { manageTasksWithAI, generateTaskSummary, breakDownTask } from './services/geminiService';
-import { calculateTaskXP, checkLevelUp } from './services/gamificationService'; // IMPORT NEW SERVICE
+import { manageTasksWithAI, generateTaskSummary, breakDownTask, parseTaskFromVoice } from './services/geminiService';
+import { calculateTaskXP, checkLevelUp } from './services/gamificationService'; 
 import { PomodoroTimer } from './components/PomodoroTimer';
 import { initGoogleClient, signIn, signOut } from './services/googleAuthService';
 import { COLUMN_STATUSES } from './constants';
@@ -25,6 +25,8 @@ import { useBackgroundAudio } from './hooks/useBackgroundAudio';
 import { setUserTimeOffset } from './services/timeService';
 import { ConfirmModal } from './components/ConfirmModal';
 import { getEnvVar } from './utils/env';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { StarField } from './components/StarField';
 
 declare const confetti: any;
 
@@ -78,11 +80,29 @@ const ConnectSheetPlaceholder: React.FC<{ onConnect: () => void }> = ({ onConnec
 );
 
 const App: React.FC = () => {
-    const [theme, setTheme] = useState('light'); 
+    // Initial state from localStorage to prevent re-render flash
+    const [theme, setTheme] = useState(() => {
+        try {
+            return localStorage.getItem('theme') || 'light';
+        } catch {
+            return 'light';
+        }
+    });
+    
     const [isCompactMode, setIsCompactMode] = useState(true);
     const [isFitToScreen, setIsFitToScreen] = useState(true);
-    const [zoomLevel, setZoomLevel] = useState(0.8);
+    const [zoomLevel, setZoomLevel] = useState(0.9); // Updated default to 90%
     const [showTimeline, setShowTimeline] = useState(false);
+    
+    // Header Logic
+    const [isMenuLocked, setIsMenuLocked] = useState(false);
+    const [isMenuHovered, setIsMenuHovered] = useState(false);
+    
+    // Global Rocket Animation State
+    const [isRocketFlying, setIsRocketFlying] = useState(false);
+
+    // Derived: Is Space Mode Active? (Either persistently set OR temporarily flying)
+    const isSpaceModeActive = useMemo(() => theme === 'space' || isRocketFlying, [theme, isRocketFlying]);
 
     const [settings, setSettings] = useState<Settings>({
         dailyBudget: 16,
@@ -192,6 +212,18 @@ const App: React.FC = () => {
         api: { status: 'missing', message: 'API Keys missing' }
     });
     
+    // Effect: Toggle zoom based on menu lock state
+    // Locked -> 80%, Unlocked -> 90%
+    useEffect(() => {
+        if (isMenuLocked) {
+            setZoomLevel(0.8);
+        } else {
+            setZoomLevel(0.9);
+        }
+        // FIX IMP-001: Persist lock state
+        storage.set('isMenuLocked', String(isMenuLocked));
+    }, [isMenuLocked]);
+
     useEffect(() => {
         const initialize = async () => {
             try {
@@ -227,20 +259,24 @@ const App: React.FC = () => {
     useEffect(() => {
         const loadPersistedData = async () => {
             try {
+                // Theme is already initialized from sync localStorage, but async check ensures consistency
                 const savedTheme = await storage.get('theme');
-                if (savedTheme) setTheme(savedTheme);
-                else setTheme('light');
+                if (savedTheme && savedTheme !== theme) setTheme(savedTheme);
 
                 const savedFit = await storage.get('isFitToScreen');
                 if (savedFit !== null) {
                     const shouldFit = savedFit === 'true';
                     setIsFitToScreen(shouldFit);
-                    if (shouldFit) setZoomLevel(0.8);
+                    if (shouldFit) setZoomLevel(0.9); // Updated default
                     else setZoomLevel(1);
                 }
                 
                 const savedTimeline = await storage.get('showTimeline');
                 if (savedTimeline !== null) setShowTimeline(savedTimeline === 'true');
+                
+                // FIX IMP-001: Load persisted menu lock state
+                const savedMenuLock = await storage.get('isMenuLocked');
+                if (savedMenuLock === 'true') setIsMenuLocked(true);
 
                 const savedSettings = await storage.get('taskMasterSettings_v2'); 
                 const cookieUrl = getCookie('tm_script_url');
@@ -278,8 +314,16 @@ const App: React.FC = () => {
 
     useEffect(() => {
         const root = window.document.documentElement;
-        if (theme === 'light') root.classList.remove('dark');
-        else root.classList.add('dark');
+        
+        // Remove old classes first
+        root.classList.remove('dark');
+        
+        if (theme === 'dark' || theme === 'space') {
+            root.classList.add('dark');
+        } else {
+            root.classList.remove('dark');
+        }
+        
         storage.set('theme', theme);
     }, [theme]);
 
@@ -432,6 +476,80 @@ const App: React.FC = () => {
         });
     }, [addTask]);
 
+    // NEW: Handle Voice Task Parsing
+    const handleVoiceTaskAdd = useCallback(async (transcript: string, defaultStatus: Status) => {
+        // Safe check for API Key availability first
+        const effectiveKey = settings.geminiApiKey || getEnvVar('VITE_GEMINI_API_KEY');
+        
+        if (!effectiveKey) {
+             console.warn("Voice Add: No API Key found. Falling back to raw text.");
+             // Fallback: Add as simple task immediately
+             addTask({
+                title: transcript,
+                status: defaultStatus,
+                priority: 'Medium',
+                dueDate: new Date().toISOString().split('T')[0],
+                description: '', // Raw add, no AI processing prefix needed as it's just a quick task now
+             });
+             // Alert user about missing key
+             setAiError("AI Key required for smart parsing. Task added as-is.");
+             setTimeout(() => setAiError(null), 4000);
+             return;
+        }
+
+        try {
+            const parsedData = await parseTaskFromVoice(transcript, effectiveKey);
+            
+            // Map parsed data to a new Task
+            const newTaskData = {
+                title: parsedData.title || transcript, // Fallback to raw text
+                description: parsedData.description || '',
+                status: (parsedData.status || defaultStatus) as Status,
+                priority: (parsedData.priority || 'Medium') as Priority,
+                dueDate: parsedData.dueDate || new Date().toISOString().split('T')[0],
+                scheduledStartDateTime: parsedData.scheduledStartDateTime,
+                tags: parsedData.tags || [],
+                timeEstimate: parsedData.timeEstimate,
+                // Handle blockers specially
+                blockers: parsedData.blockerReason ? [{
+                    id: `blocker-${Date.now()}`,
+                    reason: parsedData.blockerReason,
+                    createdDate: new Date().toISOString(),
+                    resolved: false
+                }] : [],
+                subtasks: parsedData.subtasks?.map((st: any) => ({
+                    id: `sub-${Date.now()}-${Math.random().toString(36).substr(2,5)}`,
+                    title: st.title,
+                    isCompleted: false
+                })) || []
+            };
+
+            addTask(newTaskData);
+            
+            // Celebration confetti for successful voice add
+            confetti({
+                particleCount: 50,
+                spread: 60,
+                origin: { y: 0.8 },
+                colors: ['#6366f1', '#a855f7']
+            });
+
+        } catch (error) {
+            console.error("Voice parse failed:", error);
+            // Fallback: Add as simple task (FIX LOGIC-001: Preserve full text in description)
+            addTask({
+                title: transcript.length > 60 ? `${transcript.substring(0, 57)}...` : transcript,
+                description: `> 🎙️ **Voice Note (AI Parse Failed)**\n> "${transcript}"`,
+                status: defaultStatus,
+                priority: 'Medium',
+                dueDate: new Date().toISOString().split('T')[0],
+            });
+            // Show toast/error
+            setAiError("Smart parsing failed. Saved as raw text.");
+            setTimeout(() => setAiError(null), 4000);
+        }
+    }, [addTask, handleQuickAddTask, settings.geminiApiKey]);
+
     const handleOpenSettings = (tab: SettingsTab = 'general') => {
         setActiveSettingsTab(tab);
         setShowIntegrationsModal(true);
@@ -473,87 +591,40 @@ const App: React.FC = () => {
         }
     }, [tasks, updateTask, settings.geminiApiKey]);
 
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            const target = e.target as HTMLElement;
-            const isEditing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable;
-    
-            if (e.key === 'Escape') {
-                if (contextMenu) setContextMenu(null);
-                else if (editingTask) setEditingTask(null);
-                else if (blockingTask) setBlockingTask(null);
-                else if (resolvingBlockerTask) setResolvingBlockerTask(null);
-                else if (showAIModal) setShowAIModal(false);
-                else if (showShortcutsModal) setShowShortcutsModal(false);
-                else if (showIntegrationsModal) setShowIntegrationsModal(false);
-                else if (confirmModalState.isOpen) setConfirmModalState(prev => ({...prev, isOpen: false}));
-                return;
-            }
-    
-            if (isEditing) return;
-            if (!isSheetConfigured) return;
-
-            switch (e.key.toLowerCase()) {
-                case 'n':
-                case 'a':
-                    e.preventDefault();
-                    handleOpenAddTaskModal('To Do');
-                    break;
-                case 'i':
-                case 'm':
-                    e.preventDefault();
-                    setShowAIModal(true);
-                    break;
-                case 't':
-                    e.preventDefault();
-                    setIsTodayView(prev => !prev);
-                    break;
-                case 'v':
-                    e.preventDefault();
-                    setViewMode(prev => (prev === 'kanban' ? 'calendar' : 'kanban'));
-                    break;
-                case '?':
-                    e.preventDefault();
-                    setShowShortcutsModal(true);
-                    break;
-                case '-':
-                    if (e.ctrlKey || e.metaKey) return; 
-                    e.preventDefault();
-                    setZoomLevel(prev => Math.max(0.1, prev - 0.1));
-                    break;
-                case '=':
-                case '+':
-                    if (e.ctrlKey || e.metaKey) return; 
-                    e.preventDefault();
-                    setZoomLevel(prev => Math.min(1.5, prev + 0.1));
-                    break;
-                case '0':
-                     if (e.ctrlKey || e.metaKey) return;
-                     setZoomLevel(1);
-                     break;
-                default:
-                    break;
-            }
-        };
-    
-        window.addEventListener('keydown', handleKeyDown);
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown);
-        };
-    }, [
-        editingTask, blockingTask, resolvingBlockerTask, showAIModal, showShortcutsModal, 
-        showIntegrationsModal, contextMenu, isTodayView, viewMode, handleOpenAddTaskModal,
-        isSheetConfigured, confirmModalState.isOpen
-    ]);
+    // --- REPLACED: Giant useEffect with Custom Hook ---
+    useKeyboardShortcuts({
+        isSheetConfigured,
+        handleOpenAddTaskModal,
+        setShowAIModal,
+        setIsTodayView,
+        setViewMode,
+        setShowShortcutsModal,
+        setZoomLevel,
+        closeAllModals: () => {
+            if (contextMenu) setContextMenu(null);
+            else if (editingTask) setEditingTask(null);
+            else if (blockingTask) setBlockingTask(null);
+            else if (resolvingBlockerTask) setResolvingBlockerTask(null);
+            else if (showAIModal) setShowAIModal(false);
+            else if (showShortcutsModal) setShowShortcutsModal(false);
+            else if (showIntegrationsModal) setShowIntegrationsModal(false);
+            else if (confirmModalState.isOpen) setConfirmModalState(prev => ({...prev, isOpen: false}));
+        },
+        isAnyModalOpen: !!(contextMenu || editingTask || blockingTask || resolvingBlockerTask || showAIModal || showShortcutsModal || showIntegrationsModal || confirmModalState.isOpen)
+    });
 
     const toggleTheme = () => {
-        setTheme(prevTheme => (prevTheme === 'dark' ? 'light' : 'dark'));
+        setTheme(prevTheme => {
+            if (prevTheme === 'light') return 'dark';
+            if (prevTheme === 'dark') return 'space';
+            return 'light';
+        });
     };
 
     const handleToggleFitToScreen = () => {
         setIsFitToScreen(prev => {
             const newValue = !prev;
-            if (newValue) setZoomLevel(0.8);
+            if (newValue) setZoomLevel(0.9); // Updated default
             else setZoomLevel(1);
             return newValue;
         });
@@ -566,10 +637,6 @@ const App: React.FC = () => {
             console.log(`[Gamification] Task "${task.title}" completed. Earned ${earnedXp} XP. Bonuses:`, bonuses);
 
             // 2. Handle Streak
-            // Logic: Check if lastCompletionDate is "yesterday" or "today".
-            // If yesterday -> streak++, update date
-            // If today -> streak same, update date
-            // If older -> streak = 1, update date
             let newStreak = { ...prev.streak };
             const today = new Date().toISOString().split('T')[0];
             
@@ -830,7 +897,9 @@ const App: React.FC = () => {
     };
 
     return (
-        <div className="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-white h-screen flex flex-col overflow-hidden font-sans bg-dots transition-colors duration-300">
+        <div className={`bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-white h-screen flex flex-col overflow-hidden font-sans ${isSpaceModeActive ? 'bg-transparent' : 'bg-dots'} transition-colors duration-300 relative`}>
+            {isSpaceModeActive && <StarField />}
+            
             <Header
                 tasks={tasks}
                 isTodayView={isTodayView}
@@ -863,9 +932,23 @@ const App: React.FC = () => {
                 audioControls={audioControls}
                 isTimelineVisible={showTimeline}
                 onToggleTimeline={() => setShowTimeline(prev => !prev)}
+                isMenuLocked={isMenuLocked} // Pass State
+                setIsMenuLocked={setIsMenuLocked} // Pass Setter
+                isRocketFlying={isRocketFlying}
+                onRocketLaunch={setIsRocketFlying}
+                isMenuHovered={isMenuHovered} // Pass State
+                onMenuHoverChange={setIsMenuHovered} // Pass Setter
             />
 
-            <main className="flex-1 overflow-auto pl-2 sm:pl-6 pt-16 sm:pt-20 pr-2 pb-2 relative flex flex-col scroll-smooth">
+            <main 
+                className="flex-1 overflow-auto pl-2 sm:pl-6 pr-2 pb-2 relative flex flex-col scroll-smooth transition-all duration-700 z-10"
+                style={{ 
+                    // Dynamic padding top based on menu state
+                    // 280px is roughly the height of the expanded menu + some buffer
+                    // 5rem (80px) is the default when collapsed
+                    paddingTop: (isMenuLocked || isMenuHovered) ? '280px' : '5rem' 
+                }}
+            >
                 {!isSheetConfigured ? (
                     <ConnectSheetPlaceholder onConnect={() => handleOpenSettings('sheets')} />
                 ) : (
@@ -900,6 +983,7 @@ const App: React.FC = () => {
                                             onEditTask={handleEditTask}
                                             onAddTask={(status) => handleOpenAddTaskModal(status)}
                                             onQuickAddTask={handleQuickAddTask}
+                                            onSmartAddTask={handleVoiceTaskAdd}
                                             onUpdateColumnLayout={updateColumnLayout}
                                             activeTaskTimer={activeTaskTimer}
                                             onToggleTimer={handleToggleTimer}
@@ -911,6 +995,7 @@ const App: React.FC = () => {
                                             isCompactMode={isCompactMode}
                                             isFitToScreen={isFitToScreen}
                                             zoomLevel={zoomLevel}
+                                            isSpaceMode={isSpaceModeActive} // Pass calculated active mode
                                         />
                                     </div>
                                 )}
@@ -931,6 +1016,7 @@ const App: React.FC = () => {
                 )}
             </main>
             
+            {/* ... rest of modals ... */}
             {isSheetConfigured && syncStatus !== 'idle' && (
                 <div className="fixed bottom-4 left-4 z-40 flex items-center gap-2 px-3 py-1.5 bg-white/80 dark:bg-gray-800/80 backdrop-blur rounded-full text-xs font-medium shadow-sm border border-gray-200 dark:border-gray-700">
                     {syncStatus === 'syncing' && <i className="fas fa-sync fa-spin text-blue-500"></i>}

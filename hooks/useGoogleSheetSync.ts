@@ -123,10 +123,15 @@ export const useGoogleSheetSync = (
         try {
             console.log("[Sync] Manual Push: Sending data...");
             
-            // Prepare Metadata
+            // Prepare Metadata - FIX SEC-001: Sanitize sensitive keys
+            const safeSettings = { ...(settingsRef.current || {}) };
+            delete safeSettings.geminiApiKey;
+            delete safeSettings.googleApiKey;
+            delete safeSettings.googleClientId;
+
             const metadata = {
                 gamification: gamificationRef.current,
-                settings: settingsRef.current
+                settings: safeSettings
             };
 
             if (syncMethod === 'api' && sheetId) {
@@ -181,6 +186,11 @@ export const useGoogleSheetSync = (
             return;
         }
 
+        // RACE CONDITION FIX: Do not queue updates if already syncing
+        if (status === 'syncing') {
+            return;
+        }
+
         isDirtyRef.current = true;
         if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
 
@@ -192,7 +202,7 @@ export const useGoogleSheetSync = (
         return () => {
             if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
         };
-    }, [localTasks, gamification, settings, syncMethod, manualPush]);
+    }, [localTasks, gamification, settings, syncMethod, manualPush, status]);
 
     // Polling
     useEffect(() => {

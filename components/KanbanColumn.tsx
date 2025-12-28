@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { TaskCard } from './TaskCard';
 import { Task, Status, SortOption } from '../types';
 import { STATUS_STYLES } from '../constants';
+import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 
 interface KanbanColumnProps {
     status: Status;
@@ -12,6 +13,7 @@ interface KanbanColumnProps {
     onEditTask: (task: Task) => void;
     onAddTask: (status: Status) => void;
     onQuickAddTask: (title: string) => void; 
+    onSmartAddTask: (transcript: string) => Promise<void>;
     isCollapsed: boolean;
     onToggleCollapse: () => void;
     sortOption: SortOption;
@@ -22,30 +24,87 @@ interface KanbanColumnProps {
     onOpenContextMenu: (e: React.MouseEvent, task: Task) => void;
     onDeleteTask: (taskId: string) => void;
     onSubtaskToggle: (taskId: string, subtaskId: string) => void; 
-    onBreakDownTask?: (taskId: string) => Promise<void>; // New Prop
+    onBreakDownTask?: (taskId: string) => Promise<void>; 
     isCompactMode: boolean;
     onTaskSizeChange?: () => void; 
     width?: number; 
     height?: number; 
     onResize?: (width: number, height: number) => void;
     zoomLevel?: number;
+    isSpaceMode?: boolean; // New Prop
 }
 
+// Define specific tints for Space Mode to retain color identity while keeping the space aesthetic
+const SPACE_TINTS: Record<Status, { body: string, header: string, border: string }> = {
+    'To Do': { body: 'bg-slate-900/60', header: 'bg-slate-800/80', border: 'border-slate-500/30' },
+    'In Progress': { body: 'bg-sky-900/60', header: 'bg-sky-800/80', border: 'border-sky-500/30' },
+    'Review': { body: 'bg-purple-900/60', header: 'bg-purple-800/80', border: 'border-purple-500/30' },
+    'Blocker': { body: 'bg-red-900/60', header: 'bg-red-800/80', border: 'border-red-500/30' },
+    'Hold': { body: 'bg-amber-900/60', header: 'bg-amber-800/80', border: 'border-amber-500/30' },
+    "Won't Complete": { body: 'bg-stone-900/60', header: 'bg-stone-800/80', border: 'border-stone-500/30' },
+    'Done': { body: 'bg-green-900/60', header: 'bg-green-800/80', border: 'border-green-500/30' },
+};
+
 export const KanbanColumn: React.FC<KanbanColumnProps> = ({ 
-    status, tasks, allTasks, onTaskMove, onEditTask, onAddTask, onQuickAddTask,
+    status, tasks, allTasks, onTaskMove, onEditTask, onAddTask, onQuickAddTask, onSmartAddTask,
     isCollapsed, onToggleCollapse, sortOption, onSortChange, onMouseDown, 
     activeTaskTimer, onToggleTimer, onOpenContextMenu, onDeleteTask, onSubtaskToggle, onBreakDownTask,
-    isCompactMode, onTaskSizeChange, width, height, onResize, zoomLevel = 1 
+    isCompactMode, onTaskSizeChange, width, height, onResize, zoomLevel = 1, isSpaceMode = false
 }) => {
     const [isDraggingOver, setIsDraggingOver] = useState(false);
     const [isResizing, setIsResizing] = useState(false);
     const [quickAddTitle, setQuickAddTitle] = useState('');
     const [showScrollIndicator, setShowScrollIndicator] = useState(false);
+    const [isProcessing, setIsProcessing] = useState(false);
     
     const statusStyle = STATUS_STYLES[status] || STATUS_STYLES['To Do'];
+    const spaceTint = SPACE_TINTS[status] || SPACE_TINTS['To Do'];
+
     const colRef = useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const resizeStartRef = useRef<{ x: number, y: number, w: number, h: number } | null>(null);
+
+    // Dynamic styles based on Space Mode
+    const containerClasses = isSpaceMode 
+        ? `${spaceTint.body} backdrop-blur-md border ${spaceTint.border} shadow-2xl`
+        : `${statusStyle.body} shadow-lg`;
+    
+    const headerClasses = isSpaceMode
+        ? `${spaceTint.header} backdrop-blur-lg border-b ${spaceTint.border}`
+        : `${statusStyle.header} border-b border-black/10 dark:border-white/10`;
+
+    // Voice Handling Logic
+    const handleVoiceFinal = async (transcript: string) => {
+        if (!transcript.trim()) return;
+        
+        setIsProcessing(true);
+        setQuickAddTitle(transcript); // Show what's being processed
+        
+        try {
+            await onSmartAddTask(transcript);
+            setQuickAddTitle(''); // Clear on success
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const { 
+        isListening, 
+        transcript, 
+        startListening, 
+        stopListening 
+    } = useSpeechRecognition({
+        onFinal: handleVoiceFinal
+    });
+
+    // Sync transcript to input while listening
+    useEffect(() => {
+        if (isListening) {
+            setQuickAddTitle(transcript);
+        }
+    }, [transcript, isListening]);
 
     const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
@@ -78,18 +137,11 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
             visualDropIndex = tasks.length;
         }
 
-        // Fix H-01: Map visual index (which might be sorted) to logical index
         let logicalIndex = visualDropIndex;
 
         if (sortOption !== 'Default') {
-            // If sorted, we can't trust visualDropIndex as the insertion point for the master list.
-            // Strategy: Find the task currently at visualDropIndex (the "target").
-            // Insert *before* that target in the unsorted list.
-            
             if (visualDropIndex < tasks.length) {
                 const targetTask = tasks[visualDropIndex];
-                // Find where this target task lives in the unsorted list for this column
-                // We need to filter allTasks by this status to get the "Master Column List"
                 const unsortedColumnTasks = allTasks.filter(t => t.status === status);
                 const targetIndexInMaster = unsortedColumnTasks.findIndex(t => t.id === targetTask.id);
                 
@@ -97,8 +149,6 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                     logicalIndex = targetIndexInMaster;
                 }
             } else {
-                // Dropped at the end of a sorted list
-                // We simply append to the end of the logical list
                 const unsortedColumnTasks = allTasks.filter(t => t.status === status);
                 logicalIndex = unsortedColumnTasks.length;
             }
@@ -146,9 +196,20 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
 
     const handleQuickAddSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        // Prevent submission while processing AI to avoid duplicates or lost data
+        if (isProcessing) return;
+        
         if (quickAddTitle.trim()) {
             onQuickAddTask(quickAddTitle.trim());
             setQuickAddTitle('');
+        }
+    };
+    
+    const toggleVoiceInput = () => {
+        if (isListening) {
+            stopListening();
+        } else {
+            startListening();
         }
     };
 
@@ -177,14 +238,14 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
     return (
         <div 
             ref={colRef}
-            className={`flex-shrink-0 ${statusStyle.body} rounded-xl shadow-lg flex flex-col ${isResizing ? 'transition-none select-none' : 'transition-all duration-300 ease-in-out'} relative`}
+            className={`flex-shrink-0 rounded-xl flex flex-col ${containerClasses} ${isResizing ? 'transition-none select-none' : 'transition-all duration-300 ease-in-out'} relative`}
             style={{ 
                 width: `${currentWidth}px`, 
                 height: typeof currentHeight === 'number' ? `${currentHeight}px` : undefined,
             }}
         >
             <div 
-                className={`p-2 border-b border-black/10 dark:border-white/10 flex justify-between items-center sticky top-0 backdrop-blur-sm rounded-t-xl z-10 ${statusStyle.header}`}
+                className={`p-2 flex justify-between items-center sticky top-0 rounded-t-xl z-10 ${headerClasses}`}
                 onMouseDown={onMouseDown}
             >
                 <h2
@@ -206,38 +267,69 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
             </div>
             {!isCollapsed && (
                 <>
-                    <div className="p-2 border-b border-gray-300 dark:border-gray-700 bg-white/20 dark:bg-black/10">
+                    <div className={`p-2 border-b ${isSpaceMode ? `border-white/10 ${spaceTint.border}` : 'border-gray-300 dark:border-gray-700 bg-white/20 dark:bg-black/10'}`}>
                         <form onSubmit={handleQuickAddSubmit} className="flex gap-2">
-                            <input 
-                                type="text" 
-                                value={quickAddTitle}
-                                onChange={(e) => setQuickAddTitle(e.target.value)}
-                                placeholder="Add quick task..." 
-                                className="flex-1 min-w-0 px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white/90 dark:bg-gray-800 text-gray-800 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
-                            />
+                            <div className="relative flex-1">
+                                <input 
+                                    type="text" 
+                                    value={quickAddTitle}
+                                    onChange={(e) => setQuickAddTitle(e.target.value)}
+                                    placeholder={isProcessing ? "AI Analyzing..." : isListening ? "Listening..." : "Add quick task..."}
+                                    className={`w-full px-3 py-1.5 pr-8 text-sm rounded-md border transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500
+                                        ${isListening 
+                                            ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-200 ring-2 ring-indigo-500/50' 
+                                            : isProcessing
+                                                ? 'border-purple-500 bg-purple-100 dark:bg-purple-900/30 text-purple-900 dark:text-purple-200 cursor-wait'
+                                                : isSpaceMode 
+                                                    ? 'border-white/20 bg-black/20 text-white placeholder-white/50 focus:bg-black/40' 
+                                                    : 'border-gray-300 dark:border-gray-600 bg-white/90 dark:bg-gray-800 text-gray-800 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400'
+                                        }
+                                    `}
+                                    disabled={isListening || isProcessing}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={toggleVoiceInput}
+                                    className={`absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-full transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : isProcessing ? 'text-purple-500 animate-spin' : isSpaceMode ? 'text-white/60 hover:text-white' : 'text-gray-400 hover:text-indigo-500'}`}
+                                    title="Voice Add (AI Powered)"
+                                    disabled={isProcessing}
+                                >
+                                    <i className={`fas ${isListening ? 'fa-microphone-slash' : isProcessing ? 'fa-spinner' : 'fa-microphone'}`}></i>
+                                </button>
+                            </div>
+                            
                             <button
                                 type="button"
                                 onClick={() => onAddTask(status)}
-                                className="px-3 py-1.5 bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-md transition-colors border border-gray-300 dark:border-gray-600 shadow-sm flex items-center gap-1.5 whitespace-nowrap text-xs font-bold"
+                                className={`px-3 py-1.5 rounded-md transition-colors border shadow-sm flex items-center gap-1.5 whitespace-nowrap text-xs font-bold disabled:opacity-50 ${
+                                    isSpaceMode 
+                                        ? 'bg-white/10 hover:bg-white/20 text-white border-white/20'
+                                        : 'bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600'
+                                }`}
                                 title="Open full task creator"
+                                disabled={isProcessing}
                             >
-                                <i className="fas fa-pen-to-square"></i> Detail
+                                <i className="fas fa-pen-to-square"></i>
                             </button>
                         </form>
                     </div>
 
-                    <div className="p-2 border-b border-gray-300 dark:border-gray-700">
+                    <div className={`p-2 border-b ${isSpaceMode ? `border-white/10 ${spaceTint.border}` : 'border-gray-300 dark:border-gray-700'}`}>
                         <label htmlFor={`sort-${status}`} className="sr-only">Sort tasks by</label>
                         <select
                             id={`sort-${status}`}
                             value={sortOption}
                             onChange={(e) => onSortChange(status, e.target.value as SortOption)}
-                            className="w-full bg-gray-300/50 dark:bg-gray-700/50 rounded-md px-3 py-1.5 text-sm text-gray-800 dark:text-gray-300 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            className={`w-full rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                                isSpaceMode 
+                                    ? 'bg-black/20 text-white border border-white/20 option-black'
+                                    : 'bg-gray-300/50 dark:bg-gray-700/50 text-gray-800 dark:text-gray-300 placeholder-gray-500 dark:placeholder-gray-400'
+                            }`}
                         >
-                            <option value="Default">Sort: Default</option>
-                            <option value="Priority">Sort: Priority</option>
-                            <option value="Due Date">Sort: Due Date</option>
-                            <option value="Created Date">Sort: Created Date</option>
+                            <option value="Default" className="text-black">Sort: Default</option>
+                            <option value="Priority" className="text-black">Sort: Priority</option>
+                            <option value="Due Date" className="text-black">Sort: Due Date</option>
+                            <option value="Created Date" className="text-black">Sort: Created Date</option>
                         </select>
                     </div>
                     <div
@@ -249,7 +341,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                         className={`flex-grow p-1 space-y-1 min-h-[200px] column-drop-zone ${isDraggingOver ? 'column-drop-zone-active' : ''} ${isCustomHeight ? 'overflow-y-auto' : ''}`}
                     >
                         {tasks.length === 0 ? (
-                            <div className="h-full flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 opacity-50 p-4 select-none min-h-[150px]">
+                            <div className={`h-full flex flex-col items-center justify-center opacity-50 p-4 select-none min-h-[150px] ${isSpaceMode ? 'text-white/60' : 'text-gray-400 dark:text-gray-500'}`}>
                                 <i className="far fa-folder-open text-3xl mb-2"></i>
                                 <span className="text-sm font-medium">No Tasks</span>
                             </div>
@@ -286,7 +378,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                             onMouseDown={handleResizeStart}
                             title="Drag to resize"
                         >
-                            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="text-gray-500 dark:text-gray-400">
+                            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className={isSpaceMode ? 'text-white/50' : 'text-gray-500 dark:text-gray-400'}>
                                 <path d="M10 10L10 0L0 10H10Z" fill="currentColor"/>
                             </svg>
                         </div>
