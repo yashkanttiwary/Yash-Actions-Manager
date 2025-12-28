@@ -937,6 +937,7 @@ const App: React.FC = () => {
                 setFocusMode={setFocusMode}
                 onOpenSettings={handleOpenSettings}
                 connectionHealth={connectionHealth}
+                syncStatus={syncStatus} // Pass syncStatus
                 onManualPull={manualPull}
                 onManualPush={manualPush}
                 isCompactMode={isCompactMode}
@@ -948,20 +949,18 @@ const App: React.FC = () => {
                 audioControls={audioControls}
                 isTimelineVisible={showTimeline}
                 onToggleTimeline={() => setShowTimeline(prev => !prev)}
-                isMenuLocked={isMenuLocked} // Pass State
-                setIsMenuLocked={setIsMenuLocked} // Pass Setter
+                isMenuLocked={isMenuLocked} 
+                setIsMenuLocked={setIsMenuLocked} 
                 isRocketFlying={isRocketFlying}
                 onRocketLaunch={setIsRocketFlying}
-                isMenuHovered={isMenuHovered} // Pass State
-                onMenuHoverChange={setIsMenuHovered} // Pass Setter
+                isMenuHovered={isMenuHovered} 
+                onMenuHoverChange={setIsMenuHovered} 
             />
 
             <main 
                 className="flex-1 overflow-auto pl-2 sm:pl-6 pr-2 pb-2 relative flex flex-col scroll-smooth transition-all duration-700 z-10"
                 style={{ 
                     // Dynamic padding top based on menu state
-                    // 280px is roughly the height of the expanded menu + some buffer
-                    // 5rem (80px) is the default when collapsed
                     paddingTop: (isMenuLocked || isMenuHovered) ? '280px' : '5rem' 
                 }}
             >
@@ -1053,21 +1052,9 @@ const App: React.FC = () => {
                 )}
             </main>
             
-            {/* ... rest of modals ... */}
-            {isSheetConfigured && syncStatus !== 'idle' && (
-                <div className="fixed bottom-4 left-4 z-40 flex items-center gap-2 px-3 py-1.5 bg-white/80 dark:bg-gray-800/80 backdrop-blur rounded-full text-xs font-medium shadow-sm border border-gray-200 dark:border-gray-700">
-                    {syncStatus === 'syncing' && <i className="fas fa-sync fa-spin text-blue-500"></i>}
-                    {syncStatus === 'success' && <i className="fas fa-check text-green-500"></i>}
-                    {syncStatus === 'error' && <i className="fas fa-exclamation-circle text-red-500"></i>}
-                    
-                    <span className="text-gray-600 dark:text-gray-300">
-                        {syncStatus === 'syncing' ? 'Syncing...' : syncStatus === 'error' ? 'Sync Failed' : 'Synced'}
-                    </span>
-                    {syncError && syncStatus === 'error' && (
-                        <span className="text-red-400 max-w-[150px] truncate ml-1" title={syncError}>{syncError}</span>
-                    )}
-                </div>
-            )}
+            {/* ... Modals ... */}
+            
+            {/* REMOVED: Redundant Bottom-Left Sync Toast */}
 
             {editingTask && (
                 <EditTaskModal

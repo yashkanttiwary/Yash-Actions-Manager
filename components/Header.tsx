@@ -45,6 +45,7 @@ interface HeaderProps {
     setFocusMode: (mode: Status | 'None') => void;
     onOpenSettings: (tab?: SettingsTab) => void; 
     connectionHealth: ConnectionHealth;
+    syncStatus: 'idle' | 'syncing' | 'error' | 'success'; // New Prop
     onManualPull: () => Promise<void>;
     onManualPush: () => Promise<void>;
     isCompactMode: boolean;
@@ -76,7 +77,7 @@ export const Header: React.FC<HeaderProps> = ({
     tasks, isTodayView, setIsTodayView, onOpenAIAssistant, onToggleTheme, currentTheme, onResetLayout, 
     gamification, settings, onUpdateSettings, currentViewMode, onViewModeChange, 
     googleAuthState, onGoogleSignIn, onGoogleSignOut, onOpenShortcutsModal, 
-    focusMode, setFocusMode, onOpenSettings, connectionHealth,
+    focusMode, setFocusMode, onOpenSettings, connectionHealth, syncStatus,
     onManualPull, onManualPush, isCompactMode, onToggleCompactMode, isFitToScreen, onToggleFitToScreen,
     zoomLevel, setZoomLevel, audioControls, isTimelineVisible, onToggleTimeline,
     isMenuLocked, setIsMenuLocked, isRocketFlying, onRocketLaunch,
@@ -269,9 +270,46 @@ export const Header: React.FC<HeaderProps> = ({
         return calculateProgress(gamification.xp, gamification.level);
     }, [gamification.xp, gamification.level]);
 
+    // Derived State (Moved Up to fix ReferenceError)
+    const isMenuOpen = isMenuHovered || isMenuLocked;
+    const isSpaceVisualsActive = currentTheme === 'space' || isRocketFlying;
     
     const isSheetConnected = connectionHealth.sheet.status === 'connected';
-    const isSyncing = connectionHealth.sheet.message?.toLowerCase().includes('syncing');
+    
+    // Determine Sync Button State
+    const getSyncButtonProps = () => {
+        if (syncStatus === 'syncing') {
+            return {
+                icon: 'fa-cloud-arrow-up fa-bounce',
+                text: 'Syncing...',
+                classes: 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-700 cursor-wait'
+            };
+        }
+        if (syncStatus === 'success') {
+            return {
+                icon: 'fa-check',
+                text: 'Synced',
+                classes: 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/40 dark:text-green-300 dark:border-green-700'
+            };
+        }
+        if (syncStatus === 'error') {
+            return {
+                icon: 'fa-exclamation-triangle',
+                text: 'Failed',
+                classes: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/40 dark:text-red-300 dark:border-red-700'
+            };
+        }
+        // Idle
+        return {
+            icon: 'fa-cloud-upload-alt',
+            text: 'Sync Now',
+            classes: isSpaceVisualsActive 
+                ? 'bg-white/10 text-white border-white/20 hover:bg-white/20'
+                : 'bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-gray-700 hover:border-indigo-300'
+        };
+    };
+
+    const syncProps = getSyncButtonProps();
 
     const handleZoomIn = () => setZoomLevel(prev => Math.min(1.5, prev + 0.1));
     const handleZoomOut = () => setZoomLevel(prev => Math.max(0.1, prev - 0.1));
@@ -281,10 +319,6 @@ export const Header: React.FC<HeaderProps> = ({
         e.stopPropagation();
         setShowGame(true);
     };
-
-    // Derived State
-    const isMenuOpen = isMenuHovered || isMenuLocked;
-    const isSpaceVisualsActive = currentTheme === 'space' || isRocketFlying;
 
     // STYLING: Dynamic classes based on Space Mode
     const headerBgClass = isSpaceVisualsActive 
@@ -364,6 +398,19 @@ export const Header: React.FC<HeaderProps> = ({
 
                 {/* Right: Essential Status (AI & Sync) */}
                 <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
+                    {/* Unified Sync Button (Visible in collapsed state too) */}
+                    {isSheetConnected && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onManualPull(); }}
+                            disabled={syncStatus === 'syncing'}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all border shadow-sm ${syncProps.classes}`}
+                            title={syncProps.text}
+                        >
+                            <i className={`fas ${syncProps.icon}`}></i>
+                            <span className="hidden lg:inline">{syncProps.text}</span>
+                        </button>
+                    )}
+
                     <button
                         onClick={(e) => { e.stopPropagation(); onOpenAIAssistant(); }}
                         className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${isSpaceVisualsActive ? 'bg-white/20 text-white hover:bg-white/40' : 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-800'}`}
@@ -389,24 +436,7 @@ export const Header: React.FC<HeaderProps> = ({
                         <h1 className={`text-xl font-bold tracking-wider hidden sm:block ${isSpaceVisualsActive ? 'text-white text-shadow-neon' : ''}`}>Task Manager</h1>
                         
                         <div className="flex items-center space-x-2 sm:space-x-3 flex-wrap gap-y-2">
-                            {/* Sync Button */}
-                            {isSheetConnected && (
-                                <button
-                                    onClick={onManualPull}
-                                    disabled={!!isSyncing}
-                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all border shadow-sm ${
-                                        isSyncing 
-                                            ? 'bg-blue-100 text-blue-700 border-blue-200 cursor-wait' 
-                                            : isSpaceVisualsActive 
-                                                ? 'bg-white/10 text-white border-white/20 hover:bg-white/20'
-                                                : 'bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-gray-700 hover:border-indigo-300'
-                                    }`}
-                                >
-                                    <i className={`fas fa-cloud-download-alt ${isSyncing ? 'fa-bounce' : ''}`}></i>
-                                    <span className="hidden lg:inline">{isSyncing ? 'Syncing...' : 'Sync Now'}</span>
-                                </button>
-                            )}
-
+                            
                             {/* View Toggles - UPDATED WITH GOALS */}
                             <div className={`${isSpaceVisualsActive ? 'bg-white/10' : 'bg-gray-200 dark:bg-gray-700'} p-0.5 rounded-lg flex items-center`}>
                                 <button onClick={() => onViewModeChange('kanban')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${currentViewMode === 'kanban' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>Board</button>
