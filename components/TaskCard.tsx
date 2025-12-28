@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useLayoutEffect, useCallback } from 'react';
 import { Task, Status, Goal } from '../types';
 import { PRIORITY_COLORS, TAG_COLORS, STATUS_STYLES } from '../constants';
@@ -231,7 +232,6 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                 onDragEnd={handleDragEnd}
                 data-task-id={task.id}
                 className={`group task-card relative bg-white dark:bg-gray-800 rounded-md p-2 border border-gray-200 dark:border-gray-700 shadow-sm ${cardCursorClass} hover:shadow-md ${statusStyle.cardBorder} ${isBlockedByDep ? 'opacity-60 saturate-50' : ''}`}
-                style={{ borderLeftColor: assignedGoal?.color || undefined, borderLeftWidth: assignedGoal?.color ? '6px' : undefined }}
                 onClick={handleCardClick}
                 onContextMenu={handleContextMenu}
                 title={agingMessage || `${task.title} (Priority: ${task.priority})`}
@@ -241,6 +241,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                 <div style={agingStyle} className="absolute inset-0 bg-amber-400 dark:bg-amber-500 rounded-md pointer-events-none transition-opacity duration-500 z-0"></div>
                 <div className="relative flex items-center justify-between gap-2 z-10">
                     
+                    {/* Left: Drag Handle + Title */}
                     <div className="flex items-center gap-2 flex-grow min-w-0">
                          {isBlockedByDep ? (
                              <i className="fas fa-lock text-xs text-amber-500 flex-shrink-0" title={blockerTooltip}></i>
@@ -250,24 +251,28 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                              </div>
                          )}
                          
-                         {assignedGoal && (
+                         <span className={`text-sm font-medium text-gray-800 dark:text-gray-100 truncate ${isOverdue ? 'text-red-600 dark:text-red-400' : ''}`}>
+                             {task.title}
+                         </span>
+                    </div>
+
+                    {/* Right: Meta + Actions */}
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                        {/* Priority Badge */}
+                        <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded flex-shrink-0 uppercase ${priorityClasses.bg} ${priorityClasses.text} border ${priorityClasses.text.replace('text-', 'border-')} border-opacity-30`} title={`Priority: ${task.priority}`}>
+                            {task.priority}
+                        </span>
+
+                        {/* Goal Dot */}
+                        {assignedGoal && (
                              <div 
                                 className="flex-shrink-0 w-2.5 h-2.5 rounded-full" 
                                 style={{ backgroundColor: assignedGoal.color }}
                                 title={`Goal: ${assignedGoal.title}`}
                              ></div>
                          )}
-                         
-                         <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded flex-shrink-0 uppercase ${priorityClasses.bg} ${priorityClasses.text} border ${priorityClasses.text.replace('text-', 'border-')} border-opacity-30`} title={`Priority: ${task.priority}`}>
-                            {task.priority}
-                         </span>
-                         
-                         <span className={`text-sm font-medium text-gray-800 dark:text-gray-100 truncate ${isOverdue ? 'text-red-600 dark:text-red-400' : ''}`}>
-                             {task.title}
-                         </span>
-                    </div>
 
-                    <div className="flex items-center gap-2 flex-shrink-0">
+                        {/* Status/Blocker Icons */}
                         {activeBlocker && (
                             <i className="fas fa-exclamation-triangle text-red-500 text-xs" title={`Blocked: ${activeBlocker.reason}`}></i>
                         )}
@@ -310,7 +315,6 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
             onDragEnd={handleDragEnd}
             data-task-id={task.id}
             className={`group task-card task-card-tilt relative bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700 shadow-md ${cardCursorClass} ${priorityClasses.glow} hover:shadow-2xl ${statusStyle.cardBorder} ${isBlockedByDep ? 'opacity-60 saturate-50' : ''}`}
-            style={{ borderLeftColor: assignedGoal?.color || undefined, borderLeftWidth: assignedGoal?.color ? '6px' : undefined }}
             onClick={handleCardClick}
             onContextMenu={handleContextMenu}
             title={agingMessage || `Priority: ${task.priority} | Due: ${new Date(task.dueDate).toLocaleDateString()}`}
@@ -334,6 +338,12 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                     </h3>
                     
                     <div className="flex items-center gap-1 flex-shrink-0 relative z-20">
+                        {/* Priority First */}
+                        <span className={`text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap ${priorityClasses.bg} ${priorityClasses.text}`}>
+                            {task.priority}
+                        </span>
+
+                        {/* Goal Second */}
                         {assignedGoal && (
                             <span 
                                 className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white whitespace-nowrap shadow-sm truncate max-w-[80px]"
@@ -343,10 +353,6 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                                 {assignedGoal.title}
                             </span>
                         )}
-
-                        <span className={`text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap ${priorityClasses.bg} ${priorityClasses.text}`}>
-                            {task.priority}
-                        </span>
                         
                         {isCompactMode && isExpanded && (
                             <button

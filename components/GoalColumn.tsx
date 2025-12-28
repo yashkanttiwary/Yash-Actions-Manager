@@ -1,6 +1,6 @@
 
 import React, { useRef, useState } from 'react';
-import { Task, Goal } from '../types';
+import { Task, Goal, Status } from '../types';
 import { TaskCard } from './TaskCard';
 
 interface GoalColumnProps {
@@ -18,6 +18,35 @@ interface GoalColumnProps {
     isCompactMode: boolean;
     isSpaceMode: boolean;
 }
+
+// Helper to determine text color (black/white) based on background brightness
+const getContrastColor = (hex: string) => {
+    if (!hex || !hex.startsWith('#')) return 'text-white';
+    
+    // Parse hex
+    const r = parseInt(hex.substring(1, 3), 16);
+    const g = parseInt(hex.substring(3, 5), 16);
+    const b = parseInt(hex.substring(5, 7), 16);
+    
+    // YIQ formula
+    const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+    
+    // Check if space mode might affect this? 
+    // In space mode, we use opacity, so white text is generally preferred against dark background.
+    // This function is primarily for the solid color header in normal mode.
+    return yiq >= 128 ? 'text-gray-900' : 'text-white';
+};
+
+const getStatusColor = (status: Status): string => {
+    switch (status) {
+        case 'Done': return '#10b981'; // Green
+        case 'In Progress': return '#3b82f6'; // Blue
+        case 'Review': return '#a855f7'; // Purple
+        case 'Blocker': return '#ef4444'; // Red
+        case 'Hold': return '#f59e0b'; // Amber
+        default: return '#94a3b8'; // Slate (To Do / Won't Complete)
+    }
+};
 
 export const GoalColumn: React.FC<GoalColumnProps> = ({ 
     goal, tasks, allTasks, onTaskMove, onEditTask, onDeleteTask, onEditGoal, onDeleteGoal,
@@ -52,30 +81,54 @@ export const GoalColumn: React.FC<GoalColumnProps> = ({
 
     const progress = goal.progress || 0;
     
-    // Dynamic Styles based on goal color
-    // We use inline styles for the custom color, but tailwind for structure
-    const headerStyle = {
-        backgroundColor: isSpaceMode ? 'rgba(0,0,0,0.6)' : goal.color,
-        borderColor: goal.color
-    };
-    
     const containerClasses = isSpaceMode
         ? 'bg-slate-900/60 backdrop-blur-md border border-slate-700/50'
         : 'bg-gray-100/80 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700';
 
+    // Helper to ensure hex has 6 digits for alpha appending if needed (basic check)
+    const safeColor = goal.color.startsWith('#') ? goal.color : '#6366f1'; 
+    
+    // Determine text color for normal mode
+    const textColorClass = isSpaceMode ? 'text-white' : getContrastColor(safeColor);
+
     return (
         <div 
             className={`flex-shrink-0 w-80 rounded-xl flex flex-col ${containerClasses} shadow-lg transition-all duration-300 relative`}
-            style={{ borderColor: isDraggingOver ? goal.color : undefined, borderWidth: isDraggingOver ? '2px' : '1px' }}
+            style={{ 
+                // Enhance border visibility in space mode using the goal color (translucent)
+                borderColor: isDraggingOver 
+                    ? safeColor 
+                    : (isSpaceMode ? `${safeColor}66` : undefined),
+                borderWidth: isDraggingOver ? '2px' : '1px',
+                // Subtle glow in space mode
+                boxShadow: isSpaceMode ? `0 0 15px ${safeColor}10` : undefined
+            }}
         >
             {/* Header */}
-            <div 
-                className="p-3 rounded-t-xl text-white relative overflow-hidden"
-                style={headerStyle}
-            >
+            <div className={`relative p-3 rounded-t-xl overflow-hidden group ${textColorClass}`}>
+                
+                {/* 1. Base Color Layer */}
+                <div 
+                    className="absolute inset-0 transition-all duration-300"
+                    style={{ 
+                        backgroundColor: safeColor,
+                        // In space mode, use low opacity to let the dark glass background show through, creating a "darker version"
+                        // Increased opacity slightly for better visibility
+                        opacity: isSpaceMode ? 0.45 : 1, 
+                    }}
+                />
+
+                {/* 2. Space Mode Specific Gradient for Depth */}
+                {isSpaceMode && (
+                    <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-black/60 pointer-events-none" />
+                )}
+
+                {/* 3. Texture Overlay */}
+                <div className="absolute inset-0 opacity-10 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjZmZmIi8+CjxyZWN0IHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiMwMDAiLz4KPC9zdmc+')] mix-blend-overlay pointer-events-none"></div>
+
                 <div className="relative z-10">
                     <div className="flex justify-between items-start mb-2">
-                        <h3 className="font-bold text-lg leading-tight truncate pr-2">{goal.title}</h3>
+                        <h3 className="font-bold text-lg leading-tight truncate pr-2 drop-shadow-sm">{goal.title}</h3>
                         <div className="flex items-center gap-1">
                             <button 
                                 onClick={() => onEditGoal(goal)}
@@ -95,20 +148,17 @@ export const GoalColumn: React.FC<GoalColumnProps> = ({
                     </div>
                     
                     {/* Progress Bar */}
-                    <div className="w-full bg-black/30 rounded-full h-2 mb-1">
+                    <div className="w-full bg-black/30 rounded-full h-2 mb-1 backdrop-blur-sm">
                         <div 
-                            className="bg-white/90 h-2 rounded-full transition-all duration-500"
+                            className="bg-white/90 h-2 rounded-full transition-all duration-500 shadow-sm"
                             style={{ width: `${progress}%` }}
                         ></div>
                     </div>
-                    <div className="flex justify-between text-xs opacity-90 font-mono">
+                    <div className="flex justify-between text-xs opacity-90 font-mono drop-shadow-sm">
                         <span>{progress}% Complete</span>
                         <span>{tasks.length} Tasks</span>
                     </div>
                 </div>
-                
-                {/* Visual texture overlay */}
-                <div className="absolute inset-0 opacity-10 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjZmZmIi8+CjxyZWN0IHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiMwMDAiLz4KPC9zdmc+')]"></div>
             </div>
 
             {/* Task List */}
@@ -119,7 +169,7 @@ export const GoalColumn: React.FC<GoalColumnProps> = ({
                 onDrop={handleDrop}
             >
                 {sortedTasks.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 p-8 text-center border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg m-2">
+                    <div className={`h-full flex flex-col items-center justify-center p-8 text-center border-2 border-dashed rounded-lg m-2 ${isSpaceMode ? 'border-slate-700 text-slate-500' : 'border-gray-300 dark:border-gray-700 text-gray-400 dark:text-gray-500'}`}>
                         <i className="far fa-clipboard text-2xl mb-2 opacity-50"></i>
                         <span className="text-sm">Drop tasks here</span>
                     </div>
@@ -127,11 +177,9 @@ export const GoalColumn: React.FC<GoalColumnProps> = ({
                     sortedTasks.map(task => (
                         <div key={task.id} className="relative">
                             {/* Status Indicator Pill for Goal View */}
-                            <div className="absolute -left-1 top-3 bottom-3 w-1 rounded-l-md" 
+                            <div className="absolute -left-1 top-3 bottom-3 w-1 rounded-l-md shadow-sm" 
                                 style={{ 
-                                    backgroundColor: task.status === 'Done' ? '#10b981' : 
-                                                     task.status === 'In Progress' ? '#3b82f6' : 
-                                                     task.status === 'Blocker' ? '#ef4444' : '#94a3b8' 
+                                    backgroundColor: getStatusColor(task.status)
                                 }} 
                             />
                             <TaskCard

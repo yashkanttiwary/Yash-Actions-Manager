@@ -22,8 +22,14 @@ const taskToRow = (task: Task, goalsMap?: Map<string, Goal>): any[] => {
     const depsStr = task.dependencies?.join(', ') || '';
     const subtasksStr = task.subtasks?.map(s => `${s.isCompleted ? '[x]' : '[ ]'} ${s.title}`).join('\n') || '';
     
-    // Lookup Goal Title
-    const goalTitle = task.goalId && goalsMap ? (goalsMap.get(task.goalId)?.title || '') : '';
+    // Lookup Goal Title - Default to 'Unassigned' if missing
+    let goalTitle = 'Unassigned';
+    if (task.goalId && goalsMap) {
+        const foundGoal = goalsMap.get(task.goalId);
+        if (foundGoal) {
+            goalTitle = foundGoal.title;
+        }
+    }
 
     return [
         safeString(task.id),
@@ -41,7 +47,7 @@ const taskToRow = (task: Task, goalsMap?: Map<string, Goal>): any[] => {
         safeString(task.description),
         safeString(task.lastModified),
         safeString(task.goalId), 
-        safeString(goalTitle), // New Column 15: Goal Title
+        safeString(goalTitle), // New Column 15: Goal Title (Defaults to Unassigned)
         JSON.stringify(task) || '' // Shifted to Index 16
     ];
 };
