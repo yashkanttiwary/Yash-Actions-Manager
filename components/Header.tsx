@@ -8,6 +8,7 @@ import { TetrisGameModal } from './TetrisGameModal';
 import { getAccurateCurrentDate, initializeTimeSync } from '../services/timeService';
 import { LiquidGauge } from './LiquidGauge';
 import { calculateProgress } from '../services/gamificationService';
+import { PomodoroTimer } from './PomodoroTimer';
 
 interface GoogleAuthState {
     gapiLoaded: boolean;
@@ -337,6 +338,10 @@ export const Header: React.FC<HeaderProps> = ({
         return 'fa-star text-cyan-300 animate-pulse'; // Space
     };
 
+    const togglePomodoro = () => {
+        onUpdateSettings({ showPomodoroTimer: !settings.showPomodoroTimer });
+    };
+
     return (
         <header 
             className={`
@@ -492,6 +497,10 @@ export const Header: React.FC<HeaderProps> = ({
                                     <i className={`fas ${getThemeIcon()}`}></i>
                                 </button>
                                 
+                                <button onClick={togglePomodoro} className={`w-8 h-8 rounded-lg flex items-center justify-center ${settings.showPomodoroTimer ? 'bg-indigo-600 text-white' : (isSpaceVisualsActive ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300')} transition-colors`} title="Toggle Focus Timer">
+                                    <i className="fas fa-stopwatch"></i>
+                                </button>
+
                                 <button onClick={onResetLayout} className={`w-8 h-8 rounded-lg flex items-center justify-center ${isSpaceVisualsActive ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300'} transition-colors`} title="Reset Board Layout">
                                     <i className="fas fa-undo"></i>
                                 </button>
@@ -507,8 +516,8 @@ export const Header: React.FC<HeaderProps> = ({
                         </div>
                     </div>
 
-                    {/* Gauges Row: Fuel and XP */}
-                    <div className={`flex flex-col sm:flex-row gap-4 ${isSpaceVisualsActive ? 'opacity-80 hover:opacity-100 transition-opacity' : ''}`}>
+                    {/* Gauges Row: Fuel and XP and Timer */}
+                    <div className={`grid grid-cols-1 ${settings.showPomodoroTimer ? 'lg:grid-cols-3' : 'md:grid-cols-2'} gap-4 ${isSpaceVisualsActive ? 'opacity-80 hover:opacity-100 transition-opacity' : ''}`}>
                         {/* 1. Time Budget (Fuel) */}
                         <div className="w-full">
                             <LiquidGauge 
@@ -529,6 +538,13 @@ export const Header: React.FC<HeaderProps> = ({
                                 max={xpProgressData.levelWidth}
                             />
                         </div>
+
+                        {/* 3. Pomodoro Timer (Conditionally Rendered) */}
+                        {settings.showPomodoroTimer && (
+                            <div className="w-full">
+                                <PomodoroTimer settings={settings} className="w-full h-full min-h-[50px]" />
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

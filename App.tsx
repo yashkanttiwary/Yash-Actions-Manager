@@ -13,7 +13,6 @@ import { TimelineGantt } from './components/TimelineGantt';
 import { GoalBoard } from './components/GoalBoard'; 
 import { manageTasksWithAI, generateTaskSummary, breakDownTask, parseTaskFromVoice } from './services/geminiService';
 import { calculateTaskXP, checkLevelUp } from './services/gamificationService'; 
-import { PomodoroTimer } from './components/PomodoroTimer';
 import { initGoogleClient, signIn, signOut } from './services/googleAuthService';
 import { COLUMN_STATUSES } from './constants';
 import { ShortcutsModal } from './components/ShortcutsModal';
@@ -1128,7 +1127,7 @@ const App: React.FC = () => {
                     </div>
                 </div>
             )}
-             {settings.showPomodoroTimer && <PomodoroTimer settings={settings} />}
+             {/* REMOVED: {settings.showPomodoroTimer && <PomodoroTimer settings={settings} />} */}
              {contextMenu && (
                 <div
                     style={{ top: contextMenu.y, left: contextMenu.x }}

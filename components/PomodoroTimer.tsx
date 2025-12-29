@@ -12,6 +12,7 @@ interface PomodoroSettings {
 
 interface PomodoroTimerProps {
     settings: PomodoroSettings;
+    className?: string;
 }
 
 type TimerMode = 'focus' | 'shortBreak' | 'longBreak';
@@ -27,7 +28,7 @@ const STORAGE_KEY = 'pomodoro_state_rpg_v1';
 // --- ASSETS (Pixel Art SVGs) ---
 
 const SlimeMonster: React.FC<{ isHit: boolean; isHealing: boolean }> = ({ isHit, isHealing }) => (
-    <svg viewBox="0 0 100 100" className={`w-24 h-24 transition-transform duration-100 ${isHit ? 'translate-x-1 translate-y-1' : ''}`}>
+    <svg viewBox="0 0 100 100" className={`w-full h-full transition-transform duration-100 ${isHit ? 'translate-x-1 translate-y-1' : ''}`}>
         <defs>
             <filter id="glow-red">
                 <feDropShadow dx="0" dy="0" stdDeviation="5" floodColor="red" />
@@ -67,7 +68,7 @@ const SlimeMonster: React.FC<{ isHit: boolean; isHealing: boolean }> = ({ isHit,
 );
 
 const Campfire: React.FC = () => (
-    <svg viewBox="0 0 100 100" className="w-20 h-20">
+    <svg viewBox="0 0 100 100" className="w-full h-full">
         <g transform="translate(10, 10)">
             {/* Logs */}
             <rect x="20" y="70" width="60" height="10" fill="#78350f" transform="rotate(5, 50, 75)" />
@@ -81,7 +82,7 @@ const Campfire: React.FC = () => (
 
 // --- MAIN COMPONENT ---
 
-export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ settings }) => {
+export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ settings, className }) => {
     const [mode, setMode] = useState<TimerMode>('focus');
     const [isActive, setIsActive] = useState(false);
     const [time, setTime] = useState(modeDurations(settings).focus * 60);
@@ -240,7 +241,7 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ settings }) => {
     const timeString = `${minutes}:${seconds.toString().padStart(2, '0')}`;
 
     return (
-        <div className="fixed bottom-4 right-4 z-50 animate-slideIn">
+        <div className={`${className || ''} animate-slideIn`}>
             <style>{`
                 @keyframes shake {
                     0% { transform: translate(1px, 1px) rotate(0deg); }
@@ -266,13 +267,13 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ settings }) => {
             `}</style>
 
             <div className={`
-                flex items-center gap-4 p-4 rounded-xl border-4 shadow-2xl transition-colors duration-300
+                flex items-center gap-3 p-3 rounded-xl border-2 shadow-lg transition-colors duration-300 w-full h-full
                 ${mode === 'focus' 
-                    ? 'bg-indigo-950 border-indigo-500 shadow-indigo-900/50' 
-                    : 'bg-emerald-900 border-emerald-500 shadow-emerald-900/50'}
+                    ? 'bg-indigo-950 border-indigo-500 shadow-indigo-900/20' 
+                    : 'bg-emerald-900 border-emerald-500 shadow-emerald-900/20'}
             `}>
                 {/* Visual Avatar */}
-                <div className="relative w-20 h-20 flex-shrink-0 flex items-center justify-center bg-black/20 rounded-lg">
+                <div className="relative w-12 h-12 flex-shrink-0 flex items-center justify-center bg-black/20 rounded-lg">
                     {mode === 'focus' ? (
                         <SlimeMonster isHit={isHit} isHealing={!isActive && time < maxHP} />
                     ) : (
@@ -281,42 +282,40 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ settings }) => {
                 </div>
 
                 {/* HUD */}
-                <div className="flex flex-col min-w-[120px]">
+                <div className="flex flex-col flex-grow min-w-0">
                     {/* Header */}
                     <div className="flex justify-between items-end mb-1">
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-white/70">
-                            {mode === 'focus' ? `Boss HP (Lvl ${sessionCount + 1})` : 'Resting...'}
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-white/70 truncate">
+                            {mode === 'focus' ? `Boss Lvl ${sessionCount + 1}` : 'Resting...'}
                         </span>
-                    </div>
-
-                    {/* HP Bar */}
-                    <div className="relative w-full h-4 bg-gray-900 rounded-full border-2 border-white/10 overflow-hidden mb-2">
-                        <div 
-                            className={`absolute top-0 left-0 h-full transition-all duration-500 ease-out ${mode === 'focus' ? 'bg-red-500' : 'bg-green-500'}`}
-                            style={{ width: `${monsterHP}%` }}
-                        >
-                            {/* Shine */}
-                            <div className="absolute top-0 left-0 w-full h-1/2 bg-white/20"></div>
-                        </div>
-                    </div>
-
-                    {/* Timer & Controls */}
-                    <div className="flex items-center justify-between">
-                        <span className="text-2xl font-black font-mono text-white text-shadow-retro tracking-wider">
+                        <span className="text-xl font-black font-mono text-white text-shadow-retro leading-none">
                             {timeString}
                         </span>
-                        
+                    </div>
+
+                    {/* HP Bar & Controls Row */}
+                    <div className="flex items-center gap-2">
+                        <div className="relative flex-grow h-3 bg-gray-900 rounded-full border border-white/10 overflow-hidden">
+                            <div 
+                                className={`absolute top-0 left-0 h-full transition-all duration-500 ease-out ${mode === 'focus' ? 'bg-red-500' : 'bg-green-500'}`}
+                                style={{ width: `${monsterHP}%` }}
+                            >
+                                {/* Shine */}
+                                <div className="absolute top-0 left-0 w-full h-1/2 bg-white/20"></div>
+                            </div>
+                        </div>
+
                         <button 
                             onClick={toggleTimer}
                             className={`
-                                w-8 h-8 flex items-center justify-center rounded-lg border-b-4 active:border-b-0 active:translate-y-1 transition-all
+                                w-6 h-6 flex items-center justify-center rounded border-b-2 active:border-b-0 active:translate-y-0.5 transition-all flex-shrink-0
                                 ${isActive 
                                     ? 'bg-gray-700 border-gray-900 text-gray-300' 
                                     : 'bg-yellow-400 border-yellow-600 text-yellow-900 hover:bg-yellow-300'}
                             `}
-                            title={isActive ? "Pause (Heal Monster)" : "Attack!"}
+                            title={isActive ? "Pause" : "Start"}
                         >
-                            <i className={`fas ${isActive ? 'fa-pause' : 'fa-gavel'} text-sm`}></i>
+                            <i className={`fas ${isActive ? 'fa-pause' : 'fa-play'} text-[10px]`}></i>
                         </button>
                     </div>
                 </div>
