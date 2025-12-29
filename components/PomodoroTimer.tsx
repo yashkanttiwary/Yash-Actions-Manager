@@ -24,63 +24,101 @@ const modeDurations = (settings: PomodoroSettings): Record<TimerMode, number> =>
 
 const STORAGE_KEY = 'pomodoro_state_rpg_v1';
 
-// --- ASSETS (Pixel Art SVGs) ---
+// --- ASSETS (Pixel Art / Vector SVGs) ---
 
 const SlimeMonster: React.FC<{ isHit: boolean; isHealing: boolean; hpPercent: number }> = ({ isHit, isHealing, hpPercent }) => {
-    // Dynamic color shifting based on HP (Purple -> Red as it gets weaker/angry)
-    const bodyColor = hpPercent > 50 ? "#a5b4fc" : "#ef4444";
-    const strokeColor = hpPercent > 50 ? "#4338ca" : "#7f1d1d";
+    // Green Grimer Palette
+    // High HP: Toxic Green. Low HP: Dark Brown/Reddish (dried up/injured).
+    const bodyColor = hpPercent > 50 ? "#84cc16" : "#a16207"; // Lime-500 to Yellow-Brown
+    const shadowColor = hpPercent > 50 ? "#3f6212" : "#451a03"; // Dark Green to Dark Brown
+    const highlightColor = hpPercent > 50 ? "#d9f99d" : "#fde047";
 
     return (
-        <svg viewBox="0 0 100 100" className={`w-full h-full transition-transform duration-100 ${isHit ? 'translate-x-2 translate-y-2' : ''}`}>
+        <svg viewBox="0 0 120 120" className={`w-full h-full transition-transform duration-100 ${isHit ? 'translate-x-2 translate-y-2' : ''}`} style={{ overflow: 'visible' }}>
             <defs>
-                <filter id="glow-red">
-                    <feDropShadow dx="0" dy="0" stdDeviation="10" floodColor="red" />
+                <filter id="glow-damage">
+                    <feDropShadow dx="0" dy="0" stdDeviation="15" floodColor="#ef4444" />
                 </filter>
-                <filter id="glow-green">
-                    <feDropShadow dx="0" dy="0" stdDeviation="5" floodColor="#4ade80" />
+                <filter id="glow-slime">
+                    <feDropShadow dx="0" dy="4" stdDeviation="6" floodColor={bodyColor} floodOpacity="0.6" />
                 </filter>
-                <filter id="boss-shadow">
-                    <feDropShadow dx="0" dy="10" stdDeviation="5" floodColor="rgba(0,0,0,0.5)" />
-                </filter>
+                <linearGradient id="slimeGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" style={{ stopColor: highlightColor, stopOpacity: 1 }} />
+                    <stop offset="100%" style={{ stopColor: bodyColor, stopOpacity: 1 }} />
+                </linearGradient>
             </defs>
-            <g transform="translate(10, 10)" className={isHit ? 'animate-shake' : 'animate-bounce-slow'} filter="url(#boss-shadow)">
-                {/* Body */}
+            
+            {/* The Monster Container - Bounces/Oozes */}
+            <g transform="translate(10, 10)" className={isHit ? 'animate-shake' : 'animate-ooze'} filter={isHit ? "url(#glow-damage)" : "url(#glow-slime)"}>
+                
+                {/* 1. Left Arm (Dripping Sludge) */}
                 <path 
-                    d="M 20 80 Q 5 80 10 60 Q 15 20 50 20 Q 85 20 90 60 Q 95 80 80 80 Z" 
-                    fill={isHit ? "#fff" : bodyColor} 
-                    stroke={strokeColor} 
+                    d="M 20 60 Q 5 50 10 30 Q 20 10 35 40" 
+                    fill={bodyColor} 
+                    stroke={shadowColor} 
                     strokeWidth="3"
-                    filter={isHit ? "url(#glow-red)" : (isHealing ? "url(#glow-green)" : "")}
-                    className="transition-colors duration-100"
+                    strokeLinecap="round"
+                    className="animate-wave-left origin-bottom"
                 />
-                
-                {/* Face Expressions based on HP */}
-                <circle cx="35" cy="45" r={hpPercent < 30 ? "7" : "5"} fill="#1e1b4b" />
-                <circle cx="65" cy="45" r={hpPercent < 30 ? "3" : "5"} fill="#1e1b4b" />
-                
-                {isHit || hpPercent < 20 ? (
-                    // Pain/Dead Mouth
-                    <path d="M 35 65 Q 50 55 65 65" stroke="#1e1b4b" strokeWidth="3" fill="none" /> 
-                ) : hpPercent < 50 ? (
-                    // Worried Mouth
-                    <path d="M 35 65 L 65 65" stroke="#1e1b4b" strokeWidth="3" fill="none" />
+
+                {/* 2. Right Arm (Waving Sludge) */}
+                <path 
+                    d="M 80 60 Q 105 50 100 20 Q 85 10 70 40" 
+                    fill={bodyColor} 
+                    stroke={shadowColor} 
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    className="animate-wave-right origin-bottom"
+                />
+
+                {/* 3. Main Body (Grimer Shape: Wide base, melting look) */}
+                <path 
+                    d="M 10 100 
+                       C 0 100, 0 70, 15 60 
+                       C 25 30, 75 30, 85 60 
+                       C 100 70, 100 100, 90 100 
+                       Z" 
+                    fill={`url(#slimeGradient)`}
+                    stroke={shadowColor} 
+                    strokeWidth="3"
+                />
+
+                {/* 4. Slime Drips/Details on body */}
+                <path d="M 30 60 Q 35 70 40 60" fill="none" stroke={shadowColor} strokeWidth="2" opacity="0.6" />
+                <path d="M 60 70 Q 65 80 70 70" fill="none" stroke={shadowColor} strokeWidth="2" opacity="0.6" />
+
+                {/* 5. Eyes (Grimer Style: Big white circles, small pupils looking up/derpy) */}
+                <g transform="translate(0, -5)">
+                    {/* Left Eye */}
+                    <circle cx="35" cy="45" r={hpPercent < 30 ? "6" : "8"} fill="white" stroke={shadowColor} strokeWidth="2" />
+                    <circle cx="35" cy="45" r="2" fill="black" transform={`translate(${Math.sin(Date.now()/500)}, -2)`} />
+                    
+                    {/* Right Eye */}
+                    <circle cx="65" cy="45" r={hpPercent < 30 ? "6" : "8"} fill="white" stroke={shadowColor} strokeWidth="2" />
+                    <circle cx="65" cy="45" r="2" fill="black" transform={`translate(${Math.cos(Date.now()/500)}, -2)`} />
+                </g>
+
+                {/* 6. Mouth (Wide/Melting) */}
+                {isHit ? (
+                    // Ouch Mouth
+                    <ellipse cx="50" cy="75" rx="10" ry="12" fill="#3f6212" />
+                ) : hpPercent < 30 ? (
+                    // Worried/Melting Mouth
+                    <path d="M 35 80 Q 50 70 65 80" stroke="#3f6212" strokeWidth="3" fill="none" />
                 ) : (
-                    // Smug Smile
-                    <path d="M 35 60 Q 50 75 65 60" stroke="#1e1b4b" strokeWidth="3" fill="none" /> 
+                    // Happy Grimer Grin
+                    <path d="M 30 70 Q 50 95 70 70" fill="#3f6212" opacity="0.8" />
                 )}
                 
-                {/* Highlight */}
-                <ellipse cx="30" cy="35" rx="5" ry="3" fill="white" opacity="0.4" />
-                
-                {/* Sweat drop if low HP */}
+                {/* 7. Sweat/Particles if Low HP */}
                 {hpPercent < 40 && !isHit && (
-                    <path d="M 15 40 Q 10 30 15 20 Q 20 30 15 40" fill="#60a5fa" className="animate-pulse" />
+                    <circle cx="20" cy="30" r="3" fill="#60a5fa" className="animate-ping" style={{ animationDuration: '2s' }} />
                 )}
             </g>
+
             {isHealing && (
                 <g className="animate-float-up">
-                    <text x="20" y="20" fontSize="20" fill="#4ade80" fontWeight="bold">REGEN</text>
+                    <text x="30" y="20" fontSize="16" fill="#4ade80" fontWeight="bold" stroke="black" strokeWidth="0.5">+HP</text>
                 </g>
             )}
         </svg>
@@ -117,9 +155,16 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ settings }) => {
     const previousMinuteRef = useRef<number>(0);
 
     // Roaming Physics State
-    const [position, setPosition] = useState({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
-    const velocityRef = useRef({ vx: 2, vy: 1.5 }); // Pixels per frame
+    // Default start position (centerish)
+    const [position, setPosition] = useState({ x: window.innerWidth / 2 - 100, y: window.innerHeight / 2 - 100 });
+    
+    // Use a ref for velocity so we can mutate it inside the animation frame without re-renders
+    const velocityRef = useRef({ vx: 2.5, vy: 2 }); // Faster base speed for roaming
     const requestRef = useRef<number>();
+    
+    // Use Ref for HP to avoid stale closures in animation loop without resetting the loop
+    const monsterHPRef = useRef(monsterHP);
+    useEffect(() => { monsterHPRef.current = monsterHP; }, [monsterHP]);
 
     // Load State
     useEffect(() => {
@@ -171,20 +216,30 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ settings }) => {
         if (mode !== 'focus' || !isActive) return;
 
         setPosition(prev => {
-            const size = 150 * (0.5 + (monsterHP / 200)); // Approximate size for collision
+            const currentHP = monsterHPRef.current;
+            // Base size 150px, scales from 0.5x to 1.5x based on HP
+            const scale = 0.5 + (currentHP / 100); 
+            const size = 200 * scale; // Approximate hitbox size
+            
             let newX = prev.x + velocityRef.current.vx;
             let newY = prev.y + velocityRef.current.vy;
 
             // Bounce X
-            if (newX <= 0 || newX >= window.innerWidth - size) {
-                velocityRef.current.vx *= -1;
-                newX = Math.max(0, Math.min(newX, window.innerWidth - size));
+            if (newX <= 0) {
+                newX = 0;
+                velocityRef.current.vx = Math.abs(velocityRef.current.vx);
+            } else if (newX >= window.innerWidth - size) {
+                newX = window.innerWidth - size;
+                velocityRef.current.vx = -Math.abs(velocityRef.current.vx);
             }
 
             // Bounce Y
-            if (newY <= 0 || newY >= window.innerHeight - size) {
-                velocityRef.current.vy *= -1;
-                newY = Math.max(0, Math.min(newY, window.innerHeight - size));
+            if (newY <= 0) {
+                newY = 0;
+                velocityRef.current.vy = Math.abs(velocityRef.current.vy);
+            } else if (newY >= window.innerHeight - size) {
+                newY = window.innerHeight - size;
+                velocityRef.current.vy = -Math.abs(velocityRef.current.vy);
             }
 
             return { x: newX, y: newY };
@@ -193,19 +248,34 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ settings }) => {
         requestRef.current = requestAnimationFrame(updatePosition);
     };
 
+    // Start/Stop Animation Loop
     useEffect(() => {
         if (isActive && mode === 'focus') {
-            requestRef.current = requestAnimationFrame(updatePosition);
+            if (!requestRef.current) {
+                requestRef.current = requestAnimationFrame(updatePosition);
+            }
+        } else {
+            if (requestRef.current) {
+                cancelAnimationFrame(requestRef.current);
+                requestRef.current = undefined;
+            }
         }
         return () => {
-            if (requestRef.current) cancelAnimationFrame(requestRef.current);
+            if (requestRef.current) {
+                cancelAnimationFrame(requestRef.current);
+                requestRef.current = undefined;
+            }
         };
-    }, [isActive, mode, monsterHP]); // Re-run if these change
+    }, [isActive, mode]);
 
     // Timer Logic
     useEffect(() => {
         if (!isActive) {
-            setMonsterHP(Math.ceil((time / (modeDurations(settings)[mode] * 60)) * 100));
+            // Update HP based on manual time edits or resets if inactive
+            const total = modeDurations(settings)[mode] * 60;
+            if (total > 0) {
+                setMonsterHP(Math.ceil((time / total) * 100));
+            }
             return;
         }
 
@@ -237,9 +307,11 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ settings }) => {
         return () => clearInterval(interval);
     }, [isActive, mode, sessionCount, settings]);
 
+    // Handle settings/mode changes
     useEffect(() => {
         const total = modeDurations(settings)[mode] * 60;
         setMaxHP(total);
+        if (time > total) setTime(total); // Clamp
         setMonsterHP((time / total) * 100);
         previousMinuteRef.current = Math.ceil(time / 60);
         
@@ -247,8 +319,8 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ settings }) => {
         setPosition({ x: window.innerWidth / 2 - 100, y: window.innerHeight / 2 - 100 });
         // Randomize velocity direction
         velocityRef.current = { 
-            vx: (Math.random() > 0.5 ? 1 : -1) * (1 + Math.random()), 
-            vy: (Math.random() > 0.5 ? 1 : -1) * (1 + Math.random()) 
+            vx: (Math.random() > 0.5 ? 2.5 : -2.5) * (0.8 + Math.random() * 0.4), 
+            vy: (Math.random() > 0.5 ? 2.5 : -2.5) * (0.8 + Math.random() * 0.4) 
         };
 
     }, [mode, settings]);
@@ -256,9 +328,10 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ settings }) => {
     const triggerDamage = () => {
         setIsHit(true);
         playRetroSound('hit');
-        // Shake velocity slightly on hit
-        velocityRef.current.vx *= -1.1; 
-        setTimeout(() => setIsHit(false), 400);
+        // Shake velocity slightly on hit (recoil)
+        velocityRef.current.vx *= -1.2; 
+        velocityRef.current.vy *= -1.2;
+        setTimeout(() => setIsHit(false), 600);
     };
 
     const handleNextMode = (currentMode: TimerMode, currentCount: number) => {
@@ -269,10 +342,10 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ settings }) => {
             playRetroSound('explosion');
             if (typeof confetti === 'function') {
                 confetti({
-                    particleCount: 150,
-                    spread: 100,
+                    particleCount: 200,
+                    spread: 120,
                     origin: { x: position.x / window.innerWidth, y: position.y / window.innerHeight },
-                    colors: ['#ef4444', '#f59e0b', '#fbbf24']
+                    colors: ['#84cc16', '#3f6212', '#facc15'] // Slime colors
                 });
             }
         }
@@ -309,7 +382,7 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ settings }) => {
     // Calculated size for the monster: 
     // Starts big (1.5x) when HP is high, shrinks to 0.5x when HP is low.
     const monsterScale = 0.5 + (monsterHP / 100); 
-    const baseSize = 150; // px
+    const baseSize = 200; // px (Base drawing box)
 
     return (
         <>
@@ -327,8 +400,24 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ settings }) => {
                     90% { transform: translate(1px, 2px) rotate(0deg); }
                     100% { transform: translate(1px, -2px) rotate(-1deg); }
                 }
+                @keyframes ooze {
+                    0%, 100% { transform: scale(1, 1) translate(0, 0); }
+                    25% { transform: scale(1.05, 0.95) translate(0, 2px); }
+                    50% { transform: scale(0.95, 1.05) translate(0, -2px); }
+                    75% { transform: scale(1.02, 0.98) translate(0, 1px); }
+                }
+                @keyframes wave-left {
+                    0%, 100% { d: path("M 20 60 Q 5 50 10 30 Q 20 10 35 40"); }
+                    50% { d: path("M 20 60 Q 0 40 5 20 Q 15 5 35 40"); }
+                }
+                @keyframes wave-right {
+                    0%, 100% { d: path("M 80 60 Q 105 50 100 20 Q 85 10 70 40"); }
+                    50% { d: path("M 80 60 Q 110 40 105 10 Q 90 5 70 40"); }
+                }
                 .animate-shake { animation: shake 0.5s; }
-                .animate-bounce-slow { animation: bounce 3s infinite; }
+                .animate-ooze { animation: ooze 3s ease-in-out infinite; }
+                .animate-wave-left { animation: wave-left 4s ease-in-out infinite; }
+                .animate-wave-right { animation: wave-right 5s ease-in-out infinite; }
                 .animate-float-up { animation: floatUp 1s ease-out infinite; opacity: 0; }
                 @keyframes floatUp {
                     0% { transform: translateY(0); opacity: 1; }
@@ -340,7 +429,7 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ settings }) => {
             {/* --- ROAMING BOSS (Only Visible in Focus Mode) --- */}
             {mode === 'focus' && (
                 <div 
-                    className="fixed z-40 pointer-events-none transition-transform duration-75 ease-linear will-change-transform"
+                    className="fixed z-[60] pointer-events-none transition-transform duration-75 ease-linear will-change-transform"
                     style={{
                         left: 0,
                         top: 0,
@@ -350,10 +439,13 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ settings }) => {
                     }}
                 >
                     {/* Boss HP Bar Floating Above */}
-                    <div className="absolute -top-6 left-0 w-full h-3 bg-gray-900 rounded-full border border-white/30 overflow-hidden opacity-80">
+                    <div className="absolute -top-6 left-[10%] w-[80%] h-3 bg-gray-900 rounded-full border-2 border-green-900/50 overflow-hidden opacity-90 shadow-lg">
                         <div 
-                            className="h-full bg-red-500 transition-all duration-300" 
-                            style={{ width: `${monsterHP}%` }}
+                            className="h-full transition-all duration-300 ease-out" 
+                            style={{ 
+                                width: `${monsterHP}%`,
+                                backgroundColor: monsterHP > 50 ? '#84cc16' : '#ef4444'
+                            }}
                         />
                     </div>
                     
@@ -362,17 +454,25 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ settings }) => {
             )}
 
             {/* --- HUD CONTROL PANEL (Bottom Right) --- */}
-            <div className="fixed bottom-4 right-4 z-50 animate-slideIn">
+            <div className="fixed bottom-4 right-4 z-[70] animate-slideIn">
                 <div className={`
                     flex items-center gap-4 p-4 rounded-xl border-4 shadow-2xl transition-colors duration-300
                     ${mode === 'focus' 
-                        ? 'bg-indigo-950 border-indigo-500 shadow-indigo-900/50' 
+                        ? 'bg-gray-900 border-green-600 shadow-green-900/50' 
                         : 'bg-emerald-900 border-emerald-500 shadow-emerald-900/50'}
                 `}>
                     {/* Mini Avatar in HUD (Campfire during break, or Mini Boss Icon) */}
-                    <div className="relative w-16 h-16 flex-shrink-0 flex items-center justify-center bg-black/20 rounded-lg">
+                    <div className="relative w-16 h-16 flex-shrink-0 flex items-center justify-center bg-black/40 rounded-lg border border-white/10">
                         {mode === 'focus' ? (
-                            <i className="fas fa-skull text-3xl text-red-400 animate-pulse"></i>
+                            <div className="animate-ooze transform scale-75">
+                                 {/* Simple CSS shape for mini-icon */}
+                                <div className="w-10 h-8 bg-lime-500 rounded-full relative">
+                                    <div className="absolute -top-3 left-0 w-3 h-6 bg-lime-500 rounded-full"></div>
+                                    <div className="absolute -top-3 right-0 w-3 h-6 bg-lime-500 rounded-full"></div>
+                                    <div className="absolute top-2 left-2 w-2 h-2 bg-white rounded-full"><div className="w-1 h-1 bg-black rounded-full ml-0.5 mt-0.5"></div></div>
+                                    <div className="absolute top-2 right-2 w-2 h-2 bg-white rounded-full"><div className="w-1 h-1 bg-black rounded-full ml-0.5 mt-0.5"></div></div>
+                                </div>
+                            </div>
                         ) : (
                             <Campfire />
                         )}
@@ -381,8 +481,8 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ settings }) => {
                     {/* Controls */}
                     <div className="flex flex-col min-w-[120px]">
                         <div className="flex justify-between items-end mb-1">
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-white/70">
-                                {mode === 'focus' ? `Boss Battle` : 'Resting at Camp'}
+                            <span className={`text-[10px] font-bold uppercase tracking-widest ${mode === 'focus' ? 'text-lime-400' : 'text-emerald-200'}`}>
+                                {mode === 'focus' ? `Slime Battle` : 'Resting at Camp'}
                             </span>
                         </div>
 
