@@ -289,7 +289,8 @@ export const testAppsScriptConnection = async (url: string): Promise<boolean> =>
         const fetchUrl = `${url}${separator}action=check&t=${Date.now()}`;
         const response = await fetch(fetchUrl, {
             method: 'GET',
-            mode: 'cors'
+            mode: 'cors',
+            credentials: 'omit' // Fix for "Failed to fetch" on some environments
         });
         if (!response.ok) return false;
         
@@ -317,6 +318,7 @@ export const syncDataToAppsScript = async (url: string, tasks: Task[], goals: Go
         await fetch(url, {
             method: 'POST',
             mode: 'cors',
+            credentials: 'omit', // Fix for "Failed to fetch"
             body: JSON.stringify({ 
                 action: 'sync_up',
                 rows: taskRows,
@@ -337,7 +339,8 @@ export const syncDataFromAppsScript = async (url: string): Promise<{ tasks: Task
 
         const response = await fetch(fetchUrl, {
             method: 'GET',
-            mode: 'cors'
+            mode: 'cors',
+            credentials: 'omit' // Fix for "Failed to fetch"
         }); 
         
         if (!response.ok) {

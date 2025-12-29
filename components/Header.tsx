@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Task, GamificationData, Settings, Status, ConnectionHealth, SettingsTab, Goal } from '../types';
 import { COLUMN_STATUSES } from '../constants';
@@ -9,6 +8,7 @@ import { getAccurateCurrentDate, initializeTimeSync } from '../services/timeServ
 import { LiquidGauge } from './LiquidGauge';
 import { calculateProgress } from '../services/gamificationService';
 import { PomodoroTimer } from './PomodoroTimer';
+import { getLegibleTextColor } from '../utils/colorUtils';
 
 interface GoogleAuthState {
     gapiLoaded: boolean;
@@ -280,6 +280,7 @@ export const Header: React.FC<HeaderProps> = ({
     // Derived State (Moved Up to fix ReferenceError)
     const isMenuOpen = isMenuHovered || isMenuLocked;
     const isSpaceVisualsActive = currentTheme === 'space' || isRocketFlying;
+    const isDarkMode = currentTheme === 'dark' || isSpaceVisualsActive;
     
     const isSheetConnected = connectionHealth.sheet.status === 'connected';
     
@@ -367,6 +368,15 @@ export const Header: React.FC<HeaderProps> = ({
         onUpdateSettings({ showPomodoroTimer: !settings.showPomodoroTimer });
     };
 
+    // Calculate Legible Text Colors
+    const pillTextColor = (activeFocusGoal && !isSpaceVisualsActive) 
+        ? getLegibleTextColor(activeFocusGoal.color, isDarkMode) 
+        : undefined;
+
+    const titleTextColor = activeFocusGoal 
+        ? getLegibleTextColor(activeFocusGoal.color, isSpaceVisualsActive || isDarkMode) 
+        : undefined;
+
     return (
         <header 
             className={`
@@ -427,22 +437,22 @@ export const Header: React.FC<HeaderProps> = ({
                                     : ''
                             }`}
                             style={activeFocusGoal ? { 
-                                backgroundColor: isSpaceVisualsActive ? 'rgba(255,255,255,0.1)' : activeFocusGoal.color + '15', 
+                                backgroundColor: isSpaceVisualsActive ? 'rgba(255,255,255,0.1)' : activeFocusGoal.color + '25', // Increased opacity slightly for visual tint
                                 borderColor: activeFocusGoal.color + '40'
                             } : {}}
                             title={activeFocusGoal ? "Switch Focus Goal" : "Activate Focus Mode"}
                         >
                             <i 
                                 className={`fas fa-crosshairs text-xs ${activeFocusGoal ? 'animate-pulse' : 'text-gray-400 dark:text-gray-500'}`} 
-                                style={{ color: activeFocusGoal ? activeFocusGoal.color : undefined }}
+                                style={{ color: activeFocusGoal ? (pillTextColor || activeFocusGoal.color) : undefined }}
                             ></i>
                             <span 
                                 className={`text-xs font-bold truncate max-w-[120px] hidden sm:block ${isSpaceVisualsActive ? 'text-white' : ''}`}
-                                style={{ color: (activeFocusGoal && !isSpaceVisualsActive) ? activeFocusGoal.color : undefined }}
+                                style={{ color: pillTextColor }}
                             >
                                 {activeFocusGoal ? activeFocusGoal.title : 'Focus Mode'}
                             </span>
-                            <i className={`fas fa-chevron-down text-[10px] ml-1 transition-transform duration-200 ${isFocusMenuOpen ? 'rotate-180' : ''} ${isSpaceVisualsActive ? 'text-white/70' : 'text-gray-500'}`}></i>
+                            <i className={`fas fa-chevron-down text-[10px] ml-1 transition-transform duration-200 ${isFocusMenuOpen ? 'rotate-180' : ''} ${isSpaceVisualsActive ? 'text-white/70' : 'text-gray-500'}`} style={{ color: pillTextColor }}></i>
                         </button>
                         
                         {activeFocusGoal && (
@@ -556,7 +566,7 @@ export const Header: React.FC<HeaderProps> = ({
                         {activeFocusGoal ? (
                             <h1 className={`text-xl font-bold tracking-wider hidden sm:block flex items-center gap-2 ${isSpaceVisualsActive ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
                                 <i className="fas fa-crosshairs text-red-500 animate-pulse"></i>
-                                FOCUS: <span style={{ color: activeFocusGoal.color }}>{activeFocusGoal.title}</span>
+                                FOCUS: <span style={{ color: titleTextColor }}>{activeFocusGoal.title}</span>
                                 <button 
                                     onClick={onExitFocus} 
                                     className="ml-3 text-xs bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded text-gray-600 dark:text-gray-300 hover:bg-red-100 hover:text-red-500 transition-colors"
