@@ -74,6 +74,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
 
     const [draggedColumn, setDraggedColumn] = useState<{id: Status, offset: {x: number, y: number}} | null>(null);
     const [lineCoordinates, setLineCoordinates] = useState<LineCoordinate[]>([]);
+    const [boardHeight, setBoardHeight] = useState(1000); // Dynamic board height state
     
     const [layoutTick, setLayoutTick] = useState(0); 
     
@@ -90,14 +91,35 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
         let lastCalcTime = 0;
         const THROTTLE_MS = 32; 
         
-        const calculateLines = () => {
+        const calculateLinesAndHeight = () => {
             const now = performance.now();
             if (now - lastCalcTime < THROTTLE_MS) {
-                animationFrameId = requestAnimationFrame(calculateLines);
+                animationFrameId = requestAnimationFrame(calculateLinesAndHeight);
                 return;
             }
             lastCalcTime = now;
 
+            // --- 1. Calculate Board Height ---
+            if (!isFitToScreen && focusMode === 'None' && boardRef.current) {
+                let maxBottom = 0;
+                // Iterate through direct children (columns) to find max bottom
+                const children = boardRef.current.children;
+                // Skip the first child if it's the SVG dependency lines container
+                for (let i = 0; i < children.length; i++) {
+                    const child = children[i] as HTMLElement;
+                    // Ignore the dependency SVG layer which might be full height/width
+                    if (child.tagName === 'svg') continue;
+                    
+                    // We use offsetTop + offsetHeight because they are absolutely positioned relative to boardRef
+                    const bottom = child.offsetTop + child.offsetHeight;
+                    if (bottom > maxBottom) maxBottom = bottom;
+                }
+                
+                const newHeight = Math.max(maxBottom + 200, mainContainerRef.current?.clientHeight || 800);
+                setBoardHeight(prev => Math.abs(prev - newHeight) > 50 ? newHeight : prev);
+            }
+
+            // --- 2. Calculate Lines ---
             if (focusMode !== 'None' || isFitToScreen) {
                 setLineCoordinates([]);
                 return;
@@ -168,10 +190,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
         
         const onScrollOrResize = () => {
              if (animationFrameId) cancelAnimationFrame(animationFrameId);
-             animationFrameId = requestAnimationFrame(calculateLines);
+             animationFrameId = requestAnimationFrame(calculateLinesAndHeight);
         };
 
-        calculateLines();
+        calculateLinesAndHeight();
         
         const container = mainContainerRef.current;
         container?.addEventListener('scroll', onScrollOrResize, { passive: true });
@@ -413,7 +435,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                         transformOrigin: '0 0',
                         width: `${boardContentWidth}px`, 
                         minWidth: zoomLevel < 1 ? `${100 / zoomLevel}%` : '100%',
-                        height: zoomLevel < 1 ? `${100 / zoomLevel}%` : '100%',
+                        height: zoomLevel < 1 ? `${Math.max(boardHeight, window.innerHeight)}px` : `${boardHeight}px`,
                     }}
                 >
                     <DependencyLines lines={lineCoordinates} />
@@ -482,7 +504,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
             )}
             
             {/* Main Board Content */}
-            <div className="flex-grow w-full relative overflow-hidden">
+            <div className="flex-grow w-full relative overflow-auto">
                 {renderBoardContent()}
             </div>
         </div>
