@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { KanbanBoard } from './components/KanbanBoard';
 import { Header } from './components/Header';
@@ -299,6 +298,10 @@ const App: React.FC = () => {
                 const savedMenuLock = await storage.get('isMenuLocked');
                 if (savedMenuLock === 'true') setIsMenuLocked(true);
 
+                // NEW: Load Persisted Focus Mode
+                const savedFocusedGoalId = await storage.get('focusedGoalId');
+                if (savedFocusedGoalId) setFocusedGoalId(savedFocusedGoalId);
+
                 const savedSettings = await storage.get('taskMasterSettings_v2'); 
                 const cookieUrl = getCookie('tm_script_url');
 
@@ -352,6 +355,17 @@ const App: React.FC = () => {
         storage.set('isFitToScreen', String(isFitToScreen));
         storage.set('showTimeline', String(showTimeline));
     }, [isFitToScreen, showTimeline]);
+
+    // NEW: Persist Focus Mode
+    useEffect(() => {
+        if (settingsLoaded) {
+            if (focusedGoalId) {
+                storage.set('focusedGoalId', focusedGoalId);
+            } else {
+                storage.remove('focusedGoalId');
+            }
+        }
+    }, [focusedGoalId, settingsLoaded]);
 
     useEffect(() => {
         if (settingsLoaded) {
