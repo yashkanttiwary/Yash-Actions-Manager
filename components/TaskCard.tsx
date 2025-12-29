@@ -258,6 +258,11 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
 
                     {/* Right: Meta + Actions */}
                     <div className="flex items-center gap-2 flex-shrink-0">
+                        {/* Pin Icon Indicator (No Button) */}
+                        {task.isPinned && (
+                            <i className="fas fa-thumbtack text-[10px] text-indigo-500 transform rotate-45" title="Pinned to Top 5"></i>
+                        )}
+
                         {/* Priority Badge */}
                         <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded flex-shrink-0 uppercase ${priorityClasses.bg} ${priorityClasses.text} border ${priorityClasses.text.replace('text-', 'border-')} border-opacity-30`} title={`Priority: ${task.priority}`}>
                             {task.priority}
@@ -338,6 +343,11 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                     </h3>
                     
                     <div className="flex items-center gap-1 flex-shrink-0 relative z-20">
+                        {/* Pin Indicator */}
+                        {task.isPinned && (
+                            <i className="fas fa-thumbtack text-xs text-indigo-500 transform rotate-45 mr-1" title="Pinned"></i>
+                        )}
+
                         {/* Priority First */}
                         <span className={`text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap ${priorityClasses.bg} ${priorityClasses.text}`}>
                             {task.priority}

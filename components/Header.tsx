@@ -417,28 +417,35 @@ export const Header: React.FC<HeaderProps> = ({
                         </div>
                     </div>
 
-                    {/* NEW: Interactive Focus Pill */}
-                    {activeFocusGoal && (
-                        <div className="relative flex items-center gap-2 ml-2 pl-4 border-l border-gray-300 dark:border-gray-700 h-8 animate-fadeIn" ref={focusDropdownRef}>
-                            <button
-                                onClick={() => setIsFocusMenuOpen(!isFocusMenuOpen)}
-                                className="flex items-center gap-2 px-3 py-1 rounded-full border shadow-sm backdrop-blur-sm transition-all group hover:brightness-110 active:scale-95 cursor-pointer"
-                                style={{ 
-                                    backgroundColor: isSpaceVisualsActive ? 'rgba(255,255,255,0.1)' : activeFocusGoal.color + '15', 
-                                    borderColor: activeFocusGoal.color + '40'
-                                }}
-                                title="Click to switch focus"
+                    {/* NEW: Interactive Focus Pill (ALWAYS VISIBLE) */}
+                    <div className="relative flex items-center gap-2 ml-2 pl-4 border-l border-gray-300 dark:border-gray-700 h-8 animate-fadeIn" ref={focusDropdownRef}>
+                        <button
+                            onClick={() => setIsFocusMenuOpen(!isFocusMenuOpen)}
+                            className={`flex items-center gap-2 px-3 py-1 rounded-full border shadow-sm backdrop-blur-sm transition-all group hover:brightness-110 active:scale-95 cursor-pointer ${
+                                !activeFocusGoal 
+                                    ? (isSpaceVisualsActive ? 'bg-white/10 border-white/20 text-white' : 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700') 
+                                    : ''
+                            }`}
+                            style={activeFocusGoal ? { 
+                                backgroundColor: isSpaceVisualsActive ? 'rgba(255,255,255,0.1)' : activeFocusGoal.color + '15', 
+                                borderColor: activeFocusGoal.color + '40'
+                            } : {}}
+                            title={activeFocusGoal ? "Switch Focus Goal" : "Activate Focus Mode"}
+                        >
+                            <i 
+                                className={`fas fa-crosshairs text-xs ${activeFocusGoal ? 'animate-pulse' : 'text-gray-400 dark:text-gray-500'}`} 
+                                style={{ color: activeFocusGoal ? activeFocusGoal.color : undefined }}
+                            ></i>
+                            <span 
+                                className={`text-xs font-bold truncate max-w-[120px] hidden sm:block ${isSpaceVisualsActive ? 'text-white' : ''}`}
+                                style={{ color: (activeFocusGoal && !isSpaceVisualsActive) ? activeFocusGoal.color : undefined }}
                             >
-                                <i className="fas fa-crosshairs text-xs animate-pulse" style={{ color: activeFocusGoal.color }}></i>
-                                <span 
-                                    className={`text-xs font-bold truncate max-w-[120px] hidden sm:block ${isSpaceVisualsActive ? 'text-white' : ''}`}
-                                    style={{ color: isSpaceVisualsActive ? undefined : activeFocusGoal.color }}
-                                >
-                                    {activeFocusGoal.title}
-                                </span>
-                                <i className={`fas fa-chevron-down text-[10px] ml-1 transition-transform duration-200 ${isFocusMenuOpen ? 'rotate-180' : ''} ${isSpaceVisualsActive ? 'text-white/70' : 'text-gray-500'}`}></i>
-                            </button>
-                            
+                                {activeFocusGoal ? activeFocusGoal.title : 'Focus Mode'}
+                            </span>
+                            <i className={`fas fa-chevron-down text-[10px] ml-1 transition-transform duration-200 ${isFocusMenuOpen ? 'rotate-180' : ''} ${isSpaceVisualsActive ? 'text-white/70' : 'text-gray-500'}`}></i>
+                        </button>
+                        
+                        {activeFocusGoal && (
                             <button
                                 onClick={(e) => { e.stopPropagation(); onExitFocus?.(); }}
                                 className={`w-5 h-5 flex items-center justify-center rounded-full hover:bg-black/10 dark:hover:bg-white/20 transition-colors ml-1 ${isSpaceVisualsActive ? 'text-white/70 hover:text-white' : 'text-gray-400 hover:text-red-500'}`}
@@ -446,51 +453,57 @@ export const Header: React.FC<HeaderProps> = ({
                             >
                                 <i className="fas fa-times text-xs"></i>
                             </button>
+                        )}
 
-                            {/* Dropdown Menu */}
-                            {isFocusMenuOpen && (
-                                <div className={`absolute top-full left-4 mt-2 w-60 rounded-xl shadow-2xl border backdrop-blur-xl z-[100] overflow-hidden ${
-                                    isSpaceVisualsActive 
-                                        ? 'bg-black/80 border-white/20 text-white' 
-                                        : 'bg-white/95 dark:bg-gray-900/95 border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100'
-                                }`}>
-                                    <div className={`p-2 text-[10px] font-bold uppercase tracking-widest opacity-60 border-b mb-1 ${isSpaceVisualsActive ? 'border-white/10' : 'border-gray-200 dark:border-gray-700'}`}>Switch Focus Goal</div>
-                                    <div className="max-h-[300px] overflow-y-auto custom-scrollbar p-1 space-y-1">
-                                        {/* Unassigned Option */}
+                        {/* Dropdown Menu */}
+                        {isFocusMenuOpen && (
+                            <div className={`absolute top-full left-4 mt-2 w-60 rounded-xl shadow-2xl border backdrop-blur-xl z-[100] overflow-hidden ${
+                                isSpaceVisualsActive 
+                                    ? 'bg-black/80 border-white/20 text-white' 
+                                    : 'bg-white/95 dark:bg-gray-900/95 border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100'
+                            }`}>
+                                <div className={`p-2 text-[10px] font-bold uppercase tracking-widest opacity-60 border-b mb-1 ${isSpaceVisualsActive ? 'border-white/10' : 'border-gray-200 dark:border-gray-700'}`}>Switch Focus Goal</div>
+                                <div className="max-h-[300px] overflow-y-auto custom-scrollbar p-1 space-y-1">
+                                    {/* Unassigned Option */}
+                                    <button
+                                        onClick={() => { onFocusGoal('unassigned'); setIsFocusMenuOpen(false); }}
+                                        className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-2 transition-colors ${
+                                            activeFocusGoal?.id === 'unassigned' 
+                                                ? (isSpaceVisualsActive ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-700') 
+                                                : 'hover:bg-black/5 dark:hover:bg-white/5'
+                                        }`}
+                                    >
+                                        <div className="w-2 h-2 rounded-full bg-slate-500 shadow-sm"></div>
+                                        <span className="text-xs font-semibold truncate flex-1">Unassigned Tasks</span>
+                                        {activeFocusGoal?.id === 'unassigned' && <i className="fas fa-check text-xs opacity-80"></i>}
+                                    </button>
+
+                                    {/* Goals List */}
+                                    {goals.map(goal => (
                                         <button
-                                            onClick={() => { onFocusGoal('unassigned'); setIsFocusMenuOpen(false); }}
+                                            key={goal.id}
+                                            onClick={() => { onFocusGoal(goal.id); setIsFocusMenuOpen(false); }}
                                             className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-2 transition-colors ${
-                                                activeFocusGoal.id === 'unassigned' 
+                                                activeFocusGoal?.id === goal.id 
                                                     ? (isSpaceVisualsActive ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-700') 
                                                     : 'hover:bg-black/5 dark:hover:bg-white/5'
                                             }`}
                                         >
-                                            <div className="w-2 h-2 rounded-full bg-slate-500 shadow-sm"></div>
-                                            <span className="text-xs font-semibold truncate flex-1">Unassigned Tasks</span>
-                                            {activeFocusGoal.id === 'unassigned' && <i className="fas fa-check text-xs opacity-80"></i>}
+                                            <div className="w-2 h-2 rounded-full shadow-sm" style={{ backgroundColor: goal.color }}></div>
+                                            <span className="text-xs font-semibold truncate flex-1">{goal.title}</span>
+                                            {activeFocusGoal?.id === goal.id && <i className="fas fa-check text-xs opacity-80"></i>}
                                         </button>
-
-                                        {/* Goals List */}
-                                        {goals.map(goal => (
-                                            <button
-                                                key={goal.id}
-                                                onClick={() => { onFocusGoal(goal.id); setIsFocusMenuOpen(false); }}
-                                                className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-2 transition-colors ${
-                                                    activeFocusGoal.id === goal.id 
-                                                        ? (isSpaceVisualsActive ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-700') 
-                                                        : 'hover:bg-black/5 dark:hover:bg-white/5'
-                                                }`}
-                                            >
-                                                <div className="w-2 h-2 rounded-full shadow-sm" style={{ backgroundColor: goal.color }}></div>
-                                                <span className="text-xs font-semibold truncate flex-1">{goal.title}</span>
-                                                {activeFocusGoal.id === goal.id && <i className="fas fa-check text-xs opacity-80"></i>}
-                                            </button>
-                                        ))}
-                                    </div>
+                                    ))}
+                                    
+                                    {goals.length === 0 && (
+                                        <div className="p-3 text-center text-xs opacity-50 italic">
+                                            No goals created yet.
+                                        </div>
+                                    )}
                                 </div>
-                            )}
-                        </div>
-                    )}
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {/* Center: Pull Down Indicator OR Focus Indicator */}

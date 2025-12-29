@@ -149,6 +149,7 @@ const App: React.FC = () => {
         addGoal, // New Action
         updateGoal, // New Action
         deleteGoal, // New Action
+        toggleTaskPin, // Top 5 Focus
         getTasksByStatus,
         updateColumnLayout,
         resetColumnLayouts,
@@ -167,6 +168,9 @@ const App: React.FC = () => {
     const [aiError, setAiError] = useState<string | null>(null);
     const [aiSummary, setAiSummary] = useState<string | null>(null);
     
+    // Notification State
+    const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
     const [showIntegrationsModal, setShowIntegrationsModal] = useState(false);
     const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>('general');
     
@@ -232,6 +236,14 @@ const App: React.FC = () => {
         // FIX IMP-001: Persist lock state
         storage.set('isMenuLocked', String(isMenuLocked));
     }, [isMenuLocked]);
+
+    // Handle Notification Timeout
+    useEffect(() => {
+        if (notification) {
+            const timer = setTimeout(() => setNotification(null), 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [notification]);
 
     useEffect(() => {
         const initialize = async () => {
@@ -474,6 +486,7 @@ const App: React.FC = () => {
             blockers: [],
             currentSessionStartTime: null,
             goalId: focusedGoalId && focusedGoalId !== 'unassigned' ? focusedGoalId : undefined, // Pre-fill goal if focused
+            isPinned: false
         });
     }, [focusedGoalId]);
 
@@ -605,6 +618,13 @@ const App: React.FC = () => {
             // Optional: Show toast error here
         }
     }, [tasks, updateTask, settings.geminiApiKey]);
+
+    const handleTogglePin = useCallback((taskId: string) => {
+        const result = toggleTaskPin(taskId);
+        if (!result.success && result.message) {
+            setNotification({ message: result.message, type: 'error' });
+        }
+    }, [toggleTaskPin]);
 
     // --- REPLACED: Giant useEffect with Custom Hook ---
     useKeyboardShortcuts({
@@ -1002,6 +1022,16 @@ const App: React.FC = () => {
                     paddingTop: (isMenuLocked || isMenuHovered) ? '280px' : (activeFocusGoal ? '6rem' : '5rem')
                 }}
             >
+                {/* Global Notification Toast */}
+                {notification && (
+                    <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top-2 fade-in duration-300">
+                        <div className={`px-4 py-2 rounded-lg shadow-xl text-sm font-bold flex items-center gap-2 ${notification.type === 'error' ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}`}>
+                            <i className={`fas ${notification.type === 'error' ? 'fa-exclamation-circle' : 'fa-check-circle'}`}></i>
+                            {notification.message}
+                        </div>
+                    </div>
+                )}
+
                 {!isSheetConfigured ? (
                     <ConnectSheetPlaceholder onConnect={() => handleOpenSettings('sheets')} />
                 ) : (
@@ -1050,6 +1080,7 @@ const App: React.FC = () => {
                                             zoomLevel={zoomLevel}
                                             isSpaceMode={isSpaceModeActive} 
                                             goals={goals} 
+                                            onTogglePin={handleTogglePin} // Connect Pin Toggle
                                         />
                                     </div>
                                 )}
@@ -1184,6 +1215,19 @@ const App: React.FC = () => {
                     >
                         <i className="fas fa-edit text-blue-500 w-4"></i> Edit Task
                     </button>
+                    
+                    {/* --- NEW PIN OPTION --- */}
+                    <button
+                        onClick={() => {
+                            handleTogglePin(contextMenu.task.id);
+                            setContextMenu(null);
+                        }}
+                        className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                    >
+                        <i className={`fas fa-thumbtack w-4 ${contextMenu.task.isPinned ? 'text-indigo-500' : 'text-gray-400'}`}></i> 
+                        {contextMenu.task.isPinned ? 'Unpin Task' : 'Pin to Top 5'}
+                    </button>
+
                     <button
                         onClick={() => handleDeleteFromContextMenu(contextMenu.task)}
                         className="w-full text-left px-3 py-1.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center gap-2 mb-1"

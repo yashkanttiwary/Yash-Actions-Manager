@@ -97,6 +97,7 @@ export const useTaskManager = (enableLoading: boolean = true) => {
                                 blockers: blockers,
                                 currentSessionStartTime: task.currentSessionStartTime || null,
                                 goalId: task.goalId || undefined, // New Field
+                                isPinned: task.isPinned || false, // Default to false
                             };
                         });
                         loadedTasks = parsedTasks;
@@ -181,6 +182,7 @@ export const useTaskManager = (enableLoading: boolean = true) => {
             dependencies: [],
             blockers: [],
             currentSessionStartTime: null,
+            isPinned: false,
             ...taskData,
         };
         setTasks(prevTasks => [...prevTasks, newTask]);
@@ -232,6 +234,33 @@ export const useTaskManager = (enableLoading: boolean = true) => {
         });
     }, []);
     
+    // --- TOP 5 FOCUS LOGIC ---
+    const toggleTaskPin = useCallback((taskId: string) => {
+        let result = { success: true, message: '' };
+        
+        setTasks(prevTasks => {
+            const task = prevTasks.find(t => t.id === taskId);
+            if (!task) return prevTasks;
+
+            // If we are pinning (currently false), check limit
+            if (!task.isPinned) {
+                const pinnedCount = prevTasks.filter(t => t.isPinned).length;
+                if (pinnedCount >= 5) {
+                    result = { success: false, message: 'Top 5 Focus is full. Unpin one task first.' };
+                    return prevTasks;
+                }
+            }
+
+            // Toggle pin state
+            const updatedTasks = prevTasks.map(t => 
+                t.id === taskId ? { ...t, isPinned: !t.isPinned, lastModified: new Date().toISOString() } : t
+            );
+            return updatedTasks;
+        });
+        
+        return result;
+    }, []);
+
     // --- GOAL OPERATIONS ---
     const addGoal = useCallback((goalData: Omit<Goal, 'id' | 'createdDate'>) => {
         const now = new Date().toISOString();
@@ -264,6 +293,7 @@ export const useTaskManager = (enableLoading: boolean = true) => {
             dependencies: task.dependencies || [],
             blockers: task.blockers || [],
             currentSessionStartTime: task.currentSessionStartTime || null,
+            isPinned: task.isPinned || false, // Ensure isPinned is carried over
         }));
         setTasks(tasksWithDefaults);
         setGoals(newGoals);
@@ -284,6 +314,7 @@ export const useTaskManager = (enableLoading: boolean = true) => {
             dependencies: task.dependencies || [],
             blockers: task.blockers || [],
             currentSessionStartTime: task.currentSessionStartTime || null,
+            isPinned: task.isPinned || false,
         }));
         setTasks(tasksWithDefaults);
     }, []);
@@ -310,6 +341,7 @@ export const useTaskManager = (enableLoading: boolean = true) => {
         updateTask,
         deleteTask,
         moveTask,
+        toggleTaskPin, // Exported logic
         getTasksByStatus,
         setAllTasks,
         setAllData, // New unified setter

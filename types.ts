@@ -55,6 +55,8 @@ export interface Task {
   currentSessionStartTime?: number | null; 
   // Strategic Goal Architecture
   goalId?: string;
+  // Top 5 Focus Feature
+  isPinned?: boolean;
 }
 
 export interface ColumnLayout {
