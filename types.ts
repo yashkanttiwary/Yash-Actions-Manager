@@ -9,6 +9,7 @@ export interface Goal {
     id: string;
     title: string;
     color: string; // Hex code
+    textColor?: string; // New: Custom text color
     description?: string;
     createdDate: string;
     progress?: number; // Calculated field (0-100)

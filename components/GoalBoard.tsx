@@ -32,6 +32,7 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
     const [isCreating, setIsCreating] = useState(false);
     const [newGoalTitle, setNewGoalTitle] = useState('');
     const [newGoalColor, setNewGoalColor] = useState('#6366f1');
+    const [newGoalTextColor, setNewGoalTextColor] = useState<string | undefined>(undefined); // Undefined means auto-contrast
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 
     const handleCreateSubmit = (e: React.FormEvent) => {
@@ -40,9 +41,12 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
             onAddGoal({
                 title: newGoalTitle.trim(),
                 color: newGoalColor,
+                textColor: newGoalTextColor, // Pass the custom text color
                 description: '',
             });
             setNewGoalTitle('');
+            setNewGoalColor('#6366f1');
+            setNewGoalTextColor(undefined);
             setIsCreating(false);
         }
     };
@@ -83,6 +87,17 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
     const unassignedTasks = tasks.filter(t => !t.goalId || !goals.find(g => g.id === t.goalId));
 
     const PRESET_COLORS = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#6366f1', '#8b5cf6', '#ec4899'];
+
+    // Helper to calculate contrast for preview if undefined
+    const getPreviewTextColor = (bg: string) => {
+        if (newGoalTextColor) return newGoalTextColor;
+        // Simple auto-contrast logic
+        const r = parseInt(bg.substring(1, 3), 16);
+        const g = parseInt(bg.substring(3, 5), 16);
+        const b = parseInt(bg.substring(5, 7), 16);
+        const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+        return yiq >= 128 ? '#000000' : '#ffffff';
+    };
 
     return (
         <>
@@ -184,44 +199,79 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
                             <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-lg border border-indigo-200 dark:border-indigo-800 animate-fadeIn">
                                 <h3 className="font-bold mb-3 text-gray-800 dark:text-white">New Goal Strategy</h3>
                                 <form onSubmit={handleCreateSubmit}>
-                                    <input
-                                        autoFocus
-                                        type="text"
-                                        value={newGoalTitle}
-                                        onChange={e => setNewGoalTitle(e.target.value)}
-                                        placeholder="Goal Title (e.g. Launch Product)"
-                                        className="w-full p-2 mb-3 bg-gray-100 dark:bg-gray-700 rounded border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
-                                    />
+                                    <div className="mb-3">
+                                        <input
+                                            autoFocus
+                                            type="text"
+                                            value={newGoalTitle}
+                                            onChange={e => setNewGoalTitle(e.target.value)}
+                                            placeholder="Goal Title (e.g. Launch Product)"
+                                            className="w-full p-2 bg-gray-100 dark:bg-gray-700 rounded border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
+                                        />
+                                    </div>
                                     
-                                    <div className="mb-2">
-                                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase">Color Theme</label>
-                                        <div className="flex flex-wrap gap-2 items-center">
-                                            {PRESET_COLORS.map(c => (
-                                                <button
-                                                    key={c}
-                                                    type="button"
-                                                    onClick={() => setNewGoalColor(c)}
-                                                    className={`w-6 h-6 rounded-full border-2 transition-all duration-200 ${newGoalColor === c ? 'border-gray-600 dark:border-white scale-110 ring-1 ring-gray-400 ring-offset-1 dark:ring-offset-gray-800' : 'border-transparent hover:scale-105'}`}
-                                                    style={{ backgroundColor: c }}
-                                                    title={c}
-                                                />
-                                            ))}
-                                            
-                                            {/* Custom Color Picker */}
-                                            <div className="relative group ml-1">
-                                                <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center cursor-pointer transition-all ${!PRESET_COLORS.includes(newGoalColor) ? 'border-gray-600 dark:border-white ring-1 ring-gray-400 ring-offset-1 dark:ring-offset-gray-800' : 'border-gray-200 dark:border-gray-600 hover:border-gray-400'}`}>
-                                                    <div 
-                                                        className="w-full h-full rounded-full" 
-                                                        style={{ backgroundColor: !PRESET_COLORS.includes(newGoalColor) ? newGoalColor : 'transparent', backgroundImage: !PRESET_COLORS.includes(newGoalColor) ? 'none' : 'conic-gradient(red, yellow, lime, aqua, blue, magenta, red)' }}
-                                                    ></div>
+                                    {/* Preview Chip */}
+                                    {newGoalTitle && (
+                                        <div className="mb-3 p-2 rounded text-center text-sm font-bold shadow-sm transition-colors border border-black/10" style={{ backgroundColor: newGoalColor, color: getPreviewTextColor(newGoalColor) }}>
+                                            {newGoalTitle}
+                                        </div>
+                                    )}
+
+                                    <div className="mb-4 space-y-3">
+                                        <div>
+                                            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase">Background Color</label>
+                                            <div className="flex flex-wrap gap-2 items-center">
+                                                {PRESET_COLORS.map(c => (
+                                                    <button
+                                                        key={c}
+                                                        type="button"
+                                                        onClick={() => setNewGoalColor(c)}
+                                                        className={`w-6 h-6 rounded-full border-2 transition-all duration-200 ${newGoalColor === c ? 'border-gray-600 dark:border-white scale-110 ring-1 ring-gray-400 ring-offset-1 dark:ring-offset-gray-800' : 'border-transparent hover:scale-105'}`}
+                                                        style={{ backgroundColor: c }}
+                                                        title={c}
+                                                    />
+                                                ))}
+                                                
+                                                {/* Custom Background Picker */}
+                                                <div className="relative group ml-1">
+                                                    <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center cursor-pointer transition-all ${!PRESET_COLORS.includes(newGoalColor) ? 'border-gray-600 dark:border-white ring-1 ring-gray-400 ring-offset-1 dark:ring-offset-gray-800' : 'border-gray-200 dark:border-gray-600 hover:border-gray-400'}`}>
+                                                        <div 
+                                                            className="w-full h-full rounded-full" 
+                                                            style={{ backgroundColor: !PRESET_COLORS.includes(newGoalColor) ? newGoalColor : 'transparent', backgroundImage: !PRESET_COLORS.includes(newGoalColor) ? 'none' : 'conic-gradient(red, yellow, lime, aqua, blue, magenta, red)' }}
+                                                        ></div>
+                                                    </div>
+                                                    <input 
+                                                        type="color" 
+                                                        value={newGoalColor} 
+                                                        onChange={(e) => setNewGoalColor(e.target.value)}
+                                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                                        title="Choose Background Color"
+                                                    />
                                                 </div>
-                                                <input 
-                                                    type="color" 
-                                                    value={newGoalColor} 
-                                                    onChange={(e) => setNewGoalColor(e.target.value)}
-                                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                                                    title="Choose Custom Color"
-                                                />
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase">Text Color</label>
+                                            <div className="flex items-center gap-3">
+                                                <div className="relative flex items-center justify-center w-8 h-8 rounded-full border border-gray-300 dark:border-gray-600 cursor-pointer overflow-hidden shadow-sm hover:border-gray-400">
+                                                    <input 
+                                                        type="color" 
+                                                        value={newGoalTextColor || '#ffffff'}
+                                                        onChange={(e) => setNewGoalTextColor(e.target.value)}
+                                                        className="absolute -top-1/2 -left-1/2 w-[200%] h-[200%] p-0 m-0 cursor-pointer"
+                                                        style={{ border: 'none' }}
+                                                    />
+                                                    <i className="fas fa-font z-10 pointer-events-none drop-shadow-md text-xs" style={{ color: newGoalTextColor ? (parseInt(newGoalTextColor.substring(1), 16) > 0xffffff/2 ? 'black' : 'white') : 'gray' }}></i>
+                                                </div>
+                                                
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setNewGoalTextColor(undefined)}
+                                                    className={`px-2 py-1 text-[10px] rounded border transition-colors ${!newGoalTextColor ? 'bg-indigo-100 text-indigo-700 border-indigo-200 font-bold' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200'}`}
+                                                >
+                                                    Auto / Reset
+                                                </button>
                                             </div>
                                         </div>
                                     </div>

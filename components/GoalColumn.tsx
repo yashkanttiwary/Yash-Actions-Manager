@@ -23,7 +23,7 @@ interface GoalColumnProps {
 
 // Helper to determine text color (black/white) based on background brightness
 const getContrastColor = (hex: string) => {
-    if (!hex || !hex.startsWith('#')) return 'text-white';
+    if (!hex || !hex.startsWith('#')) return 'white'; // default to white if invalid
     
     // Parse hex
     const r = parseInt(hex.substring(1, 3), 16);
@@ -33,10 +33,7 @@ const getContrastColor = (hex: string) => {
     // YIQ formula
     const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
     
-    // Check if space mode might affect this? 
-    // In space mode, use opacity, so white text is generally preferred against dark background.
-    // This function is primarily for the solid color header in normal mode.
-    return yiq >= 128 ? 'text-gray-900' : 'text-white';
+    return yiq >= 128 ? 'black' : 'white'; // Returning exact color names/hex
 };
 
 const getStatusColor = (status: Status): string => {
@@ -115,8 +112,12 @@ export const GoalColumn: React.FC<GoalColumnProps> = ({
     // Helper to ensure hex has 6 digits for alpha appending if needed (basic check)
     const safeColor = goal.color.startsWith('#') ? goal.color : '#6366f1'; 
     
-    // Determine text color for normal mode
-    const textColorClass = isSpaceMode ? 'text-white' : getContrastColor(safeColor);
+    // Determine effective text color
+    // Use user-specified color OR calculate contrast.
+    // In space mode, default to white unless user overrode it.
+    const effectiveTextColor = goal.textColor 
+        ? goal.textColor 
+        : (isSpaceMode ? 'white' : getContrastColor(safeColor));
 
     return (
         <div 
@@ -132,7 +133,10 @@ export const GoalColumn: React.FC<GoalColumnProps> = ({
             }}
         >
             {/* Header */}
-            <div className={`relative p-3 rounded-t-xl overflow-hidden group ${textColorClass}`}>
+            <div 
+                className={`relative p-3 rounded-t-xl overflow-hidden group`}
+                style={{ color: effectiveTextColor }}
+            >
                 
                 {/* 1. Base Color Layer */}
                 <div 

@@ -6,8 +6,9 @@ const TASK_HEADERS = [
     'ID', 'Title', 'Status', 'Priority', 'Due Date', 'Time Est (h)', 'Actual Time (s)', 'Tags', 'Scheduled Start', 'Blockers', 'Dependencies', 'Subtasks', 'Description', 'Last Modified', 'Goal ID', 'Goal Title', 'JSON_DATA'
 ];
 
+// Added Text Color at index 5 (Column F)
 const GOAL_HEADERS = [
-    'ID', 'Title', 'Color', 'Description', 'Created Date'
+    'ID', 'Title', 'Color', 'Description', 'Created Date', 'Text Color'
 ];
 
 const METADATA_ROW_ID = '__METADATA__';
@@ -115,7 +116,8 @@ const goalToRow = (goal: Goal): any[] => {
         safeString(goal.title),
         safeString(goal.color),
         safeString(goal.description),
-        safeString(goal.createdDate)
+        safeString(goal.createdDate),
+        safeString(goal.textColor) // Added
     ];
 };
 
@@ -126,7 +128,8 @@ const rowToGoal = (row: any[]): Goal | null => {
         title: row[1],
         color: row[2] || '#6366f1',
         description: row[3] || '',
-        createdDate: row[4] || new Date().toISOString()
+        createdDate: row[4] || new Date().toISOString(),
+        textColor: row[5] || undefined // Added
     };
 };
 
@@ -218,7 +221,7 @@ export const syncDataToSheet = async (sheetId: string, tasks: Task[], goals: Goa
             const nextGoalRow = goalsData.length + 1;
             await gapi.client.sheets.spreadsheets.values.clear({
                 spreadsheetId: sheetId,
-                range: `Goals!A${nextGoalRow}:E`,
+                range: `Goals!A${nextGoalRow}:F`, // Extended to F for Text Color
             });
         } catch (e) {
             console.warn("Could not write to 'Goals' tab. It might not exist.", e);
@@ -261,7 +264,7 @@ export const syncDataFromSheet = async (sheetId: string): Promise<{ tasks: Task[
         try {
             const goalsResponse = await gapi.client.sheets.spreadsheets.values.get({
                 spreadsheetId: sheetId,
-                range: 'Goals!A2:E'
+                range: 'Goals!A2:F' // Extended to F
             });
             const goalRows = goalsResponse.result.values;
             if (goalRows && goalRows.length > 0) {
