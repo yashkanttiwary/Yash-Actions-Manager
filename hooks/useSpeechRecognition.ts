@@ -18,6 +18,9 @@ export const useSpeechRecognition = (props?: UseSpeechRecognitionProps) => {
     const [transcript, setTranscript] = useState('');
     const [error, setError] = useState<string | null>(null);
     const recognitionRef = useRef<any>(null);
+    
+    // Store accumulated final results here to prevent loss during pauses
+    const finalTranscriptBuffer = useRef('');
 
     // Initialize only once
     useEffect(() => {
@@ -31,6 +34,8 @@ export const useSpeechRecognition = (props?: UseSpeechRecognitionProps) => {
             recognition.onstart = () => {
                 setIsListening(true);
                 setError(null);
+                // Don't clear buffer on start to allow appending, 
+                // but usually we want a fresh start. Let's clear in startListening.
             };
 
             recognition.onend = () => {
@@ -38,7 +43,6 @@ export const useSpeechRecognition = (props?: UseSpeechRecognitionProps) => {
             };
 
             recognition.onerror = (event: any) => {
-                // Ignore 'no-speech' errors as they are common and often not critical
                 if (event.error !== 'no-speech') {
                     console.error("Speech Recognition Error:", event.error);
                     setError(event.error);
@@ -48,36 +52,44 @@ export const useSpeechRecognition = (props?: UseSpeechRecognitionProps) => {
 
             recognition.onresult = (event: any) => {
                 let interimTranscript = '';
-                let finalTranscript = '';
+                let newFinalTranscript = '';
 
                 for (let i = event.resultIndex; i < event.results.length; ++i) {
                     if (event.results[i].isFinal) {
-                        finalTranscript += event.results[i][0].transcript;
+                        newFinalTranscript += event.results[i][0].transcript + ' ';
                     } else {
                         interimTranscript += event.results[i][0].transcript;
                     }
                 }
 
-                const currentText = finalTranscript || interimTranscript;
-                setTranscript(currentText);
+                // Accumulate final results
+                if (newFinalTranscript) {
+                    finalTranscriptBuffer.current += newFinalTranscript;
+                }
+
+                // Combine accumulated final + current interim
+                const fullCurrentText = (finalTranscriptBuffer.current + interimTranscript).trim();
                 
-                if (props?.onResult) props.onResult(currentText);
-                if (finalTranscript && props?.onFinal) props.onFinal(finalTranscript);
+                setTranscript(fullCurrentText);
+                
+                if (props?.onResult) props.onResult(fullCurrentText);
             };
 
             recognitionRef.current = recognition;
         } else {
             setError("Browser not supported");
         }
-    }, []); // Empty dependency array to ensure single initialization
+    }, []); 
 
     const startListening = useCallback(() => {
         if (recognitionRef.current && !isListening) {
-            // Update continuous setting if it changed
+            // Clear buffer on new session
+            finalTranscriptBuffer.current = '';
+            setTranscript('');
+            
             if (props?.continuous !== undefined) {
                 recognitionRef.current.continuous = props.continuous;
             }
-            setTranscript('');
             try {
                 recognitionRef.current.start();
             } catch (e) {
@@ -93,6 +105,7 @@ export const useSpeechRecognition = (props?: UseSpeechRecognitionProps) => {
     }, [isListening]);
 
     const resetTranscript = useCallback(() => {
+        finalTranscriptBuffer.current = '';
         setTranscript('');
     }, []);
 

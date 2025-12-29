@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { KanbanBoard } from './components/KanbanBoard';
 import { Header } from './components/Header';
@@ -13,7 +14,7 @@ import { GoalBoard } from './components/GoalBoard';
 import { manageTasksWithAI, generateTaskSummary, breakDownTask, parseTaskFromVoice } from './services/geminiService';
 import { calculateTaskXP, checkLevelUp } from './services/gamificationService'; 
 import { initGoogleClient, signIn, signOut } from './services/googleAuthService';
-import { COLUMN_STATUSES } from './constants';
+import { COLUMN_STATUSES, UNASSIGNED_GOAL_ID } from './constants';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { IntegrationsModal } from './components/IntegrationsModal';
 import { useGoogleSheetSync } from './hooks/useGoogleSheetSync';
@@ -499,7 +500,7 @@ const App: React.FC = () => {
             dependencies: [],
             blockers: [],
             currentSessionStartTime: null,
-            goalId: focusedGoalId && focusedGoalId !== 'unassigned' ? focusedGoalId : undefined, // Pre-fill goal if focused
+            goalId: focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined, // Pre-fill goal if focused
             isPinned: false
         });
     }, [focusedGoalId]);
@@ -511,11 +512,11 @@ const App: React.FC = () => {
             priority: 'Medium',
             dueDate: new Date().toISOString().split('T')[0],
             description: '',
-            goalId: focusedGoalId && focusedGoalId !== 'unassigned' ? focusedGoalId : undefined, // Pre-fill goal
+            goalId: focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined, // Pre-fill goal
         });
     }, [addTask, focusedGoalId]);
 
-    // NEW: Handle Voice Task Parsing
+    // NEW: Handle Voice Task Parsing -> OPEN MODAL FOR CONFIRMATION
     const handleVoiceTaskAdd = useCallback(async (transcript: string, defaultStatus: Status) => {
         // Safe check for API Key availability first
         const effectiveKey = settings.geminiApiKey || getEnvVar('VITE_GEMINI_API_KEY');
@@ -529,7 +530,7 @@ const App: React.FC = () => {
                 priority: 'Medium',
                 dueDate: new Date().toISOString().split('T')[0],
                 description: '', 
-                goalId: focusedGoalId && focusedGoalId !== 'unassigned' ? focusedGoalId : undefined
+                goalId: focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined
              });
              // Alert user about missing key
              setAiError("AI Key required for smart parsing. Task added as-is.");
@@ -538,10 +539,12 @@ const App: React.FC = () => {
         }
 
         try {
-            const parsedData = await parseTaskFromVoice(transcript, effectiveKey);
+            // FIX: Pass goals to parseTaskFromVoice for context-aware parsing
+            const parsedData = await parseTaskFromVoice(transcript, effectiveKey, goals);
             
-            // Map parsed data to a new Task
-            const newTaskData = {
+            // Map parsed data to a new Draft Task
+            const draftTask: Task = {
+                id: `new-${Date.now()}`,
                 title: parsedData.title || transcript, // Fallback to raw text
                 description: parsedData.description || '',
                 status: (parsedData.status || defaultStatus) as Status,
@@ -550,7 +553,8 @@ const App: React.FC = () => {
                 scheduledStartDateTime: parsedData.scheduledStartDateTime,
                 tags: parsedData.tags || [],
                 timeEstimate: parsedData.timeEstimate,
-                goalId: focusedGoalId && focusedGoalId !== 'unassigned' ? focusedGoalId : undefined, // Smart context
+                // Prioritize AI-detected goal, fallback to current focus
+                goalId: parsedData.goalId || (focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined), 
                 // Handle blockers specially
                 blockers: parsedData.blockerReason ? [{
                     id: `blocker-${Date.now()}`,
@@ -562,17 +566,25 @@ const App: React.FC = () => {
                     id: `sub-${Date.now()}-${Math.random().toString(36).substr(2,5)}`,
                     title: st.title,
                     isCompleted: false
-                })) || []
+                })) || [],
+                // Default Required Fields
+                createdDate: new Date().toISOString(),
+                lastModified: new Date().toISOString(),
+                statusChangeDate: new Date().toISOString(),
+                actualTimeSpent: 0,
+                isPinned: false
             };
 
-            addTask(newTaskData);
+            // OPEN FORM INSTEAD OF ADDING DIRECTLY
+            setEditingTask(draftTask);
             
-            // Celebration confetti for successful voice add
+            // Optional: Small confetti pop to indicate "Thought Complete"
             confetti({
-                particleCount: 50,
-                spread: 60,
+                particleCount: 30,
+                spread: 40,
                 origin: { y: 0.8 },
-                colors: ['#6366f1', '#a855f7']
+                colors: ['#6366f1', '#a855f7'],
+                scalar: 0.7
             });
 
         } catch (error) {
@@ -584,13 +596,13 @@ const App: React.FC = () => {
                 status: defaultStatus,
                 priority: 'Medium',
                 dueDate: new Date().toISOString().split('T')[0],
-                goalId: focusedGoalId && focusedGoalId !== 'unassigned' ? focusedGoalId : undefined
+                goalId: focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined
             });
             // Show toast/error
             setAiError("Smart parsing failed. Saved as raw text.");
             setTimeout(() => setAiError(null), 4000);
         }
-    }, [addTask, handleQuickAddTask, settings.geminiApiKey, focusedGoalId]);
+    }, [addTask, handleQuickAddTask, settings.geminiApiKey, focusedGoalId, goals]);
 
     const handleOpenSettings = (tab: SettingsTab = 'general') => {
         setActiveSettingsTab(tab);
@@ -880,7 +892,7 @@ const App: React.FC = () => {
         return tasks.filter(task => {
             // Rule 0: Focus Zone (Highest Priority Filter)
             if (focusedGoalId) {
-                if (focusedGoalId === 'unassigned') {
+                if (focusedGoalId === UNASSIGNED_GOAL_ID) {
                     // Show tasks with NO goal OR where goalId doesn't match any existing goal
                     // (Though the hook ensures goalId is removed if goal deleted, safety check)
                     if (task.goalId && goals.some(g => g.id === task.goalId)) return false; 
@@ -923,7 +935,7 @@ const App: React.FC = () => {
     // Derived focused goal object for UI
     const activeFocusGoal = useMemo(() => {
         if (!focusedGoalId) return null;
-        if (focusedGoalId === 'unassigned') return { id: 'unassigned', title: 'Unassigned Tasks', color: '#64748b' } as Goal;
+        if (focusedGoalId === UNASSIGNED_GOAL_ID) return { id: UNASSIGNED_GOAL_ID, title: 'Unassigned Tasks', color: '#64748b' } as Goal;
         return goals.find(g => g.id === focusedGoalId);
     }, [focusedGoalId, goals]);
 

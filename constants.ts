@@ -1,4 +1,7 @@
+
 import { Status, Priority } from './types';
+
+export const UNASSIGNED_GOAL_ID = 'unassigned';
 
 export const COLUMN_STATUSES: Status[] = [
     'To Do',

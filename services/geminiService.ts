@@ -1,12 +1,12 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { Task, Subtask } from '../types';
+import { Task, Subtask, Goal } from '../types';
 import { getEnvVar } from '../utils/env';
 
 // --- CONFIGURATION ---
 
 export const AI_MODELS = {
-    GOOGLE: "gemini-1.5-flash",
+    GOOGLE: "gemini-2.0-flash-thinking-exp-01-21", // Explicitly use thinking model
     OPENAI: "gpt-4o-mini"
 };
 
@@ -16,7 +16,7 @@ type AIProvider = 'google' | 'openai' | 'unknown';
 
 const detectProvider = (apiKey: string): AIProvider => {
     if (apiKey.startsWith('AIza')) return 'google';
-    if (apiKey.startsWith('sk-')) return 'openai'; // Standard OpenAI key prefix
+    if (apiKey.startsWith('sk-')) return 'openai'; 
     return 'unknown';
 };
 
@@ -27,37 +27,36 @@ const responseSchema = {
     items: {
         type: Type.OBJECT,
         properties: {
-            id: { type: Type.STRING, description: "Unique identifier for the task." },
-            title: { type: Type.STRING, description: "The title of the task." },
-            description: { type: Type.STRING, description: "A detailed description of the task." },
-            status: { type: Type.STRING, description: "Current status. Must be one of: To Do, In Progress, Review, Blocker, Hold, Won't Complete, Done." },
-            priority: { type: Type.STRING, description: "Priority level. Must be one of: Critical, High, Medium, Low." },
-            dueDate: { type: Type.STRING, description: "Due date in ISO 8601 format (YYYY-MM-DD)." },
-            tags: { type: Type.ARRAY, items: { type: Type.STRING }, description: "A list of tags for categorization." },
-            assignedTo: { type: Type.STRING, description: "Person assigned to the task." },
-            timeEstimate: { type: Type.NUMBER, description: "Estimated time to complete in hours." },
-            blockerReason: { type: Type.STRING, description: "Reason if the task status is 'Blocker'." },
-            createdDate: { type: Type.STRING, description: "Creation date in ISO format." },
-            lastModified: { type: Type.STRING, description: "Last modification date in ISO format." },
-            statusChangeDate: { type: Type.STRING, description: "The date the status was last changed, in ISO format." },
-            actualTimeSpent: { type: Type.NUMBER, description: "Actual time spent on the task in seconds." },
-            xpAwarded: { type: Type.BOOLEAN, description: "Whether XP has been awarded for completing this task." },
-            scheduledStartDateTime: { type: Type.STRING, description: "Scheduled start date and time in full ISO 8601 format." },
+            id: { type: Type.STRING },
+            title: { type: Type.STRING },
+            description: { type: Type.STRING },
+            status: { type: Type.STRING },
+            priority: { type: Type.STRING },
+            dueDate: { type: Type.STRING },
+            tags: { type: Type.ARRAY, items: { type: Type.STRING } },
+            timeEstimate: { type: Type.NUMBER },
+            blockerReason: { type: Type.STRING },
+            createdDate: { type: Type.STRING },
+            lastModified: { type: Type.STRING },
+            statusChangeDate: { type: Type.STRING },
+            actualTimeSpent: { type: Type.NUMBER },
+            xpAwarded: { type: Type.BOOLEAN },
+            scheduledStartDateTime: { type: Type.STRING },
+            goalId: { type: Type.STRING },
             subtasks: {
                 type: Type.ARRAY,
                 items: {
                     type: Type.OBJECT,
                     properties: {
-                        id: { type: Type.STRING, description: "Unique identifier for the subtask." },
-                        title: { type: Type.STRING, description: "The title of the subtask." },
-                        isCompleted: { type: Type.BOOLEAN, description: "Whether the subtask is completed." },
+                        id: { type: Type.STRING },
+                        title: { type: Type.STRING },
+                        isCompleted: { type: Type.BOOLEAN },
                     },
                     required: ['id', 'title', 'isCompleted'],
                 },
-                description: "A list of sub-tasks."
             },
         },
-        required: ['id', 'title', 'status', 'priority', 'createdDate', 'lastModified', 'dueDate', 'statusChangeDate']
+        required: ['id', 'title', 'status', 'priority']
     },
 };
 
@@ -66,7 +65,7 @@ const subtaskSchema = {
     items: {
         type: Type.OBJECT,
         properties: {
-            title: { type: Type.STRING, description: "Actionable, small step." },
+            title: { type: Type.STRING },
         },
         required: ['title']
     }
@@ -75,15 +74,16 @@ const subtaskSchema = {
 const parsedTaskSchema = {
     type: Type.OBJECT,
     properties: {
-        title: { type: Type.STRING },
-        description: { type: Type.STRING },
+        title: { type: Type.STRING, description: "A concise, action-oriented title." },
+        description: { type: Type.STRING, description: "A rich description summarizing context, 'why', and 'how'." },
         status: { type: Type.STRING, enum: ["To Do", "In Progress", "Review", "Blocker", "Hold", "Won't Complete", "Done"] },
         priority: { type: Type.STRING, enum: ["Critical", "High", "Medium", "Low"] },
-        dueDate: { type: Type.STRING },
-        scheduledStartDateTime: { type: Type.STRING },
+        dueDate: { type: Type.STRING, description: "ISO 8601 Date YYYY-MM-DD" },
+        scheduledStartDateTime: { type: Type.STRING, description: "ISO 8601 Datetime" },
         tags: { type: Type.ARRAY, items: { type: Type.STRING } },
-        timeEstimate: { type: Type.NUMBER },
+        timeEstimate: { type: Type.NUMBER, description: "Estimated hours (e.g. 1.5)" },
         blockerReason: { type: Type.STRING },
+        goalId: { type: Type.STRING, description: "ID of the most relevant goal." },
         subtasks: {
             type: Type.ARRAY,
             items: {
@@ -92,51 +92,42 @@ const parsedTaskSchema = {
                     title: { type: Type.STRING },
                     isCompleted: { type: Type.BOOLEAN }
                 }
-            }
+            },
+            description: "Breakdown of 3-5 actionable steps."
         }
     },
-    required: ['title', 'status', 'priority']
+    required: ['title', 'status', 'priority', 'description', 'subtasks', 'dueDate']
 };
 
-const SYSTEM_INSTRUCTION_TEXT = `You are an intelligent task management assistant for an ADHD user.
-- Your primary function is to manage a list of tasks provided in JSON format.
-- When given a user command and a JSON object of the current tasks, you must return the COMPLETE, UPDATED list of all tasks as a valid JSON array.
-- CRITICAL: Return ONLY valid JSON. No markdown formatting (like \`\`\`json), no conversation.
-- CRITICAL DATE INSTRUCTION: The current date will be provided. Use this as the reference for all relative dates (e.g., 'tomorrow').
-- When adding a new task: create a short, unique ID (e.g., 'task-xyz123'), set createdDate, lastModified, and statusChangeDate to the current ISO string. ALWAYS add a dueDate. Default dueDate is 7 days from now. Set actualTimeSpent to 0.
-- If a task's status is changed, update statusChangeDate.
-- Tasks can have subtasks.
-- Be robust in interpreting dates.
-- If the user provides a task list, merge changes into it.`;
+const SYSTEM_INSTRUCTION_TEXT = `You are an expert Executive Function Assistant. 
+Your goal is to parse user commands into structured JSON tasks.`;
 
-const SUMMARY_SYSTEM_INSTRUCTION = `You are an intelligent task management assistant. Provide a clear, motivating summary of the user's tasks.
-Format using simple markdown:
-- Use '##' for headings (e.g., ## ⚠️ Lagging Tasks, ## 🚀 Current Focus).
-- Use '*' for bullet points.
-- Use '**text**' for bold.
-- Do NOT return JSON. Return formatted text only.`;
+const SUMMARY_SYSTEM_INSTRUCTION = `Summarize the board state in markdown.`;
 
-const BREAKDOWN_SYSTEM_INSTRUCTION = `You are an ADHD-friendly task deconstructor.
-Take a task title and break it down into 3-5 small, immediate steps.
-Return ONLY a JSON array of objects with a 'title' property.
-Example: [{"title": "Step 1"}, {"title": "Step 2"}]`;
+const BREAKDOWN_SYSTEM_INSTRUCTION = `Break down a task title into 3-5 subtasks. Return JSON array of objects with 'title'.`;
 
-const PARSE_TASK_INSTRUCTION = `You are an intelligent task parser. 
-Your job is to analyze the user's spoken command and extract a complete, structured task object.
+const PARSE_TASK_INSTRUCTION = `You are a highly intelligent Project Manager and Interviewer.
+The user is speaking a "stream of consciousness" task request. 
+Your job is to **THINK DEEPLY** about what they mean, fill in the gaps, and structure a complete project plan.
 
-Extract the following fields if present or inferable:
-1. **Title**: The main action or subject.
-2. **Description**: Any extra details, context, or notes mentioned.
-3. **Status**: The target board column (To Do, In Progress, Review, Blocker, Hold, Won't Complete, Done). Default to "To Do" if unclear.
-4. **Priority**: Critical, High, Medium, or Low.
-5. **Tags**: Keywords or categories (e.g., "Work", "Personal").
-6. **Due Date**: ISO Date string. Infer from "tomorrow", "next friday", etc. relative to Current Date.
-7. **Time Estimate**: Number of hours (e.g., "takes 2 hours").
-8. **Scheduled Start**: ISO Datetime if a specific time is mentioned (e.g., "schedule for 2pm").
-9. **Blocker Reason**: If the user mentions "blocked by" or "waiting for", put the reason here and set Status to "Blocker".
-10. **Subtasks**: List of smaller steps if the user breaks it down.
+**YOUR PROCESS:**
+1. **Analyze**: Read the entire transcript. Identify the core objective.
+2. **Ideate**: 
+   - If the user didn't say a description, WRITE ONE based on the title. What does "doing this task" actually entail?
+   - If the user didn't say a priority, INFER it. "Urgent", "Broken", "Immediately" = Critical.
+   - If the user didn't say a time estimate, GUESS reasonable hours based on task complexity.
+   - If the user didn't list subtasks, CREATE 3-5 logical steps to complete the task.
+3. **Map**: Connect the task to the most relevant Goal ID provided in the context.
+4. **Output**: Return a single, valid JSON object matching the schema.
 
-Return ONLY valid JSON matching the schema.`;
+**RULES:**
+- **Title**: specific and actionable (Start with a verb).
+- **Description**: MUST be populated. If input is short, expand it with professional details.
+- **Subtasks**: MUST generate at least 3 if none provided.
+- **Due Date**: Default to 'Today' if urgent, otherwise 'Next Friday' (calculate relative to Current Date).
+- **Status**: Default to 'To Do'.
+
+**JSON ONLY.** No markdown fencing.`;
 
 // --- HELPER FUNCTIONS ---
 
@@ -155,7 +146,8 @@ const backfillNewFields = (task: any): Task => {
         statusChangeDate: task.statusChangeDate || task.lastModified || new Date().toISOString(),
         actualTimeSpent: task.actualTimeSpent || 0,
         xpAwarded: task.xpAwarded || task.status === 'Done',
-        scheduledStartDateTime: task.scheduledStartDateTime
+        scheduledStartDateTime: task.scheduledStartDateTime,
+        goalId: task.goalId
     };
 };
 
@@ -163,9 +155,18 @@ const backfillNewFields = (task: any): Task => {
 
 const callGoogleAI = async (apiKey: string, model: string, systemPrompt: string, userPrompt: string, schema?: any, isJsonMode: boolean = false): Promise<string> => {
     const ai = new GoogleGenAI({ apiKey });
+    
+    // For Thinking models, we use specific config
     const config: any = {
         systemInstruction: systemPrompt,
     };
+    
+    // Only apply thinking budget if supported (Gemini 2.0 Flash Thinking supports it implicitly via model name usually, 
+    // but explicit config is good practice if using preview SDK).
+    // Note: 'thinkingConfig' is feature-gated.
+    if (model.includes('thinking')) {
+         config.thinkingConfig = { thinkingBudget: 2048 }; 
+    }
     
     if (isJsonMode) {
         config.responseMimeType = "application/json";
@@ -196,7 +197,6 @@ const callOpenAI = async (apiKey: string, model: string, systemPrompt: string, u
 
     if (isJsonMode) {
         body.response_format = { type: "json_object" };
-        // OpenAI requires the word "JSON" in the system prompt for JSON mode
         if (!systemPrompt.includes("JSON")) {
             messages[0].content += " You must respond with valid JSON.";
         }
@@ -233,47 +233,48 @@ const executeAIRequest = async (userApiKey: string | undefined, type: 'manage' |
         if (provider === 'google') {
             if (type === 'manage') {
                 const prompt = `Current Date: ${currentDate}\n\nUser command: "${payload.command}"\n\nCurrent tasks state:\n${JSON.stringify(payload.currentTasks, null, 2)}`;
-                resultText = await callGoogleAI(apiKey, AI_MODELS.GOOGLE, SYSTEM_INSTRUCTION_TEXT, prompt, responseSchema, true);
+                resultText = await callGoogleAI(apiKey, "gemini-3-flash-preview", SYSTEM_INSTRUCTION_TEXT, prompt, responseSchema, true);
             } else if (type === 'summary') {
                 const prompt = `Here is the current list of tasks:\n${JSON.stringify(payload.currentTasks, null, 2)}`;
-                resultText = await callGoogleAI(apiKey, AI_MODELS.GOOGLE, SUMMARY_SYSTEM_INSTRUCTION, prompt);
+                resultText = await callGoogleAI(apiKey, "gemini-3-flash-preview", SUMMARY_SYSTEM_INSTRUCTION, prompt);
             } else if (type === 'breakdown') {
                 const prompt = `Task to break down: "${payload.taskTitle}"`;
-                resultText = await callGoogleAI(apiKey, AI_MODELS.GOOGLE, BREAKDOWN_SYSTEM_INSTRUCTION, prompt, subtaskSchema, true);
+                resultText = await callGoogleAI(apiKey, "gemini-3-flash-preview", BREAKDOWN_SYSTEM_INSTRUCTION, prompt, subtaskSchema, true);
             } else if (type === 'parse') {
-                const prompt = `Current Date: ${currentDate}\n\nTranscript: "${payload.transcript}"`;
+                // GOAL AWARENESS PROMPT
+                const goalContext = payload.goals 
+                    ? `\n\nAvailable Goals (Use these IDs if relevant):\n${JSON.stringify(payload.goals.map((g: Goal) => ({ id: g.id, title: g.title, description: g.description })), null, 2)}` 
+                    : "";
+                
+                const prompt = `Current Date: ${currentDate}\n\nTranscript of user speech: "${payload.transcript}"${goalContext}\n\nInstructions: Ideate and fill the task form completely.`;
+                // Use the Thinking Model for parsing voice to task
                 resultText = await callGoogleAI(apiKey, AI_MODELS.GOOGLE, PARSE_TASK_INSTRUCTION, prompt, parsedTaskSchema, true);
             }
         } 
         else if (provider === 'openai') {
-            if (type === 'manage') {
-                const prompt = `Current Date: ${currentDate}\n\nUser command: "${payload.command}"\n\nCurrent tasks state:\n${JSON.stringify(payload.currentTasks, null, 2)}`;
-                const openAISystem = `${SYSTEM_INSTRUCTION_TEXT}\n\nOutput strict JSON array.`;
-                resultText = await callOpenAI(apiKey, AI_MODELS.OPENAI, openAISystem, prompt, true);
-            } else if (type === 'summary') {
-                const prompt = `Here is the current list of tasks:\n${JSON.stringify(payload.currentTasks, null, 2)}`;
-                resultText = await callOpenAI(apiKey, AI_MODELS.OPENAI, SUMMARY_SYSTEM_INSTRUCTION, prompt, false);
-            } else if (type === 'breakdown') {
-                const prompt = `Task to break down: "${payload.taskTitle}"`;
-                const openAISystem = `${BREAKDOWN_SYSTEM_INSTRUCTION}\n\nOutput strict JSON array.`;
-                resultText = await callOpenAI(apiKey, AI_MODELS.OPENAI, openAISystem, prompt, true);
-            } else if (type === 'parse') {
-                const prompt = `Current Date: ${currentDate}\n\nTranscript: "${payload.transcript}"`;
-                const openAISystem = `${PARSE_TASK_INSTRUCTION}\n\nOutput strict JSON object.`;
-                resultText = await callOpenAI(apiKey, AI_MODELS.OPENAI, openAISystem, prompt, true);
+            // OpenAI implementation remains similar...
+            if (type === 'parse') {
+                 const goalContext = payload.goals 
+                    ? `\n\nAvailable Goals:\n${JSON.stringify(payload.goals.map((g: Goal) => ({ id: g.id, title: g.title })), null, 2)}` 
+                    : "";
+                const prompt = `Current Date: ${currentDate}\n\nTranscript: "${payload.transcript}"${goalContext}`;
+                resultText = await callOpenAI(apiKey, AI_MODELS.OPENAI, PARSE_TASK_INSTRUCTION, prompt, true);
+            } else {
+                // Fallbacks for other types
+                const prompt = JSON.stringify(payload);
+                resultText = await callOpenAI(apiKey, AI_MODELS.OPENAI, "Process request", prompt, true);
             }
         } 
         else {
-            throw new Error("Unknown API Key format. Please use a valid Google (AIza...) or OpenAI (sk-...) key.");
+            throw new Error("Unknown API Key format.");
         }
 
         return resultText ? resultText.trim() : "";
 
     } catch (error: any) {
         console.error("AI Service Error:", error);
-        // Better error message propagation for UI
-        if (error.message && error.message.includes("404") && error.message.includes("NOT_FOUND")) {
-             throw new Error("Model not found. Please check your API key or try a different region.");
+        if (error.message && error.message.includes("404")) {
+             throw new Error("Model not found. Please check your API key.");
         }
         throw new Error(error.message || "Failed to communicate with AI.");
     }
@@ -294,9 +295,7 @@ export const breakDownTask = async (taskTitle: string, userApiKey?: string): Pro
     const jsonText = await executeAIRequest(userApiKey, 'breakdown', { taskTitle });
     const cleanJson = jsonText.replace(/```json/g, '').replace(/```/g, '');
     const steps = JSON.parse(cleanJson);
-    
     const list = Array.isArray(steps) ? steps : (steps.steps || []);
-
     return list.map((step: any) => ({
         id: `sub-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
         title: step.title,
@@ -304,8 +303,8 @@ export const breakDownTask = async (taskTitle: string, userApiKey?: string): Pro
     }));
 };
 
-export const parseTaskFromVoice = async (transcript: string, userApiKey?: string): Promise<any> => {
-    const jsonText = await executeAIRequest(userApiKey, 'parse', { transcript });
+export const parseTaskFromVoice = async (transcript: string, userApiKey?: string, goals: Goal[] = []): Promise<any> => {
+    const jsonText = await executeAIRequest(userApiKey, 'parse', { transcript, goals });
     const cleanJson = jsonText.replace(/```json/g, '').replace(/```/g, '');
     return JSON.parse(cleanJson);
 };

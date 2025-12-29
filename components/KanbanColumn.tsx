@@ -75,38 +75,74 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
         ? `${spaceTint.header} backdrop-blur-lg border-b ${spaceTint.border}`
         : `${statusStyle.header} border-b border-black/10 dark:border-white/10`;
 
-    // Voice Handling Logic
-    const handleVoiceFinal = async (transcript: string) => {
-        if (!transcript.trim()) return;
-        
-        setIsProcessing(true);
-        setQuickAddTitle(transcript); // Show what's being processed
-        
-        try {
-            await onSmartAddTask(transcript);
-            setQuickAddTitle(''); // Clear on success
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setIsProcessing(false);
-        }
-    };
-
     const { 
         isListening, 
         transcript, 
         startListening, 
-        stopListening 
+        stopListening,
+        resetTranscript
     } = useSpeechRecognition({
-        onFinal: handleVoiceFinal
+        continuous: true // Allow continuous input without auto-stop
     });
 
-    // Sync transcript to input while listening
+    // Update the input field as you speak
     useEffect(() => {
         if (isListening) {
             setQuickAddTitle(transcript);
         }
     }, [transcript, isListening]);
+
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setQuickAddTitle(e.target.value);
+    };
+
+    // MANUAL TOGGLE: Mic -> Pause -> Stop & Process
+    const toggleVoiceInput = async () => {
+        if (isListening) {
+            // STOP ACTION
+            stopListening();
+            
+            // Wait a tick for the final transcript to settle?
+            // Actually, we use the local state `quickAddTitle` which is updated via effect.
+            // But let's verify if `transcript` (hook state) is more up to date.
+            // The safest bet is using the accumulated transcript.
+            
+            const textToProcess = quickAddTitle.trim();
+            
+            if (textToProcess) {
+                setIsProcessing(true);
+                try {
+                    // Send text to App.tsx for AI parsing & modal opening
+                    await onSmartAddTask(textToProcess);
+                    setQuickAddTitle(''); // Clear input on success
+                    resetTranscript();    // Reset hook state
+                } catch (e) {
+                    console.error("Smart add failed", e);
+                } finally {
+                    setIsProcessing(false);
+                }
+            } else {
+                // Empty speech, just stop
+                resetTranscript();
+                setQuickAddTitle('');
+            }
+        } else {
+            // START ACTION
+            setQuickAddTitle(''); // Clear previous text
+            resetTranscript();    // Ensure hook is clean
+            startListening();
+        }
+    };
+
+    const handleQuickAddSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (isProcessing) return;
+        
+        if (quickAddTitle.trim()) {
+            onQuickAddTask(quickAddTitle.trim());
+            setQuickAddTitle('');
+        }
+    };
 
     const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
@@ -196,25 +232,6 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
         if(onTaskSizeChange) onTaskSizeChange();
     };
 
-    const handleQuickAddSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        // Prevent submission while processing AI to avoid duplicates or lost data
-        if (isProcessing) return;
-        
-        if (quickAddTitle.trim()) {
-            onQuickAddTask(quickAddTitle.trim());
-            setQuickAddTitle('');
-        }
-    };
-    
-    const toggleVoiceInput = () => {
-        if (isListening) {
-            stopListening();
-        } else {
-            startListening();
-        }
-    };
-
     const checkScrollIndicator = useCallback(() => {
         const el = scrollContainerRef.current;
         if (!el) return;
@@ -277,11 +294,11 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                                 <input 
                                     type="text" 
                                     value={quickAddTitle}
-                                    onChange={(e) => setQuickAddTitle(e.target.value)}
-                                    placeholder={isProcessing ? "AI Analyzing..." : isListening ? "Listening..." : "Add quick task..."}
+                                    onChange={handleInputChange}
+                                    placeholder={isProcessing ? "AI Thinking..." : isListening ? "Listening... (Click Stop to Process)" : "Add quick task..."}
                                     className={`w-full px-3 py-1.5 pr-8 text-sm rounded-md border transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500
                                         ${isListening 
-                                            ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-200 ring-2 ring-indigo-500/50' 
+                                            ? 'border-red-500 bg-red-50 dark:bg-red-900/30 text-red-900 dark:text-red-200 ring-2 ring-red-500/50' 
                                             : isProcessing
                                                 ? 'border-purple-500 bg-purple-100 dark:bg-purple-900/30 text-purple-900 dark:text-purple-200 cursor-wait'
                                                 : isSpaceMode 
@@ -289,16 +306,21 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                                                     : 'border-gray-300 dark:border-gray-600 bg-white/90 dark:bg-gray-800 text-gray-800 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400'
                                         }
                                     `}
-                                    disabled={isListening || isProcessing}
+                                    disabled={isProcessing}
                                 />
+                                {isProcessing && (
+                                    <div className="absolute right-8 top-1/2 -translate-y-1/2">
+                                        <i className="fas fa-spinner fa-spin text-purple-500 text-xs"></i>
+                                    </div>
+                                )}
                                 <button
                                     type="button"
                                     onClick={toggleVoiceInput}
                                     className={`absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-full transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : isProcessing ? 'text-purple-500 animate-spin' : isSpaceMode ? 'text-white/60 hover:text-white' : 'text-gray-400 hover:text-indigo-500'}`}
-                                    title="Voice Add (AI Powered)"
+                                    title={isListening ? "Stop & Think" : "Voice Add (AI Powered)"}
                                     disabled={isProcessing}
                                 >
-                                    <i className={`fas ${isListening ? 'fa-microphone-slash' : isProcessing ? 'fa-spinner' : 'fa-microphone'}`}></i>
+                                    <i className={`fas ${isListening ? 'fa-pause' : isProcessing ? 'fa-brain' : 'fa-microphone'}`}></i>
                                 </button>
                             </div>
                             

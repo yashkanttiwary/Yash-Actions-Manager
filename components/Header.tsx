@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Task, GamificationData, Settings, Status, ConnectionHealth, SettingsTab, Goal } from '../types';
-import { COLUMN_STATUSES } from '../constants';
+import { COLUMN_STATUSES, UNASSIGNED_GOAL_ID } from '../constants';
 import { ConnectionHealthIndicator } from './ConnectionHealthIndicator';
 import { exportTasksToCSV } from '../utils/exportUtils';
 import { TetrisGameModal } from './TetrisGameModal';
@@ -254,7 +255,7 @@ export const Header: React.FC<HeaderProps> = ({
 
             return tasks
                 .filter(task => {
-                    if (task.status === 'Done' || task.status === "Won't Complete") return false;
+                    if (task.status === 'Done' || task.status === "Won't Complete" || task.status === 'Hold') return false;
                     // Count "To Do" and "In Progress" towards the load
                     if (task.status === 'To Do' || task.status === 'In Progress') return true;
                     // Or if it's scheduled for today
@@ -476,16 +477,16 @@ export const Header: React.FC<HeaderProps> = ({
                                 <div className="max-h-[300px] overflow-y-auto custom-scrollbar p-1 space-y-1">
                                     {/* Unassigned Option */}
                                     <button
-                                        onClick={() => { onFocusGoal('unassigned'); setIsFocusMenuOpen(false); }}
+                                        onClick={() => { onFocusGoal(UNASSIGNED_GOAL_ID); setIsFocusMenuOpen(false); }}
                                         className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-2 transition-colors ${
-                                            activeFocusGoal?.id === 'unassigned' 
+                                            activeFocusGoal?.id === UNASSIGNED_GOAL_ID 
                                                 ? (isSpaceVisualsActive ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-700') 
                                                 : 'hover:bg-black/5 dark:hover:bg-white/5'
                                         }`}
                                     >
                                         <div className="w-2 h-2 rounded-full bg-slate-500 shadow-sm"></div>
                                         <span className="text-xs font-semibold truncate flex-1">Unassigned Tasks</span>
-                                        {activeFocusGoal?.id === 'unassigned' && <i className="fas fa-check text-xs opacity-80"></i>}
+                                        {activeFocusGoal?.id === UNASSIGNED_GOAL_ID && <i className="fas fa-check text-xs opacity-80"></i>}
                                     </button>
 
                                     {/* Goals List */}

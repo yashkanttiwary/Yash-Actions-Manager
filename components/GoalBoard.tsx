@@ -2,6 +2,7 @@
 import React, { useState, useRef } from 'react';
 import { Task, Goal } from '../types';
 import { GoalColumn } from './GoalColumn';
+import { UNASSIGNED_GOAL_ID } from '../constants';
 
 interface GoalBoardProps {
     tasks: Task[];
@@ -72,7 +73,7 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
 
     // Virtual "Unassigned" Goal
     const unassignedGoal: Goal = {
-        id: 'unassigned',
+        id: UNASSIGNED_GOAL_ID,
         title: 'Unassigned Tasks',
         color: '#64748b', // Slate
         createdDate: new Date().toISOString(),
@@ -152,7 +153,7 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
                         isCompactMode={isCompactMode}
                         isSpaceMode={isSpaceMode}
                         onFocusGoal={onFocusGoal}
-                        isFocused={currentFocusId === 'unassigned'}
+                        isFocused={currentFocusId === UNASSIGNED_GOAL_ID}
                     />
 
                     {/* Actual Goal Columns */}
