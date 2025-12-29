@@ -91,7 +91,22 @@ export const useGoogleSheetSync = (
                 setGamification(remoteMetadata.gamification);
             }
             if (remoteMetadata.settings && setSettings) {
-                setSettings(remoteMetadata.settings);
+                // FIX: Merge remote settings with local secrets (keys)
+                // Remote settings are sanitized (keys removed), so we must preserve what we have locally.
+                const currentLocalSettings = settingsRef.current || {} as Settings;
+                
+                const mergedSettings = {
+                    ...remoteMetadata.settings,
+                    // Preserve local API keys if they exist locally
+                    geminiApiKey: currentLocalSettings.geminiApiKey || remoteMetadata.settings.geminiApiKey,
+                    googleApiKey: currentLocalSettings.googleApiKey || remoteMetadata.settings.googleApiKey,
+                    googleClientId: currentLocalSettings.googleClientId || remoteMetadata.settings.googleClientId,
+                    // Preserve script URL/Sheet ID if locally set (though usually they match context)
+                    googleAppsScriptUrl: currentLocalSettings.googleAppsScriptUrl || remoteMetadata.settings.googleAppsScriptUrl,
+                    googleSheetId: currentLocalSettings.googleSheetId || remoteMetadata.settings.googleSheetId
+                };
+
+                setSettings(mergedSettings);
             }
         }
         
@@ -264,7 +279,19 @@ export const useGoogleSheetSync = (
                         
                         if (remoteMetadata) {
                             if(setGamification) setGamification(remoteMetadata.gamification);
-                            if(setSettings) setSettings(remoteMetadata.settings);
+                            if (remoteMetadata.settings && setSettings) {
+                                // MERGE FIX HERE TOO
+                                const currentLocalSettings = settingsRef.current || {} as Settings;
+                                const mergedSettings = {
+                                    ...remoteMetadata.settings,
+                                    geminiApiKey: currentLocalSettings.geminiApiKey || remoteMetadata.settings.geminiApiKey,
+                                    googleApiKey: currentLocalSettings.googleApiKey || remoteMetadata.settings.googleApiKey,
+                                    googleClientId: currentLocalSettings.googleClientId || remoteMetadata.settings.googleClientId,
+                                    googleAppsScriptUrl: currentLocalSettings.googleAppsScriptUrl || remoteMetadata.settings.googleAppsScriptUrl,
+                                    googleSheetId: currentLocalSettings.googleSheetId || remoteMetadata.settings.googleSheetId
+                                };
+                                setSettings(mergedSettings);
+                            }
                         }
 
                         setLastSyncTime(new Date().toISOString());
