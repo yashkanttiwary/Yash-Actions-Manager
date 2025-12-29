@@ -79,7 +79,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
         isListening, 
         transcript, 
         startListening, 
-        stopListening,
+        stopListening, 
         resetTranscript
     } = useSpeechRecognition({
         continuous: true // Allow continuous input without auto-stop

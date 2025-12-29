@@ -417,7 +417,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                                     {isBreakingDown ? (
                                         <i className="fas fa-spinner fa-spin text-xs"></i>
                                     ) : (
-                                        <i className="fas fa-wand-magic-sparkles text-[10px]"></i>
+                                        <i className="fas fa-brain text-[10px]"></i>
                                     )}
                                 </button>
                             )}

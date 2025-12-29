@@ -19,7 +19,7 @@ import { ShortcutsModal } from './components/ShortcutsModal';
 import { IntegrationsModal } from './components/IntegrationsModal';
 import { useGoogleSheetSync } from './hooks/useGoogleSheetSync';
 import { checkCalendarConnection } from './services/googleCalendarService'; 
-import { playCompletionSound, resumeAudioContext } from './utils/audio';
+import { resumeAudioContext } from './utils/audio';
 import { storage } from './utils/storage';
 import { useBackgroundAudio } from './hooks/useBackgroundAudio';
 import { setUserTimeOffset } from './services/timeService';
@@ -28,12 +28,12 @@ import { getEnvVar } from './utils/env';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { StarField } from './components/StarField';
 
-declare const confetti: any;
+// Confetti removed: "Why celebrate a simple fact?"
+// Sounds removed: "Why condition the mind like a dog?"
 
 const setCookie = (name: string, value: string, days: number) => {
     try {
         const expires = new Date(Date.now() + days * 864e5).toUTCString();
-        // Secure and SameSite=Strict added as per audit recommendation
         document.cookie = name + '=' + encodeURIComponent(value) + '; expires=' + expires + '; path=/; SameSite=Strict; Secure';
     } catch (e) {
         console.error("Failed to set cookie", e);
@@ -65,44 +65,36 @@ const ConnectSheetPlaceholder: React.FC<{ onConnect: () => void }> = ({ onConnec
             <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center mx-auto mb-6">
                 <i className="fas fa-table text-4xl"></i>
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Connect Your Sheet</h2>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Practical Order</h2>
             <p className="text-gray-600 dark:text-gray-400 mb-8">
-                To enable the Task Manager, you must connect a Google Sheet. This acts as your secure, permanent database.
+                Connect a sheet to maintain factual records of necessary actions.
             </p>
             <button 
                 onClick={onConnect}
                 className="w-full py-3 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-indigo-500/30 flex items-center justify-center gap-2"
             >
-                <i className="fas fa-link"></i> Connect Now
+                <i className="fas fa-link"></i> Connect Database
             </button>
         </div>
     </div>
 );
 
 const App: React.FC = () => {
-    // Initial state from localStorage to prevent re-render flash
-    const [theme, setTheme] = useState(() => {
-        try {
-            return localStorage.getItem('theme') || 'light';
-        } catch {
-            return 'light';
-        }
-    });
+    const [theme, setTheme] = useState('light');
     
     const [isCompactMode, setIsCompactMode] = useState(true);
     const [isFitToScreen, setIsFitToScreen] = useState(true);
-    const [zoomLevel, setZoomLevel] = useState(0.9); // Updated default to 90%
+    const [zoomLevel, setZoomLevel] = useState(0.9);
     const [showTimeline, setShowTimeline] = useState(false);
     
-    // Header Logic
     const [isMenuLocked, setIsMenuLocked] = useState(false);
     const [isMenuHovered, setIsMenuHovered] = useState(false);
     
-    // Global Rocket Animation State
+    // Rocket Animation REMOVED - It is a distraction.
+    // We keep the state variables to satisfy TypeScript, but they will remain static.
     const [isRocketFlying, setIsRocketFlying] = useState(false);
 
-    // Derived: Is Space Mode Active? (Either persistently set OR temporarily flying)
-    const isSpaceModeActive = useMemo(() => theme === 'space' || isRocketFlying, [theme, isRocketFlying]);
+    const isSpaceModeActive = useMemo(() => theme === 'space', [theme]);
 
     const [settings, setSettings] = useState<Settings>({
         dailyBudget: 16,
@@ -115,7 +107,7 @@ const App: React.FC = () => {
         googleSheetId: '',
         googleAppsScriptUrl: '',
         googleCalendarId: 'primary',
-        geminiApiKey: '', // New field for user-provided key
+        geminiApiKey: '', 
         audio: {
             enabled: true,
             mode: 'brown_noise',
@@ -130,14 +122,13 @@ const App: React.FC = () => {
         return !!(settings.googleSheetId || settings.googleAppsScriptUrl);
     }, [settings.googleSheetId, settings.googleAppsScriptUrl]);
 
-    // Check if API key exists (either user provided or env var)
     const hasApiKey = useMemo(() => {
         return !!settings.geminiApiKey || !!getEnvVar('VITE_GEMINI_API_KEY');
     }, [settings.geminiApiKey]);
 
     const {
         tasks,
-        goals, // New State
+        goals, 
         columns,
         columnLayouts,
         addTask,
@@ -145,11 +136,11 @@ const App: React.FC = () => {
         deleteTask,
         moveTask,
         setAllTasks,
-        setAllData, // New Setter
-        addGoal, // New Action
-        updateGoal, // New Action
-        deleteGoal, // New Action
-        toggleTaskPin, // Top 5 Focus
+        setAllData, 
+        addGoal, 
+        updateGoal, 
+        deleteGoal, 
+        toggleTaskPin,
         getTasksByStatus,
         updateColumnLayout,
         resetColumnLayouts,
@@ -165,20 +156,15 @@ const App: React.FC = () => {
     const [isTodayView, setIsTodayView] = useState<boolean>(false);
     const [showAIModal, setShowAIModal] = useState(false);
     
-    // Notification State
     const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
     const [showIntegrationsModal, setShowIntegrationsModal] = useState(false);
     const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>('general');
     
-    // Updated View Mode State
     const [viewMode, setViewMode] = useState<'kanban' | 'calendar' | 'goals'>('kanban');
     const [focusMode, setFocusMode] = useState<Status | 'None'>('None');
-    
-    // NEW: Focus Zone State
     const [focusedGoalId, setFocusedGoalId] = useState<string | null>(null);
     
-    // Confirmation Modal State
     const [confirmModalState, setConfirmModalState] = useState<{
         isOpen: boolean;
         title: string;
@@ -197,12 +183,14 @@ const App: React.FC = () => {
         return activeTask ? { taskId: activeTask.id, startTime: activeTask.currentSessionStartTime! } : null;
     }, [tasks]);
 
+    // Gamification state kept for compatibility but effectively dead
     const [gamification, setGamification] = useState<GamificationData>({
         xp: 0,
         level: 1,
         streak: { current: 0, longest: 0, lastCompletionDate: null }
     });
     
+    // Level Up Modal Removed
     const [showLevelUp, setShowLevelUp] = useState(false);
     const [leveledUpTo, setLeveledUpTo] = useState(0);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; task: Task } | null>(null);
@@ -222,19 +210,15 @@ const App: React.FC = () => {
         api: { status: 'missing', message: 'API Keys missing' }
     });
     
-    // Effect: Toggle zoom based on menu lock state
-    // Locked -> 80%, Unlocked -> 90%
     useEffect(() => {
         if (isMenuLocked) {
             setZoomLevel(0.8);
         } else {
             setZoomLevel(0.9);
         }
-        // FIX IMP-001: Persist lock state
         storage.set('isMenuLocked', String(isMenuLocked));
     }, [isMenuLocked]);
 
-    // Handle Notification Timeout
     useEffect(() => {
         if (notification) {
             const timer = setTimeout(() => setNotification(null), 3000);
@@ -277,7 +261,6 @@ const App: React.FC = () => {
     useEffect(() => {
         const loadPersistedData = async () => {
             try {
-                // Theme is already initialized from sync localStorage, but async check ensures consistency
                 const savedTheme = await storage.get('theme');
                 if (savedTheme && savedTheme !== theme) setTheme(savedTheme);
 
@@ -285,18 +268,16 @@ const App: React.FC = () => {
                 if (savedFit !== null) {
                     const shouldFit = savedFit === 'true';
                     setIsFitToScreen(shouldFit);
-                    if (shouldFit) setZoomLevel(0.9); // Updated default
+                    if (shouldFit) setZoomLevel(0.9);
                     else setZoomLevel(1);
                 }
                 
                 const savedTimeline = await storage.get('showTimeline');
                 if (savedTimeline !== null) setShowTimeline(savedTimeline === 'true');
                 
-                // FIX IMP-001: Load persisted menu lock state
                 const savedMenuLock = await storage.get('isMenuLocked');
                 if (savedMenuLock === 'true') setIsMenuLocked(true);
 
-                // NEW: Load Persisted Focus Mode
                 const savedFocusedGoalId = await storage.get('focusedGoalId');
                 if (savedFocusedGoalId) setFocusedGoalId(savedFocusedGoalId);
 
@@ -321,9 +302,6 @@ const App: React.FC = () => {
                 } else if (cookieUrl) {
                     setSettings(prev => ({ ...prev, googleAppsScriptUrl: cookieUrl }));
                 }
-
-                const savedGamification = await storage.get('taskMasterGamification');
-                if (savedGamification) setGamification(JSON.parse(savedGamification));
             
             } catch (e) {
                 console.error("Error loading persisted data", e);
@@ -336,16 +314,12 @@ const App: React.FC = () => {
 
     useEffect(() => {
         const root = window.document.documentElement;
-        
-        // Remove old classes first
         root.classList.remove('dark');
-        
         if (theme === 'dark' || theme === 'space') {
             root.classList.add('dark');
         } else {
             root.classList.remove('dark');
         }
-        
         storage.set('theme', theme);
     }, [theme]);
 
@@ -354,7 +328,6 @@ const App: React.FC = () => {
         storage.set('showTimeline', String(showTimeline));
     }, [isFitToScreen, showTimeline]);
 
-    // NEW: Persist Focus Mode
     useEffect(() => {
         if (settingsLoaded) {
             if (focusedGoalId) {
@@ -369,7 +342,6 @@ const App: React.FC = () => {
         if (settingsLoaded) {
             const saveSettings = async () => {
                 try {
-                    // Fix L-8: Exclude sensitive URLs from localStorage, use Cookie instead
                     const settingsToSave = { ...settings };
                     if (settingsToSave.googleAppsScriptUrl) {
                         setCookie('tm_script_url', settingsToSave.googleAppsScriptUrl, 365);
@@ -388,23 +360,18 @@ const App: React.FC = () => {
         }
     }, [settings, settingsLoaded]);
 
-    useEffect(() => {
-        storage.set('taskMasterGamification', JSON.stringify(gamification));
-    }, [gamification]);
-    
-    // Fix H-02: Pass Metadata State to Sync Hook
     const shouldSync = settingsLoaded && !isLoading;
     const { status: syncStatus, errorMsg: syncError, syncMethod, manualPull, manualPush } = useGoogleSheetSync(
         shouldSync ? settings.googleSheetId : undefined,
         tasks,
-        setAllData, // Updated to unified setter
+        setAllData, 
         googleAuth.isSignedIn,
         shouldSync ? settings.googleAppsScriptUrl : undefined,
         gamification,
         settings,
         setGamification,
         setSettings,
-        goals // Pass Goals
+        goals 
     );
 
     useEffect(() => {
@@ -497,7 +464,7 @@ const App: React.FC = () => {
             dependencies: [],
             blockers: [],
             currentSessionStartTime: null,
-            goalId: focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined, // Pre-fill goal if focused
+            goalId: focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined,
             isPinned: false
         });
     }, [focusedGoalId]);
@@ -509,16 +476,14 @@ const App: React.FC = () => {
             priority: 'Medium',
             dueDate: new Date().toISOString().split('T')[0],
             description: '',
-            goalId: focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined, // Pre-fill goal
+            goalId: focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined, 
         });
     }, [addTask, focusedGoalId]);
 
-    // NEW: Handle Voice Task Parsing -> OPEN MODAL FOR CONFIRMATION
     const handleVoiceTaskAdd = useCallback(async (transcript: string, defaultStatus: Status) => {
         const effectiveKey = settings.geminiApiKey || getEnvVar('VITE_GEMINI_API_KEY');
         
         if (!effectiveKey) {
-             console.warn("Voice Add: No API Key found. Falling back to raw text.");
              addTask({
                 title: transcript,
                 status: defaultStatus,
@@ -563,20 +528,12 @@ const App: React.FC = () => {
             };
 
             setEditingTask(draftTask);
-            
-            confetti({
-                particleCount: 30,
-                spread: 40,
-                origin: { y: 0.8 },
-                colors: ['#6366f1', '#a855f7'],
-                scalar: 0.7
-            });
 
         } catch (error) {
             console.error("Voice parse failed:", error);
             addTask({
                 title: transcript.length > 60 ? `${transcript.substring(0, 57)}...` : transcript,
-                description: `> 🎙️ **Voice Note (AI Parse Failed)**\n> "${transcript}"`,
+                description: `> 🎙️ **Voice Note**\n> "${transcript}"`,
                 status: defaultStatus,
                 priority: 'Medium',
                 dueDate: new Date().toISOString().split('T')[0],
@@ -629,7 +586,6 @@ const App: React.FC = () => {
         }
     }, [toggleTaskPin]);
 
-    // --- REPLACED: Giant useEffect with Custom Hook ---
     useKeyboardShortcuts({
         isSheetConfigured,
         handleOpenAddTaskModal,
@@ -668,48 +624,8 @@ const App: React.FC = () => {
         });
     };
 
-    const handleTaskCompletion = useCallback((task: Task) => {
-        setGamification(prev => {
-            const { xp: earnedXp, bonuses } = calculateTaskXP(task);
-            console.log(`[Gamification] Task "${task.title}" completed. Earned ${earnedXp} XP. Bonuses:`, bonuses);
-
-            let newStreak = { ...prev.streak };
-            const today = new Date().toISOString().split('T')[0];
-            
-            if (prev.streak.lastCompletionDate !== today) {
-                const yesterday = new Date();
-                yesterday.setDate(yesterday.getDate() - 1);
-                const yesterdayStr = yesterday.toISOString().split('T')[0];
-
-                if (prev.streak.lastCompletionDate === yesterdayStr) {
-                    newStreak.current++;
-                } else {
-                    newStreak.current = 1;
-                }
-                newStreak.lastCompletionDate = today;
-                if (newStreak.current > newStreak.longest) {
-                    newStreak.longest = newStreak.current;
-                }
-            }
-
-            const nextState = checkLevelUp({ ...prev, streak: newStreak }, earnedXp);
-            
-            if (nextState.level > prev.level) {
-                setLeveledUpTo(nextState.level);
-                setShowLevelUp(true);
-                setTimeout(() => setShowLevelUp(false), 4000);
-                 confetti({
-                    particleCount: 300,
-                    spread: 120,
-                    origin: { y: 0.6 },
-                    colors: ['#818cf8', '#c084fc', '#4ade80', '#facc15']
-                });
-            }
-
-            return nextState;
-        });
-    }, []);
-
+    // No gamification logic in handleTaskCompletion anymore
+    // It just remains blank or removes the function call usage
     const handleToggleTimer = (taskId: string) => {
         const now = Date.now();
         const currentlyActiveTask = tasks.find(t => t.currentSessionStartTime);
@@ -742,17 +658,9 @@ const App: React.FC = () => {
              task.currentSessionStartTime = null;
         }
 
-        if (newStatus === 'Done' && !task.xpAwarded) {
-            confetti({
-                particleCount: 200,
-                spread: 90,
-                origin: { y: 0.6 }
-            });
-            playCompletionSound();
-            handleTaskCompletion(task);
-        }
+        // Just move the task. No drama.
         moveTask(task.id, newStatus, newIndex);
-    }, [handleTaskCompletion, moveTask]);
+    }, [moveTask]);
 
 
     const handleTaskMove = (taskId: string, newStatus: Status, newIndex: number) => {
@@ -761,7 +669,7 @@ const App: React.FC = () => {
 
         if (task.isBlockedByDependencies && newStatus === 'In Progress') {
             const blockerTasks = task.dependencies?.map(depId => tasks.find(t => t.id === depId)?.title).filter(Boolean).join(', ');
-            alert(`This task is blocked by dependencies. Please complete the following tasks first: ${blockerTasks}`);
+            alert(`This task is blocked by dependencies: ${blockerTasks}`);
             return;
         }
 
@@ -830,16 +738,12 @@ const App: React.FC = () => {
         setEditingTask(null);
     };
     
-    // UPDATED: APPLY AI CHANGES (Called from Chat Modal)
     const handleApplyAIChanges = async (changes: TaskDiff) => {
-        // Apply Additions
         if (changes.added && changes.added.length > 0) {
             changes.added.forEach(t => {
                 addTask(t as any);
             });
         }
-
-        // Apply Updates
         if (changes.updated && changes.updated.length > 0) {
             changes.updated.forEach(partialTask => {
                 const existing = tasks.find(t => t.id === partialTask.id);
@@ -848,24 +752,14 @@ const App: React.FC = () => {
                 }
             });
         }
-
-        // Apply Deletions (Only if explicit)
         if (changes.deletedIds && changes.deletedIds.length > 0) {
             changes.deletedIds.forEach(id => {
                 deleteTask(id);
             });
         }
-
-        setNotification({ 
-            message: "Changes applied successfully.", 
-            type: 'success' 
-        });
+        setNotification({ message: "Changes applied.", type: 'success' });
     };
 
-    const handleGenerateSummary = async () => {
-        // This is handled inside the modal now, but we keep this stub or move summary logic to chat
-    };
-    
     const filteredTasks = useMemo(() => {
         return tasks.filter(task => {
             if (focusedGoalId) {
@@ -947,7 +841,7 @@ const App: React.FC = () => {
         setConfirmModalState({
             isOpen: true,
             title: "Delete Task?",
-            message: `Are you sure you want to permanently delete "${task.title}"? This action cannot be undone.`,
+            message: `Are you sure you want to permanently delete "${task.title}"?`,
             isDestructive: true,
             onConfirm: () => {
                 deleteTask(taskId);
@@ -1117,8 +1011,6 @@ const App: React.FC = () => {
                 )}
             </main>
             
-            {/* ... Modals ... */}
-            
             {editingTask && (
                 <EditTaskModal
                     task={editingTask}
@@ -1126,10 +1018,9 @@ const App: React.FC = () => {
                     onSave={handleSaveTask}
                     onDelete={requestDeleteTask}
                     onClose={() => setEditingTask(null)}
-                    onAddGoal={addGoal} // Pass the addGoal function
+                    onAddGoal={addGoal}
                 />
             )}
-            {/* ... Rest of Modals ... */}
             {blockingTask && (
                  <BlockerModal
                     task={blockingTask}
@@ -1180,14 +1071,6 @@ const App: React.FC = () => {
                 confirmLabel="Delete"
             />
 
-            {showLevelUp && (
-                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 pointer-events-none">
-                    <div className="bg-gray-800 rounded-lg shadow-2xl p-8 text-center border-2 border-yellow-400">
-                        <h2 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-amber-500 mb-4 animate-pulse">LEVEL UP!</h2>
-                        <p className="text-gray-200 text-2xl">You've reached Level {leveledUpTo}!</p>
-                    </div>
-                </div>
-            )}
              {contextMenu && (
                 <div
                     style={{ top: contextMenu.y, left: contextMenu.x }}
