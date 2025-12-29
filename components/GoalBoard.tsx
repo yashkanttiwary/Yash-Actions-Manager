@@ -18,11 +18,15 @@ interface GoalBoardProps {
     isCompactMode: boolean;
     isSpaceMode: boolean;
     zoomLevel: number;
+    // Focus Mode Props
+    onFocusGoal?: (goalId: string) => void;
+    currentFocusId?: string | null;
 }
 
 export const GoalBoard: React.FC<GoalBoardProps> = ({
     tasks, goals, onTaskMove, onEditTask, onDeleteTask, onAddGoal, onEditGoal, onDeleteGoal,
-    activeTaskTimer, onToggleTimer, onSubtaskToggle, isCompactMode, isSpaceMode, zoomLevel
+    activeTaskTimer, onToggleTimer, onSubtaskToggle, isCompactMode, isSpaceMode, zoomLevel,
+    onFocusGoal, currentFocusId
 }) => {
     const [isCreating, setIsCreating] = useState(false);
     const [newGoalTitle, setNewGoalTitle] = useState('');
@@ -147,6 +151,8 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
                         onSubtaskToggle={onSubtaskToggle}
                         isCompactMode={isCompactMode}
                         isSpaceMode={isSpaceMode}
+                        onFocusGoal={onFocusGoal}
+                        isFocused={currentFocusId === 'unassigned'}
                     />
 
                     {/* Actual Goal Columns */}
@@ -166,6 +172,8 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
                             onSubtaskToggle={onSubtaskToggle}
                             isCompactMode={isCompactMode}
                             isSpaceMode={isSpaceMode}
+                            onFocusGoal={onFocusGoal}
+                            isFocused={currentFocusId === goal.id}
                         />
                     ))}
 

@@ -1,5 +1,5 @@
 
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Task, Goal, Status } from '../types';
 import { TaskCard } from './TaskCard';
 
@@ -17,6 +17,8 @@ interface GoalColumnProps {
     onSubtaskToggle: (taskId: string, subtaskId: string) => void;
     isCompactMode: boolean;
     isSpaceMode: boolean;
+    onFocusGoal?: (goalId: string) => void;
+    isFocused?: boolean;
 }
 
 // Helper to determine text color (black/white) based on background brightness
@@ -32,7 +34,7 @@ const getContrastColor = (hex: string) => {
     const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
     
     // Check if space mode might affect this? 
-    // In space mode, we use opacity, so white text is generally preferred against dark background.
+    // In space mode, use opacity, so white text is generally preferred against dark background.
     // This function is primarily for the solid color header in normal mode.
     return yiq >= 128 ? 'text-gray-900' : 'text-white';
 };
@@ -50,9 +52,12 @@ const getStatusColor = (status: Status): string => {
 
 export const GoalColumn: React.FC<GoalColumnProps> = ({ 
     goal, tasks, allTasks, onTaskMove, onEditTask, onDeleteTask, onEditGoal, onDeleteGoal,
-    activeTaskTimer, onToggleTimer, onSubtaskToggle, isCompactMode, isSpaceMode 
+    activeTaskTimer, onToggleTimer, onSubtaskToggle, isCompactMode, isSpaceMode, onFocusGoal, isFocused
 }) => {
     const [isDraggingOver, setIsDraggingOver] = useState(false);
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const [showScrollIndicator, setShowScrollIndicator] = useState(false);
+    const [showTopScrollIndicator, setShowTopScrollIndicator] = useState(false);
     
     // Sort tasks: Active first, then Done
     const sortedTasks = [...tasks].sort((a, b) => {
@@ -60,6 +65,28 @@ export const GoalColumn: React.FC<GoalColumnProps> = ({
         if (a.status !== 'Done' && b.status === 'Done') return -1;
         return new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime();
     });
+
+    const checkScrollIndicator = useCallback(() => {
+        const el = scrollContainerRef.current;
+        if (!el) return;
+        
+        const hasOverflow = el.scrollHeight > el.clientHeight;
+        const isAtBottom = Math.abs(el.scrollHeight - el.clientHeight - el.scrollTop) < 5;
+        const isAtTop = el.scrollTop < 5;
+        
+        setShowScrollIndicator(hasOverflow && !isAtBottom);
+        setShowTopScrollIndicator(hasOverflow && !isAtTop);
+    }, []);
+
+    useEffect(() => {
+        checkScrollIndicator();
+        window.addEventListener('resize', checkScrollIndicator);
+        return () => window.removeEventListener('resize', checkScrollIndicator);
+    }, [tasks, checkScrollIndicator]);
+
+    const handleScroll = () => {
+        checkScrollIndicator();
+    };
 
     const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
@@ -93,7 +120,7 @@ export const GoalColumn: React.FC<GoalColumnProps> = ({
 
     return (
         <div 
-            className={`flex-shrink-0 w-80 rounded-xl flex flex-col ${containerClasses} shadow-lg transition-all duration-300 relative`}
+            className={`flex-shrink-0 w-80 rounded-xl flex flex-col ${containerClasses} shadow-lg transition-all duration-300 relative ${isFocused ? 'ring-4 ring-offset-2 ring-indigo-500' : ''}`}
             style={{ 
                 // Enhance border visibility in space mode using the goal color (translucent)
                 borderColor: isDraggingOver 
@@ -130,6 +157,15 @@ export const GoalColumn: React.FC<GoalColumnProps> = ({
                     <div className="flex justify-between items-start mb-2">
                         <h3 className="font-bold text-lg leading-tight truncate pr-2 drop-shadow-sm">{goal.title}</h3>
                         <div className="flex items-center gap-1">
+                            {onFocusGoal && (
+                                <button 
+                                    onClick={() => onFocusGoal(isFocused ? '' : goal.id)} // Toggle focus
+                                    className={`p-1 rounded transition-colors text-xs ${isFocused ? 'bg-white text-black animate-pulse' : 'hover:bg-white/20'}`}
+                                    title={isFocused ? "Exit Focus Zone" : "Enter Focus Zone"}
+                                >
+                                    <i className="fas fa-crosshairs"></i>
+                                </button>
+                            )}
                             <button 
                                 onClick={() => onEditGoal(goal)}
                                 className="p-1 hover:bg-white/20 rounded transition-colors text-xs"
@@ -163,11 +199,29 @@ export const GoalColumn: React.FC<GoalColumnProps> = ({
 
             {/* Task List */}
             <div 
-                className="flex-grow p-2 overflow-y-auto min-h-[200px] space-y-2 custom-scrollbar"
+                ref={scrollContainerRef}
+                onScroll={handleScroll}
+                className="flex-grow p-2 overflow-y-auto min-h-[200px] space-y-2 custom-scrollbar relative"
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
             >
+                {/* Top Scroll Indicator - Subtle Liquid Glass */}
+                <div 
+                    className={`sticky top-0 left-0 right-0 h-8 pointer-events-none transition-all duration-500 z-20 -mb-8 -mx-2 ${showTopScrollIndicator ? 'opacity-100' : 'opacity-0'}`}
+                    style={{
+                        background: isSpaceMode 
+                            ? 'linear-gradient(to bottom, rgba(165, 243, 252, 0.15) 0%, rgba(165, 243, 252, 0) 100%)' 
+                            : 'linear-gradient(to bottom, rgba(0,0,0,0.06) 0%, transparent 100%)',
+                        backdropFilter: 'blur(2px)',
+                        maskImage: 'linear-gradient(to bottom, black 40%, transparent 100%)',
+                        WebkitMaskImage: 'linear-gradient(to bottom, black 40%, transparent 100%)'
+                    }}
+                >
+                    {/* Intricate Highlight Line */}
+                    <div className={`w-full h-[1px] shadow-sm ${isSpaceMode ? 'bg-gradient-to-r from-transparent via-cyan-200/40 to-transparent' : 'bg-gradient-to-r from-transparent via-gray-400/20 to-transparent'}`}></div>
+                </div>
+
                 {sortedTasks.length === 0 ? (
                     <div className={`h-full flex flex-col items-center justify-center p-8 text-center border-2 border-dashed rounded-lg m-2 ${isSpaceMode ? 'border-slate-700 text-slate-500' : 'border-gray-300 dark:border-gray-700 text-gray-400 dark:text-gray-500'}`}>
                         <i className="far fa-clipboard text-2xl mb-2 opacity-50"></i>
@@ -196,6 +250,22 @@ export const GoalColumn: React.FC<GoalColumnProps> = ({
                         </div>
                     ))
                 )}
+            </div>
+
+            {/* Bottom Scroll Indicator - Subtle Liquid Glass */}
+            <div 
+                className={`absolute bottom-0 left-0 right-0 h-10 pointer-events-none transition-all duration-500 rounded-b-xl z-20 ${showScrollIndicator ? 'opacity-100' : 'opacity-0'}`}
+                style={{
+                    background: isSpaceMode 
+                        ? 'linear-gradient(to top, rgba(165, 243, 252, 0.15) 0%, rgba(165, 243, 252, 0) 100%)' 
+                        : 'linear-gradient(to top, rgba(0,0,0,0.06) 0%, transparent 100%)',
+                    backdropFilter: 'blur(2px)',
+                    maskImage: 'linear-gradient(to top, black 40%, transparent 100%)',
+                    WebkitMaskImage: 'linear-gradient(to top, black 40%, transparent 100%)'
+                }}
+            >
+                 {/* Intricate Highlight Line */}
+                 <div className={`absolute bottom-0 left-0 right-0 h-[1px] shadow-sm ${isSpaceMode ? 'bg-gradient-to-r from-transparent via-cyan-200/40 to-transparent' : 'bg-gradient-to-r from-transparent via-gray-400/20 to-transparent'}`}></div>
             </div>
         </div>
     );

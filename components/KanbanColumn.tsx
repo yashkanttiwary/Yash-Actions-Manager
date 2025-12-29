@@ -56,6 +56,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
     const [isResizing, setIsResizing] = useState(false);
     const [quickAddTitle, setQuickAddTitle] = useState('');
     const [showScrollIndicator, setShowScrollIndicator] = useState(false);
+    const [showTopScrollIndicator, setShowTopScrollIndicator] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     
     const statusStyle = STATUS_STYLES[status] || STATUS_STYLES['To Do'];
@@ -220,8 +221,10 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
         
         const hasOverflow = el.scrollHeight > el.clientHeight;
         const isAtBottom = Math.abs(el.scrollHeight - el.clientHeight - el.scrollTop) < 5;
+        const isAtTop = el.scrollTop < 5;
         
         setShowScrollIndicator(hasOverflow && !isAtBottom);
+        setShowTopScrollIndicator(hasOverflow && !isAtTop);
     }, []);
 
     useEffect(() => {
@@ -341,6 +344,22 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                         onScroll={handleScroll}
                         className={`flex-grow p-1 space-y-1 min-h-[200px] column-drop-zone ${isDraggingOver ? 'column-drop-zone-active' : ''} ${isCustomHeight ? 'overflow-y-auto' : ''}`}
                     >
+                        {/* Top Scroll Indicator - Subtle Liquid Glass */}
+                        <div 
+                            className={`sticky top-0 left-0 right-0 h-8 pointer-events-none transition-all duration-500 z-20 -mb-8 -mx-1 ${showTopScrollIndicator ? 'opacity-100' : 'opacity-0'}`}
+                            style={{
+                                background: isSpaceMode 
+                                    ? 'linear-gradient(to bottom, rgba(165, 243, 252, 0.15) 0%, rgba(165, 243, 252, 0) 100%)' 
+                                    : 'linear-gradient(to bottom, rgba(0,0,0,0.06) 0%, transparent 100%)',
+                                backdropFilter: 'blur(2px)',
+                                maskImage: 'linear-gradient(to bottom, black 40%, transparent 100%)',
+                                WebkitMaskImage: 'linear-gradient(to bottom, black 40%, transparent 100%)'
+                            }}
+                        >
+                             {/* Intricate Highlight Line */}
+                             <div className={`w-full h-[1px] ${isSpaceMode ? 'bg-gradient-to-r from-transparent via-cyan-200/40 to-transparent' : 'bg-gradient-to-r from-transparent via-gray-400/20 to-transparent'}`}></div>
+                        </div>
+
                         {tasks.length === 0 ? (
                             <div className={`h-full flex flex-col items-center justify-center opacity-50 p-4 select-none min-h-[150px] ${isSpaceMode ? 'text-white/60' : 'text-gray-400 dark:text-gray-500'}`}>
                                 <i className="far fa-folder-open text-3xl mb-2"></i>
@@ -367,12 +386,21 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                         )}
                     </div>
                     
+                    {/* Bottom Scroll Indicator - Subtle Liquid Glass */}
                     <div 
-                        className={`absolute bottom-0 left-0 right-0 h-12 pointer-events-none transition-opacity duration-300 rounded-b-xl z-20 ${showScrollIndicator ? 'opacity-100' : 'opacity-0'}`}
+                        className={`absolute bottom-0 left-0 right-0 h-10 pointer-events-none transition-all duration-500 rounded-b-xl z-20 ${showScrollIndicator ? 'opacity-100' : 'opacity-0'}`}
                         style={{
-                            background: 'linear-gradient(to top, rgba(0,0,0,0.25) 0%, transparent 100%)'
+                            background: isSpaceMode 
+                                ? 'linear-gradient(to top, rgba(165, 243, 252, 0.15) 0%, rgba(165, 243, 252, 0) 100%)' 
+                                : 'linear-gradient(to top, rgba(0,0,0,0.06) 0%, transparent 100%)',
+                            backdropFilter: 'blur(2px)',
+                            maskImage: 'linear-gradient(to top, black 40%, transparent 100%)',
+                            WebkitMaskImage: 'linear-gradient(to top, black 40%, transparent 100%)'
                         }}
-                    ></div>
+                    >
+                        {/* Intricate Highlight Line */}
+                        <div className={`absolute bottom-0 left-0 right-0 h-[1px] ${isSpaceMode ? 'bg-gradient-to-r from-transparent via-cyan-200/40 to-transparent' : 'bg-gradient-to-r from-transparent via-gray-400/20 to-transparent'}`}></div>
+                    </div>
 
                     {onResize && (
                         <div 

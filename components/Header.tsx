@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Task, GamificationData, Settings, Status, ConnectionHealth, SettingsTab } from '../types';
+import { Task, GamificationData, Settings, Status, ConnectionHealth, SettingsTab, Goal } from '../types';
 import { COLUMN_STATUSES } from '../constants';
 import { ConnectionHealthIndicator } from './ConnectionHealthIndicator';
 import { exportTasksToCSV } from '../utils/exportUtils';
@@ -68,6 +68,10 @@ interface HeaderProps {
     // Hover State (Lifted)
     isMenuHovered: boolean;
     onMenuHoverChange: (isHovered: boolean) => void;
+    
+    // Focus Zone Props
+    activeFocusGoal?: Goal | null;
+    onExitFocus?: () => void;
 }
 
 // Helper functions for rocket animation
@@ -82,7 +86,7 @@ export const Header: React.FC<HeaderProps> = ({
     onManualPull, onManualPush, isCompactMode, onToggleCompactMode, isFitToScreen, onToggleFitToScreen,
     zoomLevel, setZoomLevel, audioControls, isTimelineVisible, onToggleTimeline,
     isMenuLocked, setIsMenuLocked, isRocketFlying, onRocketLaunch,
-    isMenuHovered, onMenuHoverChange
+    isMenuHovered, onMenuHoverChange, activeFocusGoal, onExitFocus
 }) => {
     
     // --- CLOCK LOGIC ---
@@ -364,7 +368,7 @@ export const Header: React.FC<HeaderProps> = ({
                 title={isMenuLocked ? "Click to Unlock Menu (Auto-hide)" : "Click to Lock Menu Open"}
             >
                 
-                {/* Left: Rocket & Clock (Always Visible) */}
+                {/* Left: Rocket & Clock & Focus Pill (Always Visible) */}
                 <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
                     <div 
                         ref={rocketRef}
@@ -391,9 +395,38 @@ export const Header: React.FC<HeaderProps> = ({
                             {headerTimeStr}
                         </div>
                     </div>
+
+                    {/* NEW: Subtle Focus Pill */}
+                    {activeFocusGoal && (
+                        <div className="flex items-center gap-2 ml-2 pl-4 border-l border-gray-300 dark:border-gray-700 h-8 animate-fadeIn">
+                            <div 
+                                className="flex items-center gap-2 px-3 py-1 rounded-full border shadow-sm backdrop-blur-sm transition-all group"
+                                style={{ 
+                                    backgroundColor: isSpaceVisualsActive ? 'rgba(255,255,255,0.1)' : activeFocusGoal.color + '15', 
+                                    borderColor: activeFocusGoal.color + '40'
+                                }}
+                            >
+                                <i className="fas fa-crosshairs text-xs animate-pulse" style={{ color: activeFocusGoal.color }}></i>
+                                <span 
+                                    className={`text-xs font-bold truncate max-w-[120px] hidden sm:block ${isSpaceVisualsActive ? 'text-white' : ''}`}
+                                    style={{ color: isSpaceVisualsActive ? undefined : activeFocusGoal.color }}
+                                >
+                                    {activeFocusGoal.title}
+                                </span>
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); onExitFocus?.(); }}
+                                    className={`w-4 h-4 flex items-center justify-center rounded-full hover:bg-black/10 dark:hover:bg-white/20 transition-colors ml-1 ${isSpaceVisualsActive ? 'text-white/70 hover:text-white' : ''}`}
+                                    style={{ color: isSpaceVisualsActive ? undefined : activeFocusGoal.color }}
+                                    title="Exit Focus Mode"
+                                >
+                                    <i className="fas fa-times text-[10px]"></i>
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
-                {/* Center: Pull Down Indicator */}
+                {/* Center: Pull Down Indicator OR Focus Indicator */}
                 <div className="flex flex-col items-center opacity-50 group-hover:opacity-100 transition-opacity">
                     <div className={`w-12 h-1 rounded-full mb-1 transition-colors ${isMenuLocked ? (isSpaceVisualsActive ? 'bg-cyan-400' : 'bg-indigo-500') : (isSpaceVisualsActive ? 'bg-white/50' : 'bg-gray-300 dark:bg-gray-600')}`}></div>
                     <span className={`text-[10px] font-bold ${isSpaceVisualsActive ? 'text-white/70' : 'text-gray-400'} uppercase tracking-widest`}>
@@ -440,7 +473,20 @@ export const Header: React.FC<HeaderProps> = ({
                     
                     {/* Top Row: Title & Controls */}
                     <div className="flex flex-wrap items-center justify-between gap-y-2">
-                        <h1 className={`text-xl font-bold tracking-wider hidden sm:block ${isSpaceVisualsActive ? 'text-white text-shadow-neon' : ''}`}>Task Manager</h1>
+                        {activeFocusGoal ? (
+                            <h1 className={`text-xl font-bold tracking-wider hidden sm:block flex items-center gap-2 ${isSpaceVisualsActive ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
+                                <i className="fas fa-crosshairs text-red-500 animate-pulse"></i>
+                                FOCUS: <span style={{ color: activeFocusGoal.color }}>{activeFocusGoal.title}</span>
+                                <button 
+                                    onClick={onExitFocus} 
+                                    className="ml-3 text-xs bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded text-gray-600 dark:text-gray-300 hover:bg-red-100 hover:text-red-500 transition-colors"
+                                >
+                                    EXIT
+                                </button>
+                            </h1>
+                        ) : (
+                            <h1 className={`text-xl font-bold tracking-wider hidden sm:block ${isSpaceVisualsActive ? 'text-white text-shadow-neon' : ''}`}>Task Manager</h1>
+                        )}
                         
                         <div className="flex items-center space-x-2 sm:space-x-3 flex-wrap gap-y-2">
                             

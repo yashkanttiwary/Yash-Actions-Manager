@@ -174,6 +174,9 @@ const App: React.FC = () => {
     const [viewMode, setViewMode] = useState<'kanban' | 'calendar' | 'goals'>('kanban');
     const [focusMode, setFocusMode] = useState<Status | 'None'>('None');
     
+    // NEW: Focus Zone State
+    const [focusedGoalId, setFocusedGoalId] = useState<string | null>(null);
+    
     // Confirmation Modal State
     const [confirmModalState, setConfirmModalState] = useState<{
         isOpen: boolean;
@@ -470,9 +473,9 @@ const App: React.FC = () => {
             dependencies: [],
             blockers: [],
             currentSessionStartTime: null,
-            goalId: undefined, // Explicit
+            goalId: focusedGoalId && focusedGoalId !== 'unassigned' ? focusedGoalId : undefined, // Pre-fill goal if focused
         });
-    }, []);
+    }, [focusedGoalId]);
 
     const handleQuickAddTask = useCallback((title: string, status: Status) => {
         addTask({
@@ -481,8 +484,9 @@ const App: React.FC = () => {
             priority: 'Medium',
             dueDate: new Date().toISOString().split('T')[0],
             description: '',
+            goalId: focusedGoalId && focusedGoalId !== 'unassigned' ? focusedGoalId : undefined, // Pre-fill goal
         });
-    }, [addTask]);
+    }, [addTask, focusedGoalId]);
 
     // NEW: Handle Voice Task Parsing
     const handleVoiceTaskAdd = useCallback(async (transcript: string, defaultStatus: Status) => {
@@ -497,7 +501,8 @@ const App: React.FC = () => {
                 status: defaultStatus,
                 priority: 'Medium',
                 dueDate: new Date().toISOString().split('T')[0],
-                description: '', // Raw add, no AI processing prefix needed as it's just a quick task now
+                description: '', 
+                goalId: focusedGoalId && focusedGoalId !== 'unassigned' ? focusedGoalId : undefined
              });
              // Alert user about missing key
              setAiError("AI Key required for smart parsing. Task added as-is.");
@@ -518,6 +523,7 @@ const App: React.FC = () => {
                 scheduledStartDateTime: parsedData.scheduledStartDateTime,
                 tags: parsedData.tags || [],
                 timeEstimate: parsedData.timeEstimate,
+                goalId: focusedGoalId && focusedGoalId !== 'unassigned' ? focusedGoalId : undefined, // Smart context
                 // Handle blockers specially
                 blockers: parsedData.blockerReason ? [{
                     id: `blocker-${Date.now()}`,
@@ -544,19 +550,20 @@ const App: React.FC = () => {
 
         } catch (error) {
             console.error("Voice parse failed:", error);
-            // Fallback: Add as simple task (FIX LOGIC-001: Preserve full text in description)
+            // Fallback: Add as simple task
             addTask({
                 title: transcript.length > 60 ? `${transcript.substring(0, 57)}...` : transcript,
                 description: `> 🎙️ **Voice Note (AI Parse Failed)**\n> "${transcript}"`,
                 status: defaultStatus,
                 priority: 'Medium',
                 dueDate: new Date().toISOString().split('T')[0],
+                goalId: focusedGoalId && focusedGoalId !== 'unassigned' ? focusedGoalId : undefined
             });
             // Show toast/error
             setAiError("Smart parsing failed. Saved as raw text.");
             setTimeout(() => setAiError(null), 4000);
         }
-    }, [addTask, handleQuickAddTask, settings.geminiApiKey]);
+    }, [addTask, handleQuickAddTask, settings.geminiApiKey, focusedGoalId]);
 
     const handleOpenSettings = (tab: SettingsTab = 'general') => {
         setActiveSettingsTab(tab);
@@ -834,9 +841,20 @@ const App: React.FC = () => {
         }
     };
     
-    // Filter Tasks Logic: Today + Done Cleanup (2 Day Rule)
+    // Filter Tasks Logic: Today + Done Cleanup (2 Day Rule) + FOCUS ZONE
     const filteredTasks = useMemo(() => {
         return tasks.filter(task => {
+            // Rule 0: Focus Zone (Highest Priority Filter)
+            if (focusedGoalId) {
+                if (focusedGoalId === 'unassigned') {
+                    // Show tasks with NO goal OR where goalId doesn't match any existing goal
+                    // (Though the hook ensures goalId is removed if goal deleted, safety check)
+                    if (task.goalId && goals.some(g => g.id === task.goalId)) return false; 
+                } else {
+                    if (task.goalId !== focusedGoalId) return false;
+                }
+            }
+
             // Rule 1: Today View
             if (isTodayView) {
                 const today = new Date();
@@ -858,7 +876,23 @@ const App: React.FC = () => {
 
             return true;
         });
-    }, [tasks, isTodayView]);
+    }, [tasks, isTodayView, focusedGoalId, goals]);
+
+    // Handle Goal Deletion with Focus Reset
+    const handleGoalDelete = useCallback((goalId: string) => {
+        if (focusedGoalId === goalId) {
+            setFocusedGoalId(null);
+        }
+        deleteGoal(goalId);
+    }, [deleteGoal, focusedGoalId]);
+
+    // Derived focused goal object for UI
+    const activeFocusGoal = useMemo(() => {
+        if (!focusedGoalId) return null;
+        if (focusedGoalId === 'unassigned') return { title: 'Unassigned Tasks', color: '#64748b' } as Goal;
+        return goals.find(g => g.id === focusedGoalId);
+    }, [focusedGoalId, goals]);
+
 
     const handleGoogleSignIn = async () => {
         try {
@@ -953,14 +987,17 @@ const App: React.FC = () => {
                 isRocketFlying={isRocketFlying}
                 onRocketLaunch={setIsRocketFlying}
                 isMenuHovered={isMenuHovered} 
-                onMenuHoverChange={setIsMenuHovered} 
+                onMenuHoverChange={setIsMenuHovered}
+                // Focus Zone Props
+                activeFocusGoal={activeFocusGoal}
+                onExitFocus={() => setFocusedGoalId(null)}
             />
 
             <main 
                 className="flex-1 overflow-auto pl-2 sm:pl-6 pr-2 pb-2 relative flex flex-col scroll-smooth transition-all duration-700 z-10"
                 style={{ 
-                    // Dynamic padding top based on menu state
-                    paddingTop: (isMenuLocked || isMenuHovered) ? '280px' : '5rem' 
+                    // Dynamic padding top based on menu state and Focus Zone
+                    paddingTop: (isMenuLocked || isMenuHovered) ? '280px' : (activeFocusGoal ? '6rem' : '5rem')
                 }}
             >
                 {!isSheetConfigured ? (
@@ -989,7 +1026,7 @@ const App: React.FC = () => {
                                 {viewMode === 'kanban' && (
                                     <div className="flex-grow">
                                         <KanbanBoard
-                                            tasks={tasks}
+                                            tasks={filteredTasks} // Use Filtered Tasks
                                             columns={columns}
                                             columnLayouts={columnLayouts}
                                             getTasksByStatus={(status) => getTasksByStatus(status, filteredTasks)}
@@ -1009,15 +1046,15 @@ const App: React.FC = () => {
                                             isCompactMode={isCompactMode}
                                             isFitToScreen={isFitToScreen}
                                             zoomLevel={zoomLevel}
-                                            isSpaceMode={isSpaceModeActive} // Pass calculated active mode
-                                            goals={goals} // Pass goals to KanbanBoard
+                                            isSpaceMode={isSpaceModeActive} 
+                                            goals={goals} 
                                         />
                                     </div>
                                 )}
                                 {viewMode === 'calendar' && (
                                     <div className="flex-grow h-full">
                                         <CalendarView
-                                            tasks={tasks}
+                                            tasks={filteredTasks} // Use Filtered Tasks
                                             onUpdateTask={updateTask}
                                             onEditTask={handleEditTask}
                                             onAddTask={handleOpenAddTaskModal}
@@ -1028,20 +1065,23 @@ const App: React.FC = () => {
                                 {viewMode === 'goals' && (
                                     <div className="flex-grow h-full">
                                         <GoalBoard
-                                            tasks={filteredTasks}
+                                            tasks={filteredTasks} // Use Filtered Tasks
                                             goals={goals}
                                             onTaskMove={handleTaskGoalMove}
                                             onEditTask={handleEditTask}
                                             onDeleteTask={requestDeleteTask}
                                             onAddGoal={addGoal}
                                             onEditGoal={updateGoal}
-                                            onDeleteGoal={deleteGoal}
+                                            onDeleteGoal={handleGoalDelete} // Use new handler
                                             activeTaskTimer={activeTaskTimer}
                                             onToggleTimer={handleToggleTimer}
                                             onSubtaskToggle={handleSubtaskToggle}
                                             isCompactMode={isCompactMode}
                                             isSpaceMode={isSpaceModeActive}
                                             zoomLevel={zoomLevel}
+                                            // Pass Focus Handlers
+                                            onFocusGoal={setFocusedGoalId}
+                                            currentFocusId={focusedGoalId}
                                         />
                                     </div>
                                 )}
@@ -1053,12 +1093,10 @@ const App: React.FC = () => {
             
             {/* ... Modals ... */}
             
-            {/* REMOVED: Redundant Bottom-Left Sync Toast */}
-
             {editingTask && (
                 <EditTaskModal
                     task={editingTask}
-                    allTasks={tasks}
+                    allTasks={tasks} // Pass ALL tasks for dependencies context, not filtered
                     onSave={handleSaveTask}
                     onDelete={requestDeleteTask}
                     onClose={() => setEditingTask(null)}
