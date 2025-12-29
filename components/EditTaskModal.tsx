@@ -11,14 +11,19 @@ interface EditTaskModalProps {
     onSave: (task: Task) => void;
     onDelete: (taskId: string) => void; // New prop
     onClose: () => void;
+    onAddGoal?: (goal: Omit<Goal, 'id' | 'createdDate'>) => string; // New prop, returns ID
 }
 
-export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, onSave, onDelete, onClose }) => {
+export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, onSave, onDelete, onClose, onAddGoal }) => {
     const [editedTask, setEditedTask] = useState<Task>(task);
     const [tagsInput, setTagsInput] = useState(task.tags?.join(', ') || '');
     const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
     const [activeBlockerReason, setActiveBlockerReason] = useState('');
     const [availableGoals, setAvailableGoals] = useState<Goal[]>([]);
+    
+    // New Goal Creation State
+    const [isCreatingGoal, setIsCreatingGoal] = useState(false);
+    const [newGoalName, setNewGoalName] = useState('');
     
     // Validation State
     const [errors, setErrors] = useState<{ title?: string; timeEstimate?: string }>({});
@@ -29,6 +34,8 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
 
     const isNewTask = task.id.startsWith('new-');
     
+    const PRESET_COLORS = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#6366f1', '#8b5cf6', '#ec4899'];
+
     useEffect(() => {
         const loadGoals = async () => {
             const saved = await storage.get('goals');
@@ -216,6 +223,33 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
         const selectedIds = Array.from(e.target.selectedOptions, (option: HTMLOptionElement) => option.value);
         setEditedTask(prev => ({ ...prev, dependencies: selectedIds }));
     };
+    
+    // --- GOAL CREATION HANDLER ---
+    const handleCreateGoal = () => {
+        if (!newGoalName.trim() || !onAddGoal) return;
+        
+        // Pick a random preset color
+        const randomColor = PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)];
+        
+        const newId = onAddGoal({
+            title: newGoalName.trim(),
+            color: randomColor,
+            description: ''
+        });
+        
+        // Optimistically add to local available goals list so it appears in dropdown immediately
+        // Note: The parent component will re-render and pass fresh props soon, but for instant UI response:
+        setAvailableGoals(prev => [...prev, {
+            id: newId,
+            title: newGoalName.trim(),
+            color: randomColor,
+            createdDate: new Date().toISOString()
+        }]);
+        
+        handleInputChange('goalId', newId);
+        setIsCreatingGoal(false);
+        setNewGoalName('');
+    };
 
     const inputClasses = "w-full p-3 bg-gray-200 dark:bg-gray-900/50 rounded-md border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-indigo-500 focus:outline-none text-gray-800 dark:text-gray-200";
     const labelClasses = "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1";
@@ -285,25 +319,74 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
                     <div>
                         <label htmlFor="task-goal" className={labelClasses}>Assigned Goal (Strategy)</label>
                         <div className="relative">
-                            <select 
-                                id="task-goal" 
-                                value={editedTask.goalId || ''} 
-                                onChange={e => handleInputChange('goalId', e.target.value || undefined)} 
-                                className={inputClasses}
-                            >
-                                <option value="">Unassigned</option>
-                                {availableGoals.map(g => (
-                                    <option key={g.id} value={g.id}>{g.title}</option>
-                                ))}
-                            </select>
-                            <div className="absolute inset-y-0 right-8 flex items-center pointer-events-none">
-                                {editedTask.goalId && (
-                                    <div 
-                                        className="w-3 h-3 rounded-full mr-2"
-                                        style={{ backgroundColor: availableGoals.find(g => g.id === editedTask.goalId)?.color || 'transparent' }}
-                                    ></div>
-                                )}
-                            </div>
+                            {isCreatingGoal ? (
+                                <div className="flex gap-2 animate-fadeIn">
+                                    <input 
+                                        type="text" 
+                                        value={newGoalName} 
+                                        onChange={(e) => setNewGoalName(e.target.value)}
+                                        placeholder="New Goal Title..." 
+                                        className={inputClasses}
+                                        autoFocus
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                handleCreateGoal();
+                                            } else if (e.key === 'Escape') {
+                                                setIsCreatingGoal(false);
+                                            }
+                                        }}
+                                    />
+                                    <button 
+                                        onClick={handleCreateGoal}
+                                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 rounded-md transition-colors"
+                                        title="Create Goal"
+                                    >
+                                        <i className="fas fa-check"></i>
+                                    </button>
+                                    <button 
+                                        onClick={() => setIsCreatingGoal(false)}
+                                        className="bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 px-3 rounded-md transition-colors"
+                                        title="Cancel"
+                                    >
+                                        <i className="fas fa-times"></i>
+                                    </button>
+                                </div>
+                            ) : (
+                                <select 
+                                    id="task-goal" 
+                                    value={editedTask.goalId || ''} 
+                                    onChange={e => {
+                                        if (e.target.value === 'NEW_GOAL_TRIGGER') {
+                                            setIsCreatingGoal(true);
+                                        } else {
+                                            handleInputChange('goalId', e.target.value || undefined);
+                                        }
+                                    }} 
+                                    className={inputClasses}
+                                >
+                                    <option value="">Unassigned</option>
+                                    {availableGoals.map(g => (
+                                        <option key={g.id} value={g.id}>{g.title}</option>
+                                    ))}
+                                    {onAddGoal && (
+                                        <option value="NEW_GOAL_TRIGGER" className="font-bold text-indigo-600 dark:text-indigo-400">
+                                            + Create New Goal
+                                        </option>
+                                    )}
+                                </select>
+                            )}
+                            
+                            {!isCreatingGoal && (
+                                <div className="absolute inset-y-0 right-8 flex items-center pointer-events-none">
+                                    {editedTask.goalId && (
+                                        <div 
+                                            className="w-3 h-3 rounded-full mr-2"
+                                            style={{ backgroundColor: availableGoals.find(g => g.id === editedTask.goalId)?.color || 'transparent' }}
+                                        ></div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
 

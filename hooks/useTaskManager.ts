@@ -264,12 +264,14 @@ export const useTaskManager = (enableLoading: boolean = true) => {
     // --- GOAL OPERATIONS ---
     const addGoal = useCallback((goalData: Omit<Goal, 'id' | 'createdDate'>) => {
         const now = new Date().toISOString();
+        const id = `goal-${Date.now()}-${Math.random()}`;
         const newGoal: Goal = {
-            id: `goal-${Date.now()}-${Math.random()}`,
+            id,
             createdDate: now,
             ...goalData
         };
         setGoals(prev => [...prev, newGoal]);
+        return id; // Return the ID so the caller can use it
     }, []);
 
     const updateGoal = useCallback((updatedGoal: Goal) => {

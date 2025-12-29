@@ -59,6 +59,14 @@ export interface Task {
   isPinned?: boolean;
 }
 
+// Added TaskDiff here to be shared
+export interface TaskDiff {
+    added: Partial<Task>[];
+    updated: Partial<Task>[];
+    deletedIds: string[];
+    summary?: string;
+}
+
 export interface ColumnLayout {
   id: Status;
   x: number;

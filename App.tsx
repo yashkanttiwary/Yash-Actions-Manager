@@ -11,7 +11,7 @@ import { AIAssistantModal } from './components/AIAssistantModal';
 import { CalendarView } from './components/CalendarView';
 import { TimelineGantt } from './components/TimelineGantt';
 import { GoalBoard } from './components/GoalBoard'; 
-import { manageTasksWithAI, generateTaskSummary, breakDownTask, parseTaskFromVoice } from './services/geminiService';
+import { generateTaskSummary, breakDownTask, parseTaskFromVoice, TaskDiff } from './services/geminiService';
 import { calculateTaskXP, checkLevelUp } from './services/gamificationService'; 
 import { initGoogleClient, signIn, signOut } from './services/googleAuthService';
 import { COLUMN_STATUSES, UNASSIGNED_GOAL_ID } from './constants';
@@ -164,9 +164,6 @@ const App: React.FC = () => {
     const [resolvingBlockerTask, setResolvingBlockerTask] = useState<{ task: Task; newStatus: Status; newIndex: number } | null>(null);
     const [isTodayView, setIsTodayView] = useState<boolean>(false);
     const [showAIModal, setShowAIModal] = useState(false);
-    const [isAIProcessing, setIsAIProcessing] = useState(false);
-    const [aiError, setAiError] = useState<string | null>(null);
-    const [aiSummary, setAiSummary] = useState<string | null>(null);
     
     // Notification State
     const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -518,12 +515,10 @@ const App: React.FC = () => {
 
     // NEW: Handle Voice Task Parsing -> OPEN MODAL FOR CONFIRMATION
     const handleVoiceTaskAdd = useCallback(async (transcript: string, defaultStatus: Status) => {
-        // Safe check for API Key availability first
         const effectiveKey = settings.geminiApiKey || getEnvVar('VITE_GEMINI_API_KEY');
         
         if (!effectiveKey) {
              console.warn("Voice Add: No API Key found. Falling back to raw text.");
-             // Fallback: Add as simple task immediately
              addTask({
                 title: transcript,
                 status: defaultStatus,
@@ -532,20 +527,15 @@ const App: React.FC = () => {
                 description: '', 
                 goalId: focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined
              });
-             // Alert user about missing key
-             setAiError("AI Key required for smart parsing. Task added as-is.");
-             setTimeout(() => setAiError(null), 4000);
              return;
         }
 
         try {
-            // FIX: Pass goals to parseTaskFromVoice for context-aware parsing
             const parsedData = await parseTaskFromVoice(transcript, effectiveKey, goals);
             
-            // Map parsed data to a new Draft Task
             const draftTask: Task = {
                 id: `new-${Date.now()}`,
-                title: parsedData.title || transcript, // Fallback to raw text
+                title: parsedData.title || transcript, 
                 description: parsedData.description || '',
                 status: (parsedData.status || defaultStatus) as Status,
                 priority: (parsedData.priority || 'Medium') as Priority,
@@ -553,9 +543,7 @@ const App: React.FC = () => {
                 scheduledStartDateTime: parsedData.scheduledStartDateTime,
                 tags: parsedData.tags || [],
                 timeEstimate: parsedData.timeEstimate,
-                // Prioritize AI-detected goal, fallback to current focus
                 goalId: parsedData.goalId || (focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined), 
-                // Handle blockers specially
                 blockers: parsedData.blockerReason ? [{
                     id: `blocker-${Date.now()}`,
                     reason: parsedData.blockerReason,
@@ -567,7 +555,6 @@ const App: React.FC = () => {
                     title: st.title,
                     isCompleted: false
                 })) || [],
-                // Default Required Fields
                 createdDate: new Date().toISOString(),
                 lastModified: new Date().toISOString(),
                 statusChangeDate: new Date().toISOString(),
@@ -575,10 +562,8 @@ const App: React.FC = () => {
                 isPinned: false
             };
 
-            // OPEN FORM INSTEAD OF ADDING DIRECTLY
             setEditingTask(draftTask);
             
-            // Optional: Small confetti pop to indicate "Thought Complete"
             confetti({
                 particleCount: 30,
                 spread: 40,
@@ -589,7 +574,6 @@ const App: React.FC = () => {
 
         } catch (error) {
             console.error("Voice parse failed:", error);
-            // Fallback: Add as simple task
             addTask({
                 title: transcript.length > 60 ? `${transcript.substring(0, 57)}...` : transcript,
                 description: `> 🎙️ **Voice Note (AI Parse Failed)**\n> "${transcript}"`,
@@ -598,9 +582,6 @@ const App: React.FC = () => {
                 dueDate: new Date().toISOString().split('T')[0],
                 goalId: focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined
             });
-            // Show toast/error
-            setAiError("Smart parsing failed. Saved as raw text.");
-            setTimeout(() => setAiError(null), 4000);
         }
     }, [addTask, handleQuickAddTask, settings.geminiApiKey, focusedGoalId, goals]);
 
@@ -620,17 +601,14 @@ const App: React.FC = () => {
         updateTask({ ...task, subtasks: updatedSubtasks });
     }, [tasks, updateTask]);
 
-    // FEATURE: "I'm Stuck" Breakdown Handler
     const handleBreakDownTask = useCallback(async (taskId: string) => {
         const task = tasks.find(t => t.id === taskId);
         if (!task) return;
 
         try {
-            // Pass the user-configured API key if available
             const steps = await breakDownTask(task.title, settings.geminiApiKey);
             const currentSubtasks = task.subtasks || [];
             
-            // Append new steps, avoiding duplicates by title if possible (simple check)
             const newSubtasks = [...currentSubtasks];
             steps.forEach(step => {
                 if (!newSubtasks.some(s => s.title === step.title)) {
@@ -641,7 +619,6 @@ const App: React.FC = () => {
             updateTask({ ...task, subtasks: newSubtasks });
         } catch (error) {
             console.error("Failed to break down task:", error);
-            // Optional: Show toast error here
         }
     }, [tasks, updateTask, settings.geminiApiKey]);
 
@@ -685,7 +662,7 @@ const App: React.FC = () => {
     const handleToggleFitToScreen = () => {
         setIsFitToScreen(prev => {
             const newValue = !prev;
-            if (newValue) setZoomLevel(0.9); // Updated default
+            if (newValue) setZoomLevel(0.9);
             else setZoomLevel(1);
             return newValue;
         });
@@ -693,11 +670,9 @@ const App: React.FC = () => {
 
     const handleTaskCompletion = useCallback((task: Task) => {
         setGamification(prev => {
-            // 1. Calculate XP for this specific task
             const { xp: earnedXp, bonuses } = calculateTaskXP(task);
             console.log(`[Gamification] Task "${task.title}" completed. Earned ${earnedXp} XP. Bonuses:`, bonuses);
 
-            // 2. Handle Streak
             let newStreak = { ...prev.streak };
             const today = new Date().toISOString().split('T')[0];
             
@@ -717,7 +692,6 @@ const App: React.FC = () => {
                 }
             }
 
-            // 3. Update Level & XP
             const nextState = checkLevelUp({ ...prev, streak: newStreak }, earnedXp);
             
             if (nextState.level > prev.level) {
@@ -856,52 +830,52 @@ const App: React.FC = () => {
         setEditingTask(null);
     };
     
-    const handleAICommand = async (command: string) => {
-        setIsAIProcessing(true);
-        setAiError(null);
-        setAiSummary(null);
-        try {
-            // Pass API Key
-            const updatedTasks = await manageTasksWithAI(command, tasks, settings.geminiApiKey);
-            setAllTasks(updatedTasks);
-            setShowAIModal(false);
-        } catch (error: any) {
-            setAiError(error.message || 'An unknown error occurred.');
-        } finally {
-            setIsAIProcessing(false);
+    // UPDATED: APPLY AI CHANGES (Called from Chat Modal)
+    const handleApplyAIChanges = async (changes: TaskDiff) => {
+        // Apply Additions
+        if (changes.added && changes.added.length > 0) {
+            changes.added.forEach(t => {
+                addTask(t as any);
+            });
         }
+
+        // Apply Updates
+        if (changes.updated && changes.updated.length > 0) {
+            changes.updated.forEach(partialTask => {
+                const existing = tasks.find(t => t.id === partialTask.id);
+                if (existing) {
+                    updateTask({ ...existing, ...partialTask });
+                }
+            });
+        }
+
+        // Apply Deletions (Only if explicit)
+        if (changes.deletedIds && changes.deletedIds.length > 0) {
+            changes.deletedIds.forEach(id => {
+                deleteTask(id);
+            });
+        }
+
+        setNotification({ 
+            message: "Changes applied successfully.", 
+            type: 'success' 
+        });
     };
 
     const handleGenerateSummary = async () => {
-        setIsAIProcessing(true);
-        setAiError(null);
-        setAiSummary(null);
-        try {
-            // Pass API Key
-            const summary = await generateTaskSummary(tasks, settings.geminiApiKey);
-            setAiSummary(summary);
-        } catch (error: any) {
-            setAiError(error.message || 'An unknown error occurred while generating summary.');
-        } finally {
-            setIsAIProcessing(false);
-        }
+        // This is handled inside the modal now, but we keep this stub or move summary logic to chat
     };
     
-    // Filter Tasks Logic: Today + Done Cleanup (2 Day Rule) + FOCUS ZONE
     const filteredTasks = useMemo(() => {
         return tasks.filter(task => {
-            // Rule 0: Focus Zone (Highest Priority Filter)
             if (focusedGoalId) {
                 if (focusedGoalId === UNASSIGNED_GOAL_ID) {
-                    // Show tasks with NO goal OR where goalId doesn't match any existing goal
-                    // (Though the hook ensures goalId is removed if goal deleted, safety check)
                     if (task.goalId && goals.some(g => g.id === task.goalId)) return false; 
                 } else {
                     if (task.goalId !== focusedGoalId) return false;
                 }
             }
 
-            // Rule 1: Today View
             if (isTodayView) {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
@@ -910,13 +884,12 @@ const App: React.FC = () => {
                 if (dueDate.getTime() !== today.getTime()) return false;
             }
 
-            // Rule 2: Done Task Cleanup (Hide tasks completed > 48h ago)
             if (task.status === 'Done' && task.completionDate) {
                 const completedTime = new Date(task.completionDate).getTime();
                 const now = new Date().getTime();
                 const hoursSinceCompletion = (now - completedTime) / (1000 * 60 * 60);
                 if (hoursSinceCompletion > 48) {
-                    return false; // Hide from view (but remains in DB/Sheet)
+                    return false; 
                 }
             }
 
@@ -924,7 +897,6 @@ const App: React.FC = () => {
         });
     }, [tasks, isTodayView, focusedGoalId, goals]);
 
-    // Handle Goal Deletion with Focus Reset
     const handleGoalDelete = useCallback((goalId: string) => {
         if (focusedGoalId === goalId) {
             setFocusedGoalId(null);
@@ -932,7 +904,6 @@ const App: React.FC = () => {
         deleteGoal(goalId);
     }, [deleteGoal, focusedGoalId]);
 
-    // Derived focused goal object for UI
     const activeFocusGoal = useMemo(() => {
         if (!focusedGoalId) return null;
         if (focusedGoalId === UNASSIGNED_GOAL_ID) return { id: UNASSIGNED_GOAL_ID, title: 'Unassigned Tasks', color: '#64748b' } as Goal;
@@ -981,7 +952,7 @@ const App: React.FC = () => {
             onConfirm: () => {
                 deleteTask(taskId);
                 setConfirmModalState(prev => ({...prev, isOpen: false}));
-                setEditingTask(null); // Close modal if open
+                setEditingTask(null); 
             }
         });
     }, [tasks, deleteTask]);
@@ -997,7 +968,7 @@ const App: React.FC = () => {
             
             <Header
                 tasks={tasks}
-                goals={goals} // Pass Goals
+                goals={goals} 
                 isTodayView={isTodayView}
                 setIsTodayView={setIsTodayView}
                 onOpenAIAssistant={() => setShowAIModal(true)}
@@ -1017,7 +988,7 @@ const App: React.FC = () => {
                 setFocusMode={setFocusMode}
                 onOpenSettings={handleOpenSettings}
                 connectionHealth={connectionHealth}
-                syncStatus={syncStatus} // Pass syncStatus
+                syncStatus={syncStatus} 
                 onManualPull={manualPull}
                 onManualPush={manualPush}
                 isCompactMode={isCompactMode}
@@ -1035,20 +1006,17 @@ const App: React.FC = () => {
                 onRocketLaunch={setIsRocketFlying}
                 isMenuHovered={isMenuHovered} 
                 onMenuHoverChange={setIsMenuHovered}
-                // Focus Zone Props
                 activeFocusGoal={activeFocusGoal}
-                onFocusGoal={setFocusedGoalId} // Pass Setter
+                onFocusGoal={setFocusedGoalId} 
                 onExitFocus={() => setFocusedGoalId(null)}
             />
 
             <main 
                 className="flex-1 overflow-auto pl-2 sm:pl-6 pr-2 pb-2 relative flex flex-col scroll-smooth transition-all duration-700 z-10"
                 style={{ 
-                    // Dynamic padding top based on menu state and Focus Zone
                     paddingTop: (isMenuLocked || isMenuHovered) ? '280px' : (activeFocusGoal ? '6rem' : '5rem')
                 }}
             >
-                {/* Global Notification Toast */}
                 {notification && (
                     <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top-2 fade-in duration-300">
                         <div className={`px-4 py-2 rounded-lg shadow-xl text-sm font-bold flex items-center gap-2 ${notification.type === 'error' ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}`}>
@@ -1076,7 +1044,7 @@ const App: React.FC = () => {
                                     tasks={filteredTasks} 
                                     onEditTask={handleEditTask}
                                     onUpdateTask={updateTask}
-                                    addTask={addTask} // Pass Add Task for Blade Tool
+                                    addTask={addTask} 
                                     isVisible={showTimeline}
                                     timezone={settings.timezone}
                                 />
@@ -1084,7 +1052,7 @@ const App: React.FC = () => {
                                 {viewMode === 'kanban' && (
                                     <div className="flex-grow">
                                         <KanbanBoard
-                                            tasks={filteredTasks} // Use Filtered Tasks
+                                            tasks={filteredTasks} 
                                             columns={columns}
                                             columnLayouts={columnLayouts}
                                             getTasksByStatus={(status) => getTasksByStatus(status, filteredTasks)}
@@ -1106,14 +1074,14 @@ const App: React.FC = () => {
                                             zoomLevel={zoomLevel}
                                             isSpaceMode={isSpaceModeActive} 
                                             goals={goals} 
-                                            onTogglePin={handleTogglePin} // Connect Pin Toggle
+                                            onTogglePin={handleTogglePin} 
                                         />
                                     </div>
                                 )}
                                 {viewMode === 'calendar' && (
                                     <div className="flex-grow h-full">
                                         <CalendarView
-                                            tasks={filteredTasks} // Use Filtered Tasks
+                                            tasks={filteredTasks} 
                                             onUpdateTask={updateTask}
                                             onEditTask={handleEditTask}
                                             onAddTask={handleOpenAddTaskModal}
@@ -1124,21 +1092,20 @@ const App: React.FC = () => {
                                 {viewMode === 'goals' && (
                                     <div className="flex-grow h-full">
                                         <GoalBoard
-                                            tasks={filteredTasks} // Use Filtered Tasks
+                                            tasks={filteredTasks} 
                                             goals={goals}
                                             onTaskMove={handleTaskGoalMove}
                                             onEditTask={handleEditTask}
                                             onDeleteTask={requestDeleteTask}
                                             onAddGoal={addGoal}
                                             onEditGoal={updateGoal}
-                                            onDeleteGoal={handleGoalDelete} // Use new handler
+                                            onDeleteGoal={handleGoalDelete} 
                                             activeTaskTimer={activeTaskTimer}
                                             onToggleTimer={handleToggleTimer}
                                             onSubtaskToggle={handleSubtaskToggle}
                                             isCompactMode={isCompactMode}
                                             isSpaceMode={isSpaceModeActive}
                                             zoomLevel={zoomLevel}
-                                            // Pass Focus Handlers
                                             onFocusGoal={setFocusedGoalId}
                                             currentFocusId={focusedGoalId}
                                         />
@@ -1155,12 +1122,14 @@ const App: React.FC = () => {
             {editingTask && (
                 <EditTaskModal
                     task={editingTask}
-                    allTasks={tasks} // Pass ALL tasks for dependencies context, not filtered
+                    allTasks={tasks} 
                     onSave={handleSaveTask}
                     onDelete={requestDeleteTask}
                     onClose={() => setEditingTask(null)}
+                    onAddGoal={addGoal} // Pass the addGoal function
                 />
             )}
+            {/* ... Rest of Modals ... */}
             {blockingTask && (
                  <BlockerModal
                     task={blockingTask}
@@ -1179,15 +1148,10 @@ const App: React.FC = () => {
                 <AIAssistantModal
                     onClose={() => {
                         setShowAIModal(false);
-                        setAiError(null);
-                        setAiSummary(null);
                     }}
-                    onProcessCommand={handleAICommand}
-                    isLoading={isAIProcessing}
-                    error={aiError}
-                    onGenerateSummary={handleGenerateSummary}
-                    summary={aiSummary}
-                    hasApiKey={hasApiKey}
+                    onApplyChanges={handleApplyAIChanges}
+                    tasks={tasks}
+                    apiKey={hasApiKey ? (settings.geminiApiKey || getEnvVar('VITE_GEMINI_API_KEY')) : undefined}
                     onSaveApiKey={(key) => setSettings(prev => ({ ...prev, geminiApiKey: key }))}
                 />
             )}
@@ -1224,7 +1188,6 @@ const App: React.FC = () => {
                     </div>
                 </div>
             )}
-             {/* REMOVED: {settings.showPomodoroTimer && <PomodoroTimer settings={settings} />} */}
              {contextMenu && (
                 <div
                     style={{ top: contextMenu.y, left: contextMenu.x }}
@@ -1234,7 +1197,6 @@ const App: React.FC = () => {
                 >
                     <div className="px-3 py-1 text-sm font-bold border-b border-gray-200 dark:border-gray-700 mb-1 truncate">{contextMenu.task.title}</div>
                     
-                    {/* Action Buttons */}
                     <button
                         onClick={() => handleEditFromContextMenu(contextMenu.task)}
                         className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
@@ -1242,7 +1204,6 @@ const App: React.FC = () => {
                         <i className="fas fa-edit text-blue-500 w-4"></i> Edit Task
                     </button>
                     
-                    {/* --- NEW PIN OPTION --- */}
                     <button
                         onClick={() => {
                             handleTogglePin(contextMenu.task.id);
