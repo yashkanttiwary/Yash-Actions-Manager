@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Task, Priority, Status, Subtask, Blocker, Goal } from '../types';
+import { Task, Priority, Status, Subtask, Blocker, Goal, TaskType } from '../types';
 import { COLUMN_STATUSES } from '../constants';
 import { ConfirmModal } from './ConfirmModal';
 import { storage } from '../utils/storage';
@@ -33,6 +33,7 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
     const [subtaskToDelete, setSubtaskToDelete] = useState<string | null>(null);
 
     const isNewTask = task.id.startsWith('new-');
+    const isObservation = editedTask.type === 'observation';
     
     const PRESET_COLORS = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#6366f1', '#8b5cf6', '#ec4899'];
 
@@ -52,7 +53,7 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
 
     useEffect(() => {
         const currentActiveBlocker = task.blockers?.find(b => !b.resolved);
-        setEditedTask(task);
+        setEditedTask({ ...task, type: task.type || 'action' });
         setTagsInput(task.tags?.join(', ') || '');
         setActiveBlockerReason(currentActiveBlocker?.reason || '');
     }, [task]);
@@ -238,7 +239,6 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
         });
         
         // Optimistically add to local available goals list so it appears in dropdown immediately
-        // Note: The parent component will re-render and pass fresh props soon, but for instant UI response:
         setAvailableGoals(prev => [...prev, {
             id: newId,
             title: newGoalName.trim(),
@@ -262,62 +262,91 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
     return (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4" onClick={onClose}>
             <div className="bg-white dark:bg-gray-800/80 border border-gray-300 dark:border-gray-600 rounded-2xl shadow-2xl w-full max-w-2xl p-6 sm:p-8" onClick={e => e.stopPropagation()}>
-                <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-gray-100">{isNewTask ? 'Add New Task' : 'Edit Task'}</h2>
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{isNewTask ? 'New Entry' : 'Edit Entry'}</h2>
+                    
+                    {/* TYPE SWITCHER */}
+                    <div className="bg-gray-200 dark:bg-gray-700 p-1 rounded-lg flex text-xs font-bold">
+                        <button
+                            type="button"
+                            onClick={() => handleInputChange('type', 'action')}
+                            className={`px-3 py-1.5 rounded-md transition-all ${!isObservation ? 'bg-white dark:bg-gray-600 shadow text-indigo-600 dark:text-indigo-400' : 'text-gray-500'}`}
+                        >
+                            Factual Action
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => handleInputChange('type', 'observation')}
+                            className={`px-3 py-1.5 rounded-md transition-all ${isObservation ? 'bg-white dark:bg-gray-600 shadow text-purple-600 dark:text-purple-400' : 'text-gray-500'}`}
+                        >
+                            Observation
+                        </button>
+                    </div>
+                </div>
                 
                 <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-4">
                     <div>
-                        <label htmlFor="task-title" className={labelClasses}>Title <span className="text-red-500">*</span></label>
+                        <label htmlFor="task-title" className={labelClasses}>{isObservation ? 'Observation' : 'Task Title'} <span className="text-red-500">*</span></label>
                         <input 
                             id="task-title" 
                             type="text" 
                             value={editedTask.title} 
                             onChange={e => handleInputChange('title', e.target.value)} 
-                            placeholder="Title" 
+                            placeholder={isObservation ? "What are you observing about the mind?" : "What is the factual action?"} 
                             className={`${inputClasses} ${errors.title ? 'border-red-500 focus:ring-red-500' : ''}`}
                         />
                         {errors.title && <p className="text-red-500 text-xs mt-1">{errors.title}</p>}
                     </div>
                     <div>
                         <label htmlFor="task-desc" className={labelClasses}>Description</label>
-                        <textarea id="task-desc" value={editedTask.description || ''} onChange={e => handleInputChange('description', e.target.value)} placeholder="Description" className={`${inputClasses} h-24`}></textarea>
+                        <textarea id="task-desc" value={editedTask.description || ''} onChange={e => handleInputChange('description', e.target.value)} placeholder="Details..." className={`${inputClasses} h-24`}></textarea>
                     </div>
                     
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                          <div>
-                            <label htmlFor="task-status" className={labelClasses}>Status (Board Column)</label>
+                            <label htmlFor="task-status" className={labelClasses}>Status</label>
                             <select id="task-status" value={editedTask.status} onChange={e => handleInputChange('status', e.target.value as Status)} className={inputClasses}>
                                 {COLUMN_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                          </div>
+                         
+                         {/* Hide Priority for Observations */}
+                         {!isObservation && (
+                             <div>
+                                <label htmlFor="task-priority" className={labelClasses}>Priority</label>
+                                <select id="task-priority" value={editedTask.priority} onChange={e => handleInputChange('priority', e.target.value as Priority)} className={inputClasses}>
+                                    {['Critical', 'High', 'Medium', 'Low'].map(p => <option key={p} value={p}>{p}</option>)}
+                                </select>
+                             </div>
+                         )}
+                         
                          <div>
-                            <label htmlFor="task-priority" className={labelClasses}>Priority</label>
-                            <select id="task-priority" value={editedTask.priority} onChange={e => handleInputChange('priority', e.target.value as Priority)} className={inputClasses}>
-                                {['Critical', 'High', 'Medium', 'Low'].map(p => <option key={p} value={p}>{p}</option>)}
-                            </select>
-                         </div>
-                         <div>
-                             <label htmlFor="task-due-date" className={labelClasses}>Due Date</label>
+                             <label htmlFor="task-due-date" className={labelClasses}>{isObservation ? 'Recorded Date' : 'Due Date'}</label>
                              <input id="task-due-date" type="date" value={editedTask.dueDate.split('T')[0]} onChange={e => handleInputChange('dueDate', e.target.value)} className={inputClasses} required/>
                          </div>
-                         <div>
-                            <label htmlFor="task-time-est" className={labelClasses}>Time Estimate (hours)</label>
-                            <input 
-                                id="task-time-est" 
-                                type="number" 
-                                min="0" 
-                                step="0.5" 
-                                value={editedTask.timeEstimate || ''} 
-                                onChange={e => handleInputChange('timeEstimate', Number(e.target.value))} 
-                                placeholder="e.g., 2.5" 
-                                className={`${inputClasses} ${errors.timeEstimate ? 'border-red-500 focus:ring-red-500' : ''}`}
-                            />
-                            {errors.timeEstimate && <p className="text-red-500 text-xs mt-1">{errors.timeEstimate}</p>}
-                         </div>
+
+                         {/* Hide Time Estimate for Observations */}
+                         {!isObservation && (
+                             <div>
+                                <label htmlFor="task-time-est" className={labelClasses}>Time Estimate (hours)</label>
+                                <input 
+                                    id="task-time-est" 
+                                    type="number" 
+                                    min="0" 
+                                    step="0.5" 
+                                    value={editedTask.timeEstimate || ''} 
+                                    onChange={e => handleInputChange('timeEstimate', Number(e.target.value))} 
+                                    placeholder="e.g., 2.5" 
+                                    className={`${inputClasses} ${errors.timeEstimate ? 'border-red-500 focus:ring-red-500' : ''}`}
+                                />
+                                {errors.timeEstimate && <p className="text-red-500 text-xs mt-1">{errors.timeEstimate}</p>}
+                             </div>
+                         )}
                     </div>
                     
                     {/* Goal Selector */}
                     <div>
-                        <label htmlFor="task-goal" className={labelClasses}>Assigned Goal (Strategy)</label>
+                        <label htmlFor="task-goal" className={labelClasses}>Assigned Context</label>
                         <div className="relative">
                             {isCreatingGoal ? (
                                 <div className="flex gap-2 animate-fadeIn">
@@ -325,7 +354,7 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
                                         type="text" 
                                         value={newGoalName} 
                                         onChange={(e) => setNewGoalName(e.target.value)}
-                                        placeholder="New Goal Title..." 
+                                        placeholder="New Context..." 
                                         className={inputClasses}
                                         autoFocus
                                         onKeyDown={(e) => {
@@ -371,7 +400,7 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
                                     ))}
                                     {onAddGoal && (
                                         <option value="NEW_GOAL_TRIGGER" className="font-bold text-indigo-600 dark:text-indigo-400">
-                                            + Create New Goal
+                                            + Create New Context
                                         </option>
                                     )}
                                 </select>
@@ -394,43 +423,46 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
                         <label htmlFor="task-tags" className={labelClasses}>Tags</label>
                         <input id="task-tags" type="text" value={tagsInput} onChange={e => setTagsInput(e.target.value)} placeholder="Tags (comma separated)" className={inputClasses}/>
                      </div>
-                     <div>
-                        <label htmlFor="scheduledTime" className={labelClasses}>Scheduled Time (optional)</label>
-                         <input
-                            id="scheduledTime"
-                            type="datetime-local"
-                            value={editedTask.scheduledStartDateTime ? editedTask.scheduledStartDateTime.substring(0, 16) : ''}
-                            onChange={e => handleDateTimeChange(e.target.value)}
-                            className={inputClasses}
-                        />
-                     </div>
+                     
+                     {!isObservation && (
+                         <div>
+                            <label htmlFor="scheduledTime" className={labelClasses}>Scheduled Time</label>
+                             <input
+                                id="scheduledTime"
+                                type="datetime-local"
+                                value={editedTask.scheduledStartDateTime ? editedTask.scheduledStartDateTime.substring(0, 16) : ''}
+                                onChange={e => handleDateTimeChange(e.target.value)}
+                                className={inputClasses}
+                            />
+                         </div>
+                     )}
 
                     {/* Active Blocker Section */}
                     <div className="mt-6 pt-4 border-t border-gray-300 dark:border-gray-700">
-                        <h3 className="text-lg font-semibold mb-1 text-gray-700 dark:text-gray-300">Active Blocker</h3>
+                        <h3 className="text-lg font-semibold mb-1 text-gray-700 dark:text-gray-300">Wait State / Blocker</h3>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                            Add a reason to move this task to the 'Blocker' column. Clear the reason to resolve the blocker.
+                            Is this waiting on something else? Waiting is not failure.
                         </p>
                         <textarea
                             id="blocker-reason"
                             value={activeBlockerReason}
                             onChange={e => setActiveBlockerReason(e.target.value)}
-                            placeholder="e.g., Waiting for API key from external team..."
+                            placeholder="Reason for waiting..."
                             className={`${inputClasses} h-20 ${showBlockerWarning ? 'border-amber-500 focus:ring-amber-500' : ''}`}
                         />
                         {showBlockerWarning && (
                             <p className="text-amber-600 dark:text-amber-400 text-xs mt-1 font-bold">
                                 <i className="fas fa-exclamation-triangle mr-1"></i>
-                                Warning: Saving this will automatically move the task to the 'Blocker' column.
+                                Moving to 'Blocker' column.
                             </p>
                         )}
                     </div>
 
-                     {/* Dependencies Section */}
-                     {!isNewTask && (
+                     {/* Dependencies Section - Hide for Observations */}
+                     {!isNewTask && !isObservation && (
                         <div className="mt-6 pt-4 border-t border-gray-300 dark:border-gray-700">
-                            <label htmlFor="dependencies" className={labelClasses}>Dependencies (Blocked By)</label>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Select tasks that must be completed before this one. Use Ctrl/Cmd to select multiple.</p>
+                            <label htmlFor="dependencies" className={labelClasses}>Dependencies</label>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Ctrl/Cmd to select multiple.</p>
                             <select
                                 id="dependencies"
                                 multiple
@@ -445,9 +477,9 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
                         </div>
                     )}
 
-                    {/* Subtasks Section */}
+                    {/* Subtasks Section - Observations don't have subtasks usually, but can keep as "notes" */}
                     <div className="mt-6 pt-4 border-t border-gray-300 dark:border-gray-700">
-                        <h3 className="text-lg font-semibold mb-3 text-gray-700 dark:text-gray-300">Subtasks</h3>
+                        <h3 className="text-lg font-semibold mb-3 text-gray-700 dark:text-gray-300">{isObservation ? 'Details / Points' : 'Subtasks'}</h3>
                         <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
                             {editedTask.subtasks?.map(subtask => (
                                 <div key={subtask.id} className="flex items-center justify-between bg-gray-100 dark:bg-gray-900/50 p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700/50 transition-colors">
@@ -483,7 +515,7 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
                                         handleAddSubtask();
                                     }
                                 }}
-                                placeholder="Add a new subtask..."
+                                placeholder={isObservation ? "Add a detail..." : "Add a new subtask..."}
                                 className={inputClasses}
                             />
                             <button
@@ -495,33 +527,10 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
                             </button>
                         </div>
                     </div>
-
-                    {/* Blocker History Section */}
-                    {resolvedBlockers.length > 0 && (
-                        <div className="mt-6 pt-4 border-t border-gray-300 dark:border-gray-700">
-                            <h3 className="text-lg font-semibold mb-3 text-gray-700 dark:text-gray-300">Resolved Blocker History</h3>
-                            <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
-                                {resolvedBlockers.map(blocker => (
-                                    <div key={blocker.id} className="flex items-start p-3 rounded-md bg-green-100 dark:bg-green-900/30">
-                                        <i className="fas fa-check-circle text-green-500 mt-1 mr-3"></i>
-                                        <div>
-                                            <p className="text-sm line-through text-gray-500 dark:text-gray-400">
-                                                {blocker.reason}
-                                            </p>
-                                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                                Resolved on {new Date(blocker.resolvedDate!).toLocaleString()}
-                                            </p>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
                 </div>
 
 
                 <div className="mt-8 flex justify-between items-center flex-shrink-0">
-                    {/* Delete Button (Only for existing tasks) */}
                     <div>
                         {!isNewTask && (
                             <button 
@@ -545,7 +554,7 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
             <ConfirmModal
                 isOpen={!!subtaskToDelete}
                 title="Delete Subtask?"
-                message="Are you sure you want to remove this subtask?"
+                message="Are you sure you want to remove this?"
                 isDestructive={true}
                 onConfirm={confirmDeleteSubtask}
                 onCancel={() => setSubtaskToDelete(null)}

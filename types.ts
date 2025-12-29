@@ -3,6 +3,7 @@ export type Status = 'To Do' | 'In Progress' | 'Review' | 'Blocker' | 'Hold' | "
 export type Priority = 'Critical' | 'High' | 'Medium' | 'Low';
 export type SortOption = 'Default' | 'Priority' | 'Due Date' | 'Created Date';
 export type SettingsTab = 'general' | 'ai' | 'api' | 'sheets' | 'calendar' | 'sounds';
+export type TaskType = 'action' | 'observation';
 
 export interface Goal {
     id: string;
@@ -57,6 +58,8 @@ export interface Task {
   goalId?: string;
   // Top 5 Focus Feature
   isPinned?: boolean;
+  // K-Teaching: Separation of Action and Observation
+  type?: TaskType;
 }
 
 // Added TaskDiff here to be shared

@@ -483,14 +483,12 @@ export const Header: React.FC<HeaderProps> = ({
                         <div className="w-full">
                             <LiquidGauge 
                                 type="fuel"
-                                label="Time Load"
+                                label="Capacity"
                                 value={todaysBudgetedTime}
                                 max={settings.dailyBudget}
                             />
                         </div>
                         
-                        {/* XP Gauge REMOVED. Space left empty or used by Timer */}
-
                         {/* Pomodoro Timer */}
                         {settings.showPomodoroTimer && (
                             <div className="w-full">

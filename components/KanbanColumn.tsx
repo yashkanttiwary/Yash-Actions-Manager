@@ -46,6 +46,10 @@ const SPACE_TINTS: Record<Status, { body: string, header: string, border: string
     'Done': { body: 'bg-green-900/60', header: 'bg-green-800/80', border: 'border-green-500/30' },
 };
 
+// Thresholds for accumulation warnings
+const LIMIT_TODO = 15;
+const LIMIT_IN_PROGRESS = 3;
+
 export const KanbanColumn: React.FC<KanbanColumnProps> = ({ 
     status, tasks, allTasks, goals, onTaskMove, onEditTask, onAddTask, onQuickAddTask, onSmartAddTask,
     isCollapsed, onToggleCollapse, sortOption, onSortChange, onMouseDown, 
@@ -65,6 +69,12 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
     const colRef = useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const resizeStartRef = useRef<{ x: number, y: number, w: number, h: number } | null>(null);
+
+    // K-Teaching: Accumulation Check
+    const isOverloaded = (status === 'To Do' && tasks.length > LIMIT_TODO) || (status === 'In Progress' && tasks.length > LIMIT_IN_PROGRESS);
+    const overloadMessage = status === 'In Progress' 
+        ? "Fragmentation creates fatigue. One thing at a time."
+        : "Accumulation is a sign to pause. See what is driving this.";
 
     // Dynamic styles based on Space Mode
     const containerClasses = isSpaceMode 
@@ -101,11 +111,6 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
         if (isListening) {
             // STOP ACTION
             stopListening();
-            
-            // Wait a tick for the final transcript to settle?
-            // Actually, we use the local state `quickAddTitle` which is updated via effect.
-            // But let's verify if `transcript` (hook state) is more up to date.
-            // The safest bet is using the accumulated transcript.
             
             const textToProcess = quickAddTitle.trim();
             
@@ -280,7 +285,9 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                     {status}
                 </h2>
                 <div className="flex items-center gap-2" onMouseDown={(e) => e.stopPropagation()}>
-                    <span className="bg-black/20 text-white text-sm font-semibold px-2.5 py-1 rounded-full">{tasks.length}</span>
+                    <span className={`text-white text-sm font-semibold px-2.5 py-1 rounded-full ${isOverloaded ? 'bg-red-500 animate-pulse' : 'bg-black/20'}`}>
+                        {tasks.length}
+                    </span>
                     <button onClick={onToggleCollapse} className="text-white/70 hover:text-white transition-colors w-6 h-6 flex items-center justify-center">
                         <i className={`fas fa-chevron-up transition-transform duration-300 ${isCollapsed ? 'rotate-180' : ''}`}></i>
                     </button>
@@ -288,57 +295,66 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
             </div>
             {!isCollapsed && (
                 <>
-                    <div className={`p-2 border-b ${isSpaceMode ? `border-white/10 ${spaceTint.border}` : 'border-gray-300 dark:border-gray-700 bg-white/20 dark:bg-black/10'}`}>
-                        <form onSubmit={handleQuickAddSubmit} className="flex gap-2">
-                            <div className="relative flex-1">
-                                <input 
-                                    type="text" 
-                                    value={quickAddTitle}
-                                    onChange={handleInputChange}
-                                    placeholder={isProcessing ? "AI Thinking..." : isListening ? "Listening... (Click Stop to Process)" : "Add quick task..."}
-                                    className={`w-full px-3 py-1.5 pr-8 text-sm rounded-md border transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500
-                                        ${isListening 
-                                            ? 'border-red-500 bg-red-50 dark:bg-red-900/30 text-red-900 dark:text-red-200 ring-2 ring-red-500/50' 
-                                            : isProcessing
-                                                ? 'border-purple-500 bg-purple-100 dark:bg-purple-900/30 text-purple-900 dark:text-purple-200 cursor-wait'
-                                                : isSpaceMode 
-                                                    ? 'border-white/20 bg-black/20 text-white placeholder-white/50 focus:bg-black/40' 
-                                                    : 'border-gray-300 dark:border-gray-600 bg-white/90 dark:bg-gray-800 text-gray-800 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400'
-                                        }
-                                    `}
-                                    disabled={isProcessing}
-                                />
-                                {isProcessing && (
-                                    <div className="absolute right-8 top-1/2 -translate-y-1/2">
-                                        <i className="fas fa-spinner fa-spin text-purple-500 text-xs"></i>
-                                    </div>
-                                )}
+                    {/* Accumulation Warning */}
+                    {isOverloaded && (
+                        <div className="p-3 bg-red-100 dark:bg-red-900/30 border-b border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 text-xs italic font-serif">
+                            "{overloadMessage}"
+                        </div>
+                    )}
+
+                    {!isOverloaded && (
+                        <div className={`p-2 border-b ${isSpaceMode ? `border-white/10 ${spaceTint.border}` : 'border-gray-300 dark:border-gray-700 bg-white/20 dark:bg-black/10'}`}>
+                            <form onSubmit={handleQuickAddSubmit} className="flex gap-2">
+                                <div className="relative flex-1">
+                                    <input 
+                                        type="text" 
+                                        value={quickAddTitle}
+                                        onChange={handleInputChange}
+                                        placeholder={isProcessing ? "AI Thinking..." : isListening ? "Listening... (Click Stop to Process)" : "Add quick task..."}
+                                        className={`w-full px-3 py-1.5 pr-8 text-sm rounded-md border transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500
+                                            ${isListening 
+                                                ? 'border-red-500 bg-red-50 dark:bg-red-900/30 text-red-900 dark:text-red-200 ring-2 ring-red-500/50' 
+                                                : isProcessing
+                                                    ? 'border-purple-500 bg-purple-100 dark:bg-purple-900/30 text-purple-900 dark:text-purple-200 cursor-wait'
+                                                    : isSpaceMode 
+                                                        ? 'border-white/20 bg-black/20 text-white placeholder-white/50 focus:bg-black/40' 
+                                                        : 'border-gray-300 dark:border-gray-600 bg-white/90 dark:bg-gray-800 text-gray-800 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400'
+                                            }
+                                        `}
+                                        disabled={isProcessing}
+                                    />
+                                    {isProcessing && (
+                                        <div className="absolute right-8 top-1/2 -translate-y-1/2">
+                                            <i className="fas fa-spinner fa-spin text-purple-500 text-xs"></i>
+                                        </div>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={toggleVoiceInput}
+                                        className={`absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-full transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : isProcessing ? 'text-purple-500 animate-spin' : isSpaceMode ? 'text-white/60 hover:text-white' : 'text-gray-400 hover:text-indigo-500'}`}
+                                        title={isListening ? "Stop & Think" : "Voice Add (AI Powered)"}
+                                        disabled={isProcessing}
+                                    >
+                                        <i className={`fas ${isListening ? 'fa-pause' : isProcessing ? 'fa-brain' : 'fa-microphone'}`}></i>
+                                    </button>
+                                </div>
+                                
                                 <button
                                     type="button"
-                                    onClick={toggleVoiceInput}
-                                    className={`absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-full transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : isProcessing ? 'text-purple-500 animate-spin' : isSpaceMode ? 'text-white/60 hover:text-white' : 'text-gray-400 hover:text-indigo-500'}`}
-                                    title={isListening ? "Stop & Think" : "Voice Add (AI Powered)"}
+                                    onClick={() => onAddTask(status)}
+                                    className={`px-3 py-1.5 rounded-md transition-colors border shadow-sm flex items-center gap-1.5 whitespace-nowrap text-xs font-bold disabled:opacity-50 ${
+                                        isSpaceMode 
+                                            ? 'bg-white/10 hover:bg-white/20 text-white border-white/20'
+                                            : 'bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600'
+                                    }`}
+                                    title="Open full task creator"
                                     disabled={isProcessing}
                                 >
-                                    <i className={`fas ${isListening ? 'fa-pause' : isProcessing ? 'fa-brain' : 'fa-microphone'}`}></i>
+                                    <i className="fas fa-pen-to-square"></i>
                                 </button>
-                            </div>
-                            
-                            <button
-                                type="button"
-                                onClick={() => onAddTask(status)}
-                                className={`px-3 py-1.5 rounded-md transition-colors border shadow-sm flex items-center gap-1.5 whitespace-nowrap text-xs font-bold disabled:opacity-50 ${
-                                    isSpaceMode 
-                                        ? 'bg-white/10 hover:bg-white/20 text-white border-white/20'
-                                        : 'bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600'
-                                }`}
-                                title="Open full task creator"
-                                disabled={isProcessing}
-                            >
-                                <i className="fas fa-pen-to-square"></i>
-                            </button>
-                        </form>
-                    </div>
+                            </form>
+                        </div>
+                    )}
 
                     <div className={`p-2 border-b ${isSpaceMode ? `border-white/10 ${spaceTint.border}` : 'border-gray-300 dark:border-gray-700'}`}>
                         <label htmlFor={`sort-${status}`} className="sr-only">Sort tasks by</label>

@@ -27,36 +27,6 @@ const getTagColor = (tagName: string) => {
     return TAG_COLORS[index];
 };
 
-const getAgingInfo = (statusChangeDateStr: string, status: Status): { style: React.CSSProperties, message: string } => {
-    const defaultInfo = { style: { opacity: 0 }, message: '' };
-
-    if (status === 'Done' || status === 'Review' || status === "Won't Complete" || status === 'Hold' || !statusChangeDateStr) {
-        return defaultInfo;
-    }
-    
-    try {
-        const now = new Date();
-        const statusChangeDate = new Date(statusChangeDateStr);
-        const diffHours = (now.getTime() - statusChangeDate.getTime()) / (1000 * 3600);
-        
-        if (diffHours > 72) { // Over 3 days
-            const diffDays = Math.floor(diffHours / 24);
-            return { style: { opacity: 0.20 }, message: `This task hasn't been updated in ${diffDays} days.` };
-        }
-        if (diffHours > 24) { // Over 1 day
-            return { style: { opacity: 0.15 }, message: `This task hasn't been updated in over a day.` };
-        }
-        if (diffHours > 8) { // Over 8 hours
-            return { style: { opacity: 0.10 }, message: `This task hasn't been updated in over 8 hours.` };
-        }
-    } catch (e) {
-        console.error("Invalid date for aging style:", statusChangeDateStr, e);
-        return defaultInfo;
-    }
-    
-    return defaultInfo;
-};
-
 const formatSeconds = (seconds: number = 0): string => {
     if (seconds < 60) return `${seconds}s`;
     if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
@@ -83,6 +53,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
     const statusStyle = STATUS_STYLES[task.status] || STATUS_STYLES['To Do'];
     const [currentSessionTime, setCurrentSessionTime] = useState(0);
     const [isBreakingDown, setIsBreakingDown] = useState(false);
+    const isObservation = task.type === 'observation';
     
     // Derived Goal Data
     const assignedGoal = goals.find(g => g.id === task.goalId);
@@ -108,8 +79,9 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
         setIsExpanded(expanded);
     }, []);
 
-    const isOverdue = new Date(task.dueDate) < new Date() && task.status !== 'Done';
-    const { style: agingStyle, message: agingMessage } = getAgingInfo(task.statusChangeDate, task.status);
+    // K-Teaching: "Let the list be a mirror, not a judge."
+    // Removed "Overdue" red styling. Changed to neutral "Date Passed".
+    const isDatePassed = new Date(task.dueDate) < new Date() && task.status !== 'Done';
     
     const isActiveTimer = !!task.currentSessionStartTime;
     const isBlockedByDep = task.isBlockedByDependencies;
@@ -206,6 +178,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
     
     const renderTimerButton = (compact = false) => {
         if (task.status !== 'In Progress') return null;
+        if (isObservation) return null;
         
         return (
             <button
@@ -223,6 +196,34 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
         );
     };
 
+    // --- OBSERVATION CARD RENDER ---
+    if (isObservation) {
+        return (
+            <div
+                draggable={!isBlockedByDep}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+                data-task-id={task.id}
+                className={`group task-card relative bg-white/50 dark:bg-gray-800/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700 shadow-sm ${cardCursorClass} hover:shadow-md border-l-4 border-l-purple-400`}
+                onClick={handleCardClick}
+                onContextMenu={handleContextMenu}
+            >
+                <div className="flex items-start gap-2 mb-2">
+                    <i className="fas fa-eye text-purple-500 mt-1"></i>
+                    <h3 className="font-serif italic text-gray-800 dark:text-gray-200 text-sm leading-relaxed">
+                        "{task.title}"
+                    </h3>
+                </div>
+                {task.description && <p className="text-xs text-gray-500 dark:text-gray-400 pl-6">{task.description}</p>}
+                
+                <div className="mt-3 flex justify-between items-center text-xs text-gray-400">
+                    <span>Observation</span>
+                    <button onClick={handleDeleteClick} className="hover:text-red-500 transition-colors"><i className="fas fa-times"></i></button>
+                </div>
+            </div>
+        );
+    }
+
     // --- COMPACT MODE RENDER ---
     if (isCompactMode && !isExpanded) {
         return (
@@ -234,11 +235,10 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                 className={`group task-card relative bg-white dark:bg-gray-800 rounded-md p-2 border border-gray-200 dark:border-gray-700 shadow-sm ${cardCursorClass} hover:shadow-md ${statusStyle.cardBorder} ${isBlockedByDep ? 'opacity-60 saturate-50' : ''}`}
                 onClick={handleCardClick}
                 onContextMenu={handleContextMenu}
-                title={agingMessage || `${task.title} (Priority: ${task.priority})`}
+                title={`${task.title} (Priority: ${task.priority})`}
                 role="article"
                 aria-label={`Task: ${task.title}`}
             >
-                <div style={agingStyle} className="absolute inset-0 bg-amber-400 dark:bg-amber-500 rounded-md pointer-events-none transition-opacity duration-500 z-0"></div>
                 <div className="relative flex items-center justify-between gap-2 z-10">
                     
                     {/* Left: Drag Handle + Title */}
@@ -251,7 +251,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                              </div>
                          )}
                          
-                         <span className={`text-sm font-medium text-gray-800 dark:text-gray-100 truncate ${isOverdue ? 'text-red-600 dark:text-red-400' : ''}`}>
+                         <span className={`text-sm font-medium text-gray-800 dark:text-gray-100 truncate`}>
                              {task.title}
                          </span>
                     </div>
@@ -322,12 +322,10 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
             className={`group task-card task-card-tilt relative bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700 shadow-md ${cardCursorClass} ${priorityClasses.glow} hover:shadow-2xl ${statusStyle.cardBorder} ${isBlockedByDep ? 'opacity-60 saturate-50' : ''}`}
             onClick={handleCardClick}
             onContextMenu={handleContextMenu}
-            title={agingMessage || `Priority: ${task.priority} | Due: ${new Date(task.dueDate).toLocaleDateString()}`}
+            title={`Priority: ${task.priority}`}
             role="article"
             aria-label={`Task: ${task.title}`}
         >
-            <div style={agingStyle} className="absolute inset-0 bg-amber-400 dark:bg-amber-500 rounded-lg pointer-events-none transition-opacity duration-500 z-0"></div>
-            
             <div className="relative z-10">
                 {/* Header */}
                 <div className="flex justify-between items-start gap-2">
@@ -451,9 +449,9 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                 </div>
                 
                 <div className="mt-3 flex justify-between items-center text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-700/50 pt-2">
-                    <span className={`flex items-center ${isOverdue ? 'text-red-500 dark:text-red-400 font-bold' : ''}`}>
+                    <span className={`flex items-center ${isDatePassed ? 'text-amber-600 dark:text-amber-500 font-bold' : ''}`}>
                         <i className="far fa-calendar-alt mr-1.5"></i>
-                        {new Date(task.dueDate).toLocaleDateString()}
+                        {isDatePassed ? `Review: ${new Date(task.dueDate).toLocaleDateString()}` : new Date(task.dueDate).toLocaleDateString()}
                     </span>
                     <span>{formatTimeSince(task.statusChangeDate)}</span>
                 </div>
