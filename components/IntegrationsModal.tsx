@@ -338,7 +338,11 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
     initialTab = 'general'
 }) => {
     const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
-    const [sheetMethod, setSheetMethod] = useState<'script' | 'api'>(settings.googleAppsScriptUrl ? 'script' : 'api');
+    
+    // Default to 'script' (Easy Mode) for new users (when googleSheetId is missing),
+    // or if they explicitly have a script URL. 
+    // Only default to 'api' if they already have an API-based Sheet ID configured.
+    const [sheetMethod, setSheetMethod] = useState<'script' | 'api'>(settings.googleSheetId ? 'api' : 'script');
     
     const [apiKeys, setApiKeys] = useState({
         apiKey: settings.googleApiKey || '',

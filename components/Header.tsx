@@ -398,6 +398,15 @@ export const Header: React.FC<HeaderProps> = ({
 
                 {/* Right: Essential Status (AI & Sync) */}
                 <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
+                    
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onOpenAIAssistant(); }}
+                        className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${isSpaceVisualsActive ? 'bg-white/20 text-white hover:bg-white/40' : 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-800'}`}
+                        title="AI Assistant"
+                    >
+                        <i className="fas fa-magic"></i>
+                    </button>
+
                     {/* Unified Sync Button (Visible in collapsed state too) */}
                     {isSheetConnected && (
                         <button
@@ -411,13 +420,6 @@ export const Header: React.FC<HeaderProps> = ({
                         </button>
                     )}
 
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onOpenAIAssistant(); }}
-                        className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${isSpaceVisualsActive ? 'bg-white/20 text-white hover:bg-white/40' : 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-800'}`}
-                        title="AI Assistant"
-                    >
-                        <i className="fas fa-magic"></i>
-                    </button>
                     <ConnectionHealthIndicator 
                         health={connectionHealth} 
                         onOpenSettings={onOpenSettings}
