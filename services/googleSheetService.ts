@@ -287,13 +287,16 @@ export const testAppsScriptConnection = async (url: string): Promise<boolean> =>
     try {
         const separator = url.includes('?') ? '&' : '?';
         const fetchUrl = `${url}${separator}action=check&t=${Date.now()}`;
-        const response = await fetch(fetchUrl);
+        const response = await fetch(fetchUrl, {
+            method: 'GET',
+            mode: 'cors'
+        });
         if (!response.ok) return false;
         
         const data = await response.json();
         return data.status === 'ok';
     } catch (error) {
-        console.error("Apps Script test failed:", error);
+        // Suppress logging here as this is expected during input typing/testing
         return false;
     }
 };
@@ -313,6 +316,7 @@ export const syncDataToAppsScript = async (url: string, tasks: Task[], goals: Go
 
         await fetch(url, {
             method: 'POST',
+            mode: 'cors',
             body: JSON.stringify({ 
                 action: 'sync_up',
                 rows: taskRows,
@@ -320,7 +324,7 @@ export const syncDataToAppsScript = async (url: string, tasks: Task[], goals: Go
             })
         });
     } catch (error) {
-        console.error("Error writing to Apps Script:", error);
+        // Let the hook handle the error logging
         throw error;
     }
 };
@@ -331,7 +335,15 @@ export const syncDataFromAppsScript = async (url: string): Promise<{ tasks: Task
         const separator = url.includes('?') ? '&' : '?';
         const fetchUrl = `${url}${separator}action=sync_down&t=${timestamp}`;
 
-        const response = await fetch(fetchUrl); 
+        const response = await fetch(fetchUrl, {
+            method: 'GET',
+            mode: 'cors'
+        }); 
+        
+        if (!response.ok) {
+            throw new Error(`HTTP Error ${response.status}`);
+        }
+
         const data = await response.json();
         
         const taskRows = data.tasks || [];
@@ -366,7 +378,7 @@ export const syncDataFromAppsScript = async (url: string): Promise<{ tasks: Task
         
         return { tasks, goals, metadata };
     } catch (error) {
-        console.error("Error reading from Apps Script:", error);
+        // Let the hook handle the error logging
         throw error;
     }
 };

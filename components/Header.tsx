@@ -27,6 +27,7 @@ interface AudioControls {
 
 interface HeaderProps {
     tasks: Task[];
+    goals: Goal[]; // New prop for dropdown
     isTodayView: boolean;
     setIsTodayView: (isToday: boolean) => void;
     onOpenAIAssistant: () => void;
@@ -46,7 +47,7 @@ interface HeaderProps {
     setFocusMode: (mode: Status | 'None') => void;
     onOpenSettings: (tab?: SettingsTab) => void; 
     connectionHealth: ConnectionHealth;
-    syncStatus: 'idle' | 'syncing' | 'error' | 'success'; // New Prop
+    syncStatus: 'idle' | 'syncing' | 'error' | 'success'; 
     onManualPull: () => Promise<void>;
     onManualPush: () => Promise<void>;
     isCompactMode: boolean;
@@ -65,12 +66,13 @@ interface HeaderProps {
     isRocketFlying: boolean;
     onRocketLaunch: (flying: boolean) => void;
 
-    // Hover State (Lifted)
+    // Hover State
     isMenuHovered: boolean;
     onMenuHoverChange: (isHovered: boolean) => void;
     
     // Focus Zone Props
     activeFocusGoal?: Goal | null;
+    onFocusGoal: (goalId: string) => void; // New prop for switching
     onExitFocus?: () => void;
 }
 
@@ -79,14 +81,14 @@ const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(ma
 const rand = (min: number, max: number) => Math.random() * (max - min) + min;
 
 export const Header: React.FC<HeaderProps> = ({ 
-    tasks, isTodayView, setIsTodayView, onOpenAIAssistant, onToggleTheme, currentTheme, onResetLayout, 
+    tasks, goals, isTodayView, setIsTodayView, onOpenAIAssistant, onToggleTheme, currentTheme, onResetLayout, 
     gamification, settings, onUpdateSettings, currentViewMode, onViewModeChange, 
     googleAuthState, onGoogleSignIn, onGoogleSignOut, onOpenShortcutsModal, 
     focusMode, setFocusMode, onOpenSettings, connectionHealth, syncStatus,
     onManualPull, onManualPush, isCompactMode, onToggleCompactMode, isFitToScreen, onToggleFitToScreen,
     zoomLevel, setZoomLevel, audioControls, isTimelineVisible, onToggleTimeline,
     isMenuLocked, setIsMenuLocked, isRocketFlying, onRocketLaunch,
-    isMenuHovered, onMenuHoverChange, activeFocusGoal, onExitFocus
+    isMenuHovered, onMenuHoverChange, activeFocusGoal, onFocusGoal, onExitFocus
 }) => {
     
     // --- CLOCK LOGIC ---
@@ -325,6 +327,25 @@ export const Header: React.FC<HeaderProps> = ({
         setShowGame(true);
     };
 
+    // --- FOCUS MENU STATE ---
+    const [isFocusMenuOpen, setIsFocusMenuOpen] = useState(false);
+    const focusDropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (focusDropdownRef.current && !focusDropdownRef.current.contains(event.target as Node)) {
+                setIsFocusMenuOpen(false);
+            }
+        };
+        if (isFocusMenuOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [isFocusMenuOpen]);
+
+
     // STYLING: Dynamic classes based on Space Mode
     const headerBgClass = isSpaceVisualsActive 
         ? 'bg-transparent border-transparent shadow-none' // Transparent during flight
@@ -396,15 +417,17 @@ export const Header: React.FC<HeaderProps> = ({
                         </div>
                     </div>
 
-                    {/* NEW: Subtle Focus Pill */}
+                    {/* NEW: Interactive Focus Pill */}
                     {activeFocusGoal && (
-                        <div className="flex items-center gap-2 ml-2 pl-4 border-l border-gray-300 dark:border-gray-700 h-8 animate-fadeIn">
-                            <div 
-                                className="flex items-center gap-2 px-3 py-1 rounded-full border shadow-sm backdrop-blur-sm transition-all group"
+                        <div className="relative flex items-center gap-2 ml-2 pl-4 border-l border-gray-300 dark:border-gray-700 h-8 animate-fadeIn" ref={focusDropdownRef}>
+                            <button
+                                onClick={() => setIsFocusMenuOpen(!isFocusMenuOpen)}
+                                className="flex items-center gap-2 px-3 py-1 rounded-full border shadow-sm backdrop-blur-sm transition-all group hover:brightness-110 active:scale-95 cursor-pointer"
                                 style={{ 
                                     backgroundColor: isSpaceVisualsActive ? 'rgba(255,255,255,0.1)' : activeFocusGoal.color + '15', 
                                     borderColor: activeFocusGoal.color + '40'
                                 }}
+                                title="Click to switch focus"
                             >
                                 <i className="fas fa-crosshairs text-xs animate-pulse" style={{ color: activeFocusGoal.color }}></i>
                                 <span 
@@ -413,15 +436,59 @@ export const Header: React.FC<HeaderProps> = ({
                                 >
                                     {activeFocusGoal.title}
                                 </span>
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); onExitFocus?.(); }}
-                                    className={`w-4 h-4 flex items-center justify-center rounded-full hover:bg-black/10 dark:hover:bg-white/20 transition-colors ml-1 ${isSpaceVisualsActive ? 'text-white/70 hover:text-white' : ''}`}
-                                    style={{ color: isSpaceVisualsActive ? undefined : activeFocusGoal.color }}
-                                    title="Exit Focus Mode"
-                                >
-                                    <i className="fas fa-times text-[10px]"></i>
-                                </button>
-                            </div>
+                                <i className={`fas fa-chevron-down text-[10px] ml-1 transition-transform duration-200 ${isFocusMenuOpen ? 'rotate-180' : ''} ${isSpaceVisualsActive ? 'text-white/70' : 'text-gray-500'}`}></i>
+                            </button>
+                            
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onExitFocus?.(); }}
+                                className={`w-5 h-5 flex items-center justify-center rounded-full hover:bg-black/10 dark:hover:bg-white/20 transition-colors ml-1 ${isSpaceVisualsActive ? 'text-white/70 hover:text-white' : 'text-gray-400 hover:text-red-500'}`}
+                                title="Exit Focus Mode"
+                            >
+                                <i className="fas fa-times text-xs"></i>
+                            </button>
+
+                            {/* Dropdown Menu */}
+                            {isFocusMenuOpen && (
+                                <div className={`absolute top-full left-4 mt-2 w-60 rounded-xl shadow-2xl border backdrop-blur-xl z-[100] overflow-hidden ${
+                                    isSpaceVisualsActive 
+                                        ? 'bg-black/80 border-white/20 text-white' 
+                                        : 'bg-white/95 dark:bg-gray-900/95 border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100'
+                                }`}>
+                                    <div className={`p-2 text-[10px] font-bold uppercase tracking-widest opacity-60 border-b mb-1 ${isSpaceVisualsActive ? 'border-white/10' : 'border-gray-200 dark:border-gray-700'}`}>Switch Focus Goal</div>
+                                    <div className="max-h-[300px] overflow-y-auto custom-scrollbar p-1 space-y-1">
+                                        {/* Unassigned Option */}
+                                        <button
+                                            onClick={() => { onFocusGoal('unassigned'); setIsFocusMenuOpen(false); }}
+                                            className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-2 transition-colors ${
+                                                activeFocusGoal.id === 'unassigned' 
+                                                    ? (isSpaceVisualsActive ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-700') 
+                                                    : 'hover:bg-black/5 dark:hover:bg-white/5'
+                                            }`}
+                                        >
+                                            <div className="w-2 h-2 rounded-full bg-slate-500 shadow-sm"></div>
+                                            <span className="text-xs font-semibold truncate flex-1">Unassigned Tasks</span>
+                                            {activeFocusGoal.id === 'unassigned' && <i className="fas fa-check text-xs opacity-80"></i>}
+                                        </button>
+
+                                        {/* Goals List */}
+                                        {goals.map(goal => (
+                                            <button
+                                                key={goal.id}
+                                                onClick={() => { onFocusGoal(goal.id); setIsFocusMenuOpen(false); }}
+                                                className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-2 transition-colors ${
+                                                    activeFocusGoal.id === goal.id 
+                                                        ? (isSpaceVisualsActive ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-700') 
+                                                        : 'hover:bg-black/5 dark:hover:bg-white/5'
+                                                }`}
+                                            >
+                                                <div className="w-2 h-2 rounded-full shadow-sm" style={{ backgroundColor: goal.color }}></div>
+                                                <span className="text-xs font-semibold truncate flex-1">{goal.title}</span>
+                                                {activeFocusGoal.id === goal.id && <i className="fas fa-check text-xs opacity-80"></i>}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

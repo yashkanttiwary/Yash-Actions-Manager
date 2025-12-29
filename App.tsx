@@ -889,7 +889,7 @@ const App: React.FC = () => {
     // Derived focused goal object for UI
     const activeFocusGoal = useMemo(() => {
         if (!focusedGoalId) return null;
-        if (focusedGoalId === 'unassigned') return { title: 'Unassigned Tasks', color: '#64748b' } as Goal;
+        if (focusedGoalId === 'unassigned') return { id: 'unassigned', title: 'Unassigned Tasks', color: '#64748b' } as Goal;
         return goals.find(g => g.id === focusedGoalId);
     }, [focusedGoalId, goals]);
 
@@ -951,6 +951,7 @@ const App: React.FC = () => {
             
             <Header
                 tasks={tasks}
+                goals={goals} // Pass Goals
                 isTodayView={isTodayView}
                 setIsTodayView={setIsTodayView}
                 onOpenAIAssistant={() => setShowAIModal(true)}
@@ -990,6 +991,7 @@ const App: React.FC = () => {
                 onMenuHoverChange={setIsMenuHovered}
                 // Focus Zone Props
                 activeFocusGoal={activeFocusGoal}
+                onFocusGoal={setFocusedGoalId} // Pass Setter
                 onExitFocus={() => setFocusedGoalId(null)}
             />
 

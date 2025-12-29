@@ -206,20 +206,20 @@ export const GoalColumn: React.FC<GoalColumnProps> = ({
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
             >
-                {/* Top Scroll Indicator - Subtle Liquid Glass */}
+                {/* Top Scroll Indicator - Liquid Glass Style */}
                 <div 
                     className={`sticky top-0 left-0 right-0 h-8 pointer-events-none transition-all duration-500 z-20 -mb-8 -mx-2 ${showTopScrollIndicator ? 'opacity-100' : 'opacity-0'}`}
                     style={{
                         background: isSpaceMode 
-                            ? 'linear-gradient(to bottom, rgba(165, 243, 252, 0.15) 0%, rgba(165, 243, 252, 0) 100%)' 
-                            : 'linear-gradient(to bottom, rgba(0,0,0,0.06) 0%, transparent 100%)',
-                        backdropFilter: 'blur(2px)',
+                            ? 'linear-gradient(to bottom, rgba(165, 243, 252, 0.2) 0%, rgba(165, 243, 252, 0) 100%)' 
+                            : 'linear-gradient(to bottom, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0) 100%)',
+                        backdropFilter: 'blur(4px)',
                         maskImage: 'linear-gradient(to bottom, black 40%, transparent 100%)',
                         WebkitMaskImage: 'linear-gradient(to bottom, black 40%, transparent 100%)'
                     }}
                 >
                     {/* Intricate Highlight Line */}
-                    <div className={`w-full h-[1px] shadow-sm ${isSpaceMode ? 'bg-gradient-to-r from-transparent via-cyan-200/40 to-transparent' : 'bg-gradient-to-r from-transparent via-gray-400/20 to-transparent'}`}></div>
+                    <div className={`w-full h-[1px] shadow-sm ${isSpaceMode ? 'bg-gradient-to-r from-transparent via-cyan-200/50 to-transparent' : 'bg-gradient-to-r from-transparent via-indigo-300/40 to-transparent'}`}></div>
                 </div>
 
                 {sortedTasks.length === 0 ? (
@@ -252,20 +252,20 @@ export const GoalColumn: React.FC<GoalColumnProps> = ({
                 )}
             </div>
 
-            {/* Bottom Scroll Indicator - Subtle Liquid Glass */}
+            {/* Bottom Scroll Indicator - Liquid Glass Style */}
             <div 
                 className={`absolute bottom-0 left-0 right-0 h-10 pointer-events-none transition-all duration-500 rounded-b-xl z-20 ${showScrollIndicator ? 'opacity-100' : 'opacity-0'}`}
                 style={{
                     background: isSpaceMode 
-                        ? 'linear-gradient(to top, rgba(165, 243, 252, 0.15) 0%, rgba(165, 243, 252, 0) 100%)' 
-                        : 'linear-gradient(to top, rgba(0,0,0,0.06) 0%, transparent 100%)',
-                    backdropFilter: 'blur(2px)',
+                        ? 'linear-gradient(to top, rgba(165, 243, 252, 0.2) 0%, rgba(165, 243, 252, 0) 100%)' 
+                        : 'linear-gradient(to top, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0) 100%)',
+                    backdropFilter: 'blur(4px)',
                     maskImage: 'linear-gradient(to top, black 40%, transparent 100%)',
                     WebkitMaskImage: 'linear-gradient(to top, black 40%, transparent 100%)'
                 }}
             >
                  {/* Intricate Highlight Line */}
-                 <div className={`absolute bottom-0 left-0 right-0 h-[1px] shadow-sm ${isSpaceMode ? 'bg-gradient-to-r from-transparent via-cyan-200/40 to-transparent' : 'bg-gradient-to-r from-transparent via-gray-400/20 to-transparent'}`}></div>
+                 <div className={`absolute bottom-0 left-0 right-0 h-[1px] shadow-sm ${isSpaceMode ? 'bg-gradient-to-r from-transparent via-cyan-200/50 to-transparent' : 'bg-gradient-to-r from-transparent via-indigo-300/40 to-transparent'}`}></div>
             </div>
         </div>
     );

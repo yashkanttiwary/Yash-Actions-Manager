@@ -271,8 +271,14 @@ export const useGoogleSheetSync = (
                         setStatus('success'); 
                     }
                 }
-            } catch (e) {
-                console.error("Poll failed", e);
+            } catch (e: any) {
+                // Suppress strict error logging for polling (network blips)
+                if (e instanceof Error && (e.message.includes('Failed to fetch') || e.message.includes('NetworkError'))) {
+                    // Debug only
+                    // console.debug("[Sync] Poll skipped due to network.");
+                } else {
+                    console.warn("[Sync] Poll warning:", e);
+                }
             }
         }, POLL_INTERVAL);
 
