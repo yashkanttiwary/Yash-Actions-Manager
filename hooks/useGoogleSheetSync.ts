@@ -3,8 +3,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Task, GamificationData, Settings, Goal } from '../types';
 import * as sheetService from '../services/googleSheetService';
 
-const POLL_INTERVAL = 5000;
-const DEBOUNCE_DELAY = 1500;
+const POLL_INTERVAL = 10000; // Relaxed poll interval to reduce quota usage
+const DEBOUNCE_DELAY = 500; // Faster debounce (0.5s) to capture edits quickly
 
 export const useGoogleSheetSync = (
     sheetId: string | undefined, 
@@ -16,14 +16,13 @@ export const useGoogleSheetSync = (
     settings?: Settings,
     setGamification?: (data: GamificationData) => void,
     setSettings?: (settings: Settings) => void,
-    localGoals: Goal[] = [] // New Parameter
+    localGoals: Goal[] = []
 ) => {
     const [status, setStatus] = useState<'idle' | 'syncing' | 'error' | 'success'>('idle');
     const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [syncMethod, setSyncMethod] = useState<'script' | 'api' | null>(null);
     
-    // Refs to track state inside timers
     const localTasksRef = useRef(localTasks);
     const localGoalsRef = useRef(localGoals);
     const gamificationRef = useRef(gamification);
@@ -31,11 +30,10 @@ export const useGoogleSheetSync = (
     const isDirtyRef = useRef(false);
     const debounceTimerRef = useRef<number | null>(null);
     
-    // SAFETY: This flag ensures we NEVER push to the sheet until we have successfully
-    // pulled from it at least once in this session. This prevents wiping the sheet
-    // if the local app initializes with empty data (e.g. after clearing cookies).
+    // Lock to prevent pushing before we have confirmed state
     const initialPullComplete = useRef(false);
     
+    // Flag to prevent echoes (remote update triggering local update triggering push)
     const isRemoteUpdate = useRef(false);
 
     useEffect(() => {
@@ -45,15 +43,12 @@ export const useGoogleSheetSync = (
         settingsRef.current = settings;
     }, [localTasks, localGoals, gamification, settings]);
 
-    // Reset safety lock when connection details change
     useEffect(() => {
         if (appsScriptUrl) {
             setSyncMethod('script');
-            // New connection? Reset lock. Pull must happen first.
             initialPullComplete.current = false;
         } else if (sheetId && isSignedIn) {
             setSyncMethod('api');
-            // New connection? Reset lock. Pull must happen first.
             initialPullComplete.current = false;
         } else {
             setSyncMethod(null);
@@ -61,92 +56,20 @@ export const useGoogleSheetSync = (
         }
     }, [appsScriptUrl, sheetId, isSignedIn]);
 
-    const executeStrictPull = useCallback(async (method: 'script' | 'api', idOrUrl: string) => {
-        console.log(`[Sync] Executing Strict Pull via ${method}...`);
-        let remoteTasks: Task[] = [];
-        let remoteGoals: Goal[] = [];
-        let remoteMetadata: any = null;
-        
-        if (method === 'api') {
-            const data = await sheetService.syncDataFromSheet(idOrUrl);
-            remoteTasks = data.tasks;
-            remoteGoals = data.goals;
-            remoteMetadata = data.metadata;
-        } else {
-            const data = await sheetService.syncDataFromAppsScript(idOrUrl);
-            remoteTasks = data.tasks;
-            remoteGoals = data.goals;
-            remoteMetadata = data.metadata;
-        }
-
-        console.log(`[Sync] Pulled ${remoteTasks.length} tasks and ${remoteGoals.length} goals.`);
-        
-        isRemoteUpdate.current = true;
-        
-        setAllData(remoteTasks, remoteGoals);
-        
-        // Restore Metadata if present
-        if (remoteMetadata) {
-            if (remoteMetadata.gamification && setGamification) {
-                setGamification(remoteMetadata.gamification);
-            }
-            if (remoteMetadata.settings && setSettings) {
-                // FIX: Merge remote settings with local secrets (keys)
-                // Remote settings are sanitized (keys removed), so we must preserve what we have locally.
-                const currentLocalSettings = settingsRef.current || {} as Settings;
-                
-                const mergedSettings = {
-                    ...remoteMetadata.settings,
-                    // Preserve local API keys if they exist locally
-                    geminiApiKey: currentLocalSettings.geminiApiKey || remoteMetadata.settings.geminiApiKey,
-                    googleApiKey: currentLocalSettings.googleApiKey || remoteMetadata.settings.googleApiKey,
-                    googleClientId: currentLocalSettings.googleClientId || remoteMetadata.settings.googleClientId,
-                    // Preserve script URL/Sheet ID if locally set (though usually they match context)
-                    googleAppsScriptUrl: currentLocalSettings.googleAppsScriptUrl || remoteMetadata.settings.googleAppsScriptUrl,
-                    googleSheetId: currentLocalSettings.googleSheetId || remoteMetadata.settings.googleSheetId,
-                    // FIX: Preserve local Audio settings to avoid overwriting user preference with stale remote data on boot
-                    audio: currentLocalSettings.audio || remoteMetadata.settings.audio
-                };
-
-                setSettings(mergedSettings);
-            }
-        }
-        
-        setLastSyncTime(new Date().toISOString());
-        
-        // SAFETY: Only NOW do we allow pushes. We know the current state of the sheet.
-        initialPullComplete.current = true;
-        
-        setStatus('success');
-    }, [setAllData, setGamification, setSettings]);
-
-    const manualPull = useCallback(async () => {
-        if (!syncMethod) return;
-        setStatus('syncing');
-        try {
-            const target = syncMethod === 'api' ? sheetId! : appsScriptUrl!;
-            await executeStrictPull(syncMethod, target);
-        } catch (e: any) {
-            console.error("Manual Pull Failed", e);
-            setStatus('error');
-            setErrorMsg(e.message || "Pull failed");
-        }
-    }, [syncMethod, sheetId, appsScriptUrl, executeStrictPull]);
-
+    // --- MAIN PUSH FUNCTION ---
     const manualPush = useCallback(async () => {
         if (!syncMethod) return;
         
-        // SAFETY GUARD: Block push if we haven't pulled yet
         if (!initialPullComplete.current) {
-            console.warn("[Sync] Safety Guard: Push blocked because initial pull is not complete.");
+            console.warn("[Sync] Push blocked: Initial pull pending.");
             return;
         }
 
         setStatus('syncing');
         try {
-            console.log("[Sync] Manual Push: Sending data...");
+            console.log("[Sync] Pushing data...");
             
-            // Prepare Metadata - FIX SEC-001: Sanitize sensitive keys
+            // Sanitize settings
             const safeSettings = { ...(settingsRef.current || {}) };
             delete safeSettings.geminiApiKey;
             delete safeSettings.googleApiKey;
@@ -165,37 +88,116 @@ export const useGoogleSheetSync = (
             setLastSyncTime(new Date().toISOString());
             setStatus('success');
             isDirtyRef.current = false;
-            console.log("[Sync] Push Complete.");
         } catch (e: any) {
-            console.error("Manual Push Failed", e);
+            console.error("Push Failed", e);
             setStatus('error');
             setErrorMsg(e.message || "Push failed");
         }
     }, [syncMethod, sheetId, appsScriptUrl]);
 
-    // Initial Load
+    // --- MAIN PULL FUNCTION (SMART HYDRATION) ---
+    const executeStrictPull = useCallback(async (method: 'script' | 'api', idOrUrl: string) => {
+        console.log(`[Sync] Initializing via ${method}...`);
+        let remoteTasks: Task[] = [];
+        let remoteGoals: Goal[] = [];
+        let remoteMetadata: any = null;
+        
+        try {
+            if (method === 'api') {
+                const data = await sheetService.syncDataFromSheet(idOrUrl);
+                remoteTasks = data.tasks;
+                remoteGoals = data.goals;
+                remoteMetadata = data.metadata;
+            } else {
+                const data = await sheetService.syncDataFromAppsScript(idOrUrl);
+                remoteTasks = data.tasks;
+                remoteGoals = data.goals;
+                remoteMetadata = data.metadata;
+            }
+
+            // SMART MERGE: Compare Remote vs Local
+            // We use the current refs because they contain what was loaded from localStorage on boot
+            const currentLocalTasks = localTasksRef.current;
+            const currentLocalGoals = localGoalsRef.current;
+
+            // 1. Merge Tasks (Prefer Newest)
+            const { mergedTasks, hasLocalWins } = smartMergeTasks(currentLocalTasks, remoteTasks);
+            
+            // 2. Merge Goals (Simple ID check + Newest wins)
+            const mergedGoals = smartMergeGoals(currentLocalGoals, remoteGoals);
+
+            console.log(`[Sync] Merge Result: ${mergedTasks.length} tasks (Local wins: ${hasLocalWins})`);
+            
+            // Apply Update
+            isRemoteUpdate.current = true;
+            setAllData(mergedTasks, mergedGoals);
+            
+            // Handle Metadata
+            if (remoteMetadata) {
+                if (remoteMetadata.gamification && setGamification) {
+                    setGamification(remoteMetadata.gamification);
+                }
+                if (remoteMetadata.settings && setSettings) {
+                    const currentLocalSettings = settingsRef.current || {} as Settings;
+                    const mergedSettings = {
+                        ...remoteMetadata.settings,
+                        geminiApiKey: currentLocalSettings.geminiApiKey || remoteMetadata.settings.geminiApiKey,
+                        googleApiKey: currentLocalSettings.googleApiKey || remoteMetadata.settings.googleApiKey,
+                        googleClientId: currentLocalSettings.googleClientId || remoteMetadata.settings.googleClientId,
+                        googleAppsScriptUrl: currentLocalSettings.googleAppsScriptUrl || remoteMetadata.settings.googleAppsScriptUrl,
+                        googleSheetId: currentLocalSettings.googleSheetId || remoteMetadata.settings.googleSheetId,
+                        audio: currentLocalSettings.audio || remoteMetadata.settings.audio
+                    };
+                    setSettings(mergedSettings);
+                }
+            }
+            
+            setLastSyncTime(new Date().toISOString());
+            initialPullComplete.current = true;
+            setStatus('success');
+
+            // CRITICAL FIX: If local data was newer (hasLocalWins), the sheet is now stale.
+            // We must schedule a push to update the sheet with our preserved local edits.
+            if (hasLocalWins) {
+                console.log("[Sync] Local data was newer. Scheduling repair push.");
+                isDirtyRef.current = true; // Trigger the debounce effect
+            }
+
+        } catch (e: any) {
+            console.error("Pull Failed", e);
+            setStatus('error');
+            setErrorMsg(e.message || "Initialization failed");
+        }
+    }, [setAllData, setGamification, setSettings]);
+
+    // Manual Pull Wrapper
+    const manualPull = useCallback(async () => {
+        if (!syncMethod) return;
+        setStatus('syncing');
+        const target = syncMethod === 'api' ? sheetId! : appsScriptUrl!;
+        await executeStrictPull(syncMethod, target);
+    }, [syncMethod, sheetId, appsScriptUrl, executeStrictPull]);
+
+    // Initial Load Effect
     useEffect(() => {
         if (!syncMethod) return;
-        const init = async () => {
-            try {
-                setStatus('syncing');
-                const target = syncMethod === 'api' ? sheetId! : appsScriptUrl!;
-                if (syncMethod === 'api') await sheetService.initializeSheetHeaders(target);
-                await executeStrictPull(syncMethod, target);
-            } catch (e: any) {
-                console.error("Sync Initialization Failed:", e);
-                setStatus('error');
-                setErrorMsg(e.message || "Failed to initialize sync");
-            }
-        };
-        // Run init if configured.
-        // This will run executeStrictPull, which eventually sets initialPullComplete.current = true
-        if ((syncMethod === 'script' && appsScriptUrl) || (syncMethod === 'api' && sheetId)) {
-            init();
-        }
-    }, [syncMethod, sheetId, appsScriptUrl, executeStrictPull]); 
+        if (initialPullComplete.current) return; // Only run once per connection session
 
-    // Auto-Push Watcher (Tasks, Goals, Gamification, Settings)
+        const target = syncMethod === 'api' ? sheetId! : appsScriptUrl!;
+        
+        // Short delay to ensure localStorage has fully loaded into state before we merge
+        const timer = setTimeout(() => {
+            if (syncMethod === 'api') {
+                sheetService.initializeSheetHeaders(target).then(() => executeStrictPull(syncMethod, target));
+            } else {
+                executeStrictPull(syncMethod, target);
+            }
+        }, 100);
+
+        return () => clearTimeout(timer);
+    }, [syncMethod, sheetId, appsScriptUrl, executeStrictPull]);
+
+    // Auto-Push Watcher
     useEffect(() => {
         if (!syncMethod) return;
 
@@ -204,15 +206,8 @@ export const useGoogleSheetSync = (
             return;
         }
         
-        // SAFETY GUARD: If we haven't pulled yet, do NOT even queue a push.
-        if (!initialPullComplete.current) {
-            return;
-        }
-
-        // RACE CONDITION FIX: Do not queue updates if already syncing
-        if (status === 'syncing') {
-            return;
-        }
+        if (!initialPullComplete.current) return;
+        if (status === 'syncing') return;
 
         isDirtyRef.current = true;
         if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
@@ -227,119 +222,101 @@ export const useGoogleSheetSync = (
         };
     }, [localTasks, localGoals, gamification, settings, syncMethod, manualPush, status]);
 
-    // Polling
+    // Background Polling
     useEffect(() => {
         if (!syncMethod) return;
 
         const pollInterval = setInterval(async () => {
-            // Block polling if syncing, dirty, OR if we haven't even finished the first pull yet
             if (status === 'syncing' || isDirtyRef.current || !initialPullComplete.current) return;
 
             try {
-                let shouldSync = false;
+                // Check if sync needed...
+                let shouldSync = true; // Simplified check for robustness
                 if (syncMethod === 'api' && sheetId) {
-                    const sheetModified = await sheetService.checkSheetModifiedTime(sheetId);
-                    if (sheetModified && lastSyncTime && new Date(sheetModified) > new Date(lastSyncTime)) {
-                        shouldSync = true;
-                    }
-                } else if (syncMethod === 'script' && appsScriptUrl) {
-                    shouldSync = true;
+                     // Optimization: Check Drive modifiedTime first if using API
+                     const sheetModified = await sheetService.checkSheetModifiedTime(sheetId);
+                     if (sheetModified && lastSyncTime && new Date(sheetModified) <= new Date(lastSyncTime)) {
+                         shouldSync = false;
+                     }
                 }
 
                 if (shouldSync) {
-                    let remoteTasks: Task[] = [];
-                    let remoteGoals: Goal[] = [];
-                    let remoteMetadata: any = null;
-
-                    if (syncMethod === 'api' && sheetId) {
-                         const data = await sheetService.syncDataFromSheet(sheetId);
-                         remoteTasks = data.tasks;
-                         remoteGoals = data.goals;
-                         remoteMetadata = data.metadata;
-                    } else if (syncMethod === 'script' && appsScriptUrl) {
-                         const data = await sheetService.syncDataFromAppsScript(appsScriptUrl);
-                         remoteTasks = data.tasks;
-                         remoteGoals = data.goals;
-                         remoteMetadata = data.metadata;
-                    }
-
-                    // Simple merge for Goals (Remote wins for simplicity in this version, or do we merge?)
-                    // Let's trust remote for now to avoid complexity in Goal conflict res.
+                    const target = syncMethod === 'api' ? sheetId! : appsScriptUrl!;
+                    let data;
                     
-                    const mergedTasks = mergeTasks(localTasksRef.current, remoteTasks, lastSyncTime);
-                    
-                    // Detect changes
-                    const metadataChanged = JSON.stringify(remoteMetadata) !== JSON.stringify({gamification: gamificationRef.current, settings: settingsRef.current});
-                    const tasksChanged = JSON.stringify(mergedTasks) !== JSON.stringify(localTasksRef.current);
-                    const goalsChanged = JSON.stringify(remoteGoals) !== JSON.stringify(localGoalsRef.current);
+                    if (syncMethod === 'api') data = await sheetService.syncDataFromSheet(target);
+                    else data = await sheetService.syncDataFromAppsScript(target);
 
-                    if (tasksChanged || goalsChanged || (metadataChanged && remoteMetadata)) {
-                        console.log("[Sync] Background update found.");
+                    // Polling Logic: Only accept remote changes if they are distinctly newer
+                    const { mergedTasks, hasRemoteChanges } = smartMergeTasks(localTasksRef.current, data.tasks, true);
+                    
+                    if (hasRemoteChanges) {
+                        console.log("[Sync] Background update applied.");
                         isRemoteUpdate.current = true;
-                        
-                        setAllData(mergedTasks, remoteGoals); // Update both
-                        
-                        if (remoteMetadata) {
-                            if(setGamification) setGamification(remoteMetadata.gamification);
-                            if (remoteMetadata.settings && setSettings) {
-                                // MERGE FIX HERE TOO
-                                const currentLocalSettings = settingsRef.current || {} as Settings;
-                                const mergedSettings = {
-                                    ...remoteMetadata.settings,
-                                    geminiApiKey: currentLocalSettings.geminiApiKey || remoteMetadata.settings.geminiApiKey,
-                                    googleApiKey: currentLocalSettings.googleApiKey || remoteMetadata.settings.googleApiKey,
-                                    googleClientId: currentLocalSettings.googleClientId || remoteMetadata.settings.googleClientId,
-                                    googleAppsScriptUrl: currentLocalSettings.googleAppsScriptUrl || remoteMetadata.settings.googleAppsScriptUrl,
-                                    googleSheetId: currentLocalSettings.googleSheetId || remoteMetadata.settings.googleSheetId,
-                                    // FIX: Preserve local Audio settings to avoid overwriting user preference with stale remote data
-                                    audio: currentLocalSettings.audio || remoteMetadata.settings.audio
-                                };
-                                setSettings(mergedSettings);
-                            }
-                        }
-
+                        setAllData(mergedTasks, data.goals); // Simplified goal sync for polling
                         setLastSyncTime(new Date().toISOString());
-                        setStatus('success'); 
                     }
                 }
-            } catch (e: any) {
-                // Suppress strict error logging for polling (network blips)
-                if (e instanceof Error && (e.message.includes('Failed to fetch') || e.message.includes('NetworkError'))) {
-                    // Debug only
-                    // console.debug("[Sync] Poll skipped due to network.");
-                } else {
-                    console.warn("[Sync] Poll warning:", e);
-                }
+            } catch (e) {
+                // Silent fail on poll
             }
         }, POLL_INTERVAL);
 
         return () => clearInterval(pollInterval);
-    }, [syncMethod, sheetId, appsScriptUrl, lastSyncTime, status, setAllData, setGamification, setSettings]);
+    }, [syncMethod, sheetId, appsScriptUrl, lastSyncTime, status, setAllData]);
 
     return { status, lastSyncTime, errorMsg, syncMethod, manualPull, manualPush };
 };
 
-const mergeTasks = (local: Task[], remote: Task[], lastSyncTime: string | null): Task[] => {
+// --- HELPER: Smart Merge ---
+// Returns merged list AND boolean if local data "won" (implies sheet is stale)
+const smartMergeTasks = (local: Task[], remote: Task[], isPolling = false): { mergedTasks: Task[], hasLocalWins: boolean, hasRemoteChanges: boolean } => {
     const taskMap = new Map<string, Task>();
-    local.forEach(t => taskMap.set(t.id, t));
-    const lastSyncMs = lastSyncTime ? new Date(lastSyncTime).getTime() : 0;
+    let hasLocalWins = false;
+    let hasRemoteChanges = false;
 
+    // 1. Start with all Local tasks (Source of Truth for unsynced edits)
+    local.forEach(t => taskMap.set(t.id, t));
+
+    // 2. Overlay Remote tasks conditionally
     remote.forEach(r => {
         const l = taskMap.get(r.id);
-        const remoteMod = new Date(r.lastModified).getTime();
-
+        
         if (!l) {
-            // If remote task is newer than last sync, add it
-            if (remoteMod > lastSyncMs - 5000) {
-                taskMap.set(r.id, r);
-            }
+            // Task exists in Remote but not Local.
+            // On Boot: Accept it (restore backup).
+            // On Poll: Only accept if it's new/recent? No, usually accept to sync devices.
+            taskMap.set(r.id, r);
+            hasRemoteChanges = true;
         } else {
-            // Conflict resolution: Remote wins if significantly newer
-            const localMod = new Date(l.lastModified).getTime();
-            if (remoteMod > localMod + 2000) {
+            // Task exists in both. Compare Timestamps.
+            const localTime = new Date(l.lastModified).getTime();
+            const remoteTime = new Date(r.lastModified).getTime();
+
+            // Threshold to prevent jitter (1 second)
+            if (remoteTime > localTime + 1000) {
+                // Remote is significantly newer. Accept it.
                 taskMap.set(r.id, r);
+                hasRemoteChanges = true;
+            } else if (localTime > remoteTime + 1000) {
+                // Local is significantly newer. Keep Local.
+                // This means the sheet is stale and needs an update.
+                hasLocalWins = true;
             }
+            // If timestamps are close, prefer Local (UI stability)
         }
     });
-    return Array.from(taskMap.values());
+
+    return { 
+        mergedTasks: Array.from(taskMap.values()), 
+        hasLocalWins: !isPolling && hasLocalWins, // Only care about local wins during initial hydrate
+        hasRemoteChanges 
+    };
+};
+
+const smartMergeGoals = (local: Goal[], remote: Goal[]) => {
+    const map = new Map<string, Goal>();
+    local.forEach(g => map.set(g.id, g));
+    remote.forEach(r => map.set(r.id, r)); // Simple overwrite for goals for now, usually fewer conflicts
+    return Array.from(map.values());
 };

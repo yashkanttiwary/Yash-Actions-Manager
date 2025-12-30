@@ -98,6 +98,7 @@ export const useTaskManager = (enableLoading: boolean = true) => {
                                 currentSessionStartTime: task.currentSessionStartTime || null,
                                 goalId: task.goalId || undefined, // New Field
                                 isPinned: task.isPinned || false, // Default to false
+                                focusOrder: task.focusOrder, // Load order
                             };
                         });
                         loadedTasks = parsedTasks;
@@ -242,23 +243,63 @@ export const useTaskManager = (enableLoading: boolean = true) => {
             const task = prevTasks.find(t => t.id === taskId);
             if (!task) return prevTasks;
 
-            // If we are pinning (currently false), check limit
+            // If pinning (currently false)
             if (!task.isPinned) {
-                const pinnedCount = prevTasks.filter(t => t.isPinned).length;
-                if (pinnedCount >= 5) {
+                const pinnedTasks = prevTasks.filter(t => t.isPinned);
+                if (pinnedTasks.length >= 5) {
                     result = { success: false, message: 'Top 5 Focus is full. Unpin one task first.' };
                     return prevTasks;
                 }
+                
+                // Assign a new order index at the end
+                const maxOrder = pinnedTasks.reduce((max, t) => Math.max(max, t.focusOrder || 0), -1);
+                
+                return prevTasks.map(t => 
+                    t.id === taskId ? { ...t, isPinned: true, focusOrder: maxOrder + 1, lastModified: new Date().toISOString() } : t
+                );
             }
 
-            // Toggle pin state
-            const updatedTasks = prevTasks.map(t => 
-                t.id === taskId ? { ...t, isPinned: !t.isPinned, lastModified: new Date().toISOString() } : t
+            // If unpinning
+            return prevTasks.map(t => 
+                t.id === taskId ? { ...t, isPinned: false, focusOrder: undefined, lastModified: new Date().toISOString() } : t
             );
-            return updatedTasks;
         });
         
         return result;
+    }, []);
+
+    // Reorder tasks within the Focus View
+    const reorderPinnedTasks = useCallback((activeTaskId: string, overTaskId: string) => {
+        setTasks(prev => {
+            // Filter and Sort existing pinned tasks
+            // We use focusOrder if available, otherwise prioritize by priority/dueDate for initial sort
+            const pinned = prev.filter(t => t.isPinned).sort((a, b) => {
+                if (a.focusOrder !== undefined && b.focusOrder !== undefined) return a.focusOrder - b.focusOrder;
+                // Fallback for migration or mixed state: Priority then ID
+                return 0; 
+            });
+
+            const activeIndex = pinned.findIndex(t => t.id === activeTaskId);
+            const overIndex = pinned.findIndex(t => t.id === overTaskId);
+
+            if (activeIndex === -1 || overIndex === -1 || activeIndex === overIndex) return prev;
+
+            // Move
+            const [moved] = pinned.splice(activeIndex, 1);
+            pinned.splice(overIndex, 0, moved);
+
+            // Create update map with new indices
+            const orderUpdates = new Map<string, number>();
+            pinned.forEach((t, index) => orderUpdates.set(t.id, index));
+
+            // Apply updates to main state
+            return prev.map(t => {
+                if (orderUpdates.has(t.id)) {
+                    return { ...t, focusOrder: orderUpdates.get(t.id), lastModified: new Date().toISOString() };
+                }
+                return t;
+            });
+        });
     }, []);
 
     // --- GOAL OPERATIONS ---
@@ -296,6 +337,7 @@ export const useTaskManager = (enableLoading: boolean = true) => {
             blockers: task.blockers || [],
             currentSessionStartTime: task.currentSessionStartTime || null,
             isPinned: task.isPinned || false, // Ensure isPinned is carried over
+            focusOrder: task.focusOrder, // Ensure order is carried
         }));
         setTasks(tasksWithDefaults);
         setGoals(newGoals);
@@ -344,6 +386,7 @@ export const useTaskManager = (enableLoading: boolean = true) => {
         deleteTask,
         moveTask,
         toggleTaskPin, // Exported logic
+        reorderPinnedTasks, // Exported logic
         getTasksByStatus,
         setAllTasks,
         setAllData, // New unified setter

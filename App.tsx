@@ -10,7 +10,8 @@ import { ResolveBlockerModal } from './components/ResolveBlockerModal';
 import { AIAssistantModal } from './components/AIAssistantModal';
 import { CalendarView } from './components/CalendarView';
 import { TimelineGantt } from './components/TimelineGantt';
-import { GoalBoard } from './components/GoalBoard'; 
+import { GoalBoard } from './components/GoalBoard';
+import { FocusView } from './components/FocusView';
 import { generateTaskSummary, breakDownTask, parseTaskFromVoice, TaskDiff } from './services/geminiService';
 import { calculateTaskXP, checkLevelUp } from './services/gamificationService'; 
 import { initGoogleClient, signIn, signOut } from './services/googleAuthService';
@@ -90,8 +91,6 @@ const App: React.FC = () => {
     const [isMenuLocked, setIsMenuLocked] = useState(false);
     const [isMenuHovered, setIsMenuHovered] = useState(false);
     
-    // Rocket Animation REMOVED - It is a distraction.
-    // We keep the state variables to satisfy TypeScript, but they will remain static.
     const [isRocketFlying, setIsRocketFlying] = useState(false);
 
     const isSpaceModeActive = useMemo(() => theme === 'space', [theme]);
@@ -141,6 +140,7 @@ const App: React.FC = () => {
         updateGoal, 
         deleteGoal, 
         toggleTaskPin,
+        reorderPinnedTasks, // Use new function
         getTasksByStatus,
         updateColumnLayout,
         resetColumnLayouts,
@@ -161,7 +161,7 @@ const App: React.FC = () => {
     const [showIntegrationsModal, setShowIntegrationsModal] = useState(false);
     const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>('general');
     
-    const [viewMode, setViewMode] = useState<'kanban' | 'calendar' | 'goals'>('kanban');
+    const [viewMode, setViewMode] = useState<'kanban' | 'calendar' | 'goals' | 'focus'>('kanban');
     const [focusMode, setFocusMode] = useState<Status | 'None'>('None');
     const [focusedGoalId, setFocusedGoalId] = useState<string | null>(null);
     
@@ -183,16 +183,12 @@ const App: React.FC = () => {
         return activeTask ? { taskId: activeTask.id, startTime: activeTask.currentSessionStartTime! } : null;
     }, [tasks]);
 
-    // Gamification state kept for compatibility but effectively dead
     const [gamification, setGamification] = useState<GamificationData>({
         xp: 0,
         level: 1,
         streak: { current: 0, longest: 0, lastCompletionDate: null }
     });
     
-    // Level Up Modal Removed
-    const [showLevelUp, setShowLevelUp] = useState(false);
-    const [leveledUpTo, setLeveledUpTo] = useState(0);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; task: Task } | null>(null);
     const [showShortcutsModal, setShowShortcutsModal] = useState(false);
 
@@ -281,6 +277,16 @@ const App: React.FC = () => {
                 const savedFocusedGoalId = await storage.get('focusedGoalId');
                 if (savedFocusedGoalId) setFocusedGoalId(savedFocusedGoalId);
 
+                // Load View State
+                const savedViewMode = await storage.get('viewMode');
+                if (savedViewMode) setViewMode(savedViewMode as any);
+
+                const savedTodayView = await storage.get('isTodayView');
+                if (savedTodayView) setIsTodayView(savedTodayView === 'true');
+
+                const savedFocusMode = await storage.get('focusMode');
+                if (savedFocusMode) setFocusMode(savedFocusMode as any);
+
                 const savedSettings = await storage.get('taskMasterSettings_v2'); 
                 const cookieUrl = getCookie('tm_script_url');
 
@@ -322,6 +328,20 @@ const App: React.FC = () => {
         }
         storage.set('theme', theme);
     }, [theme]);
+
+    // Persist UI State (View Mode, Today View, Focus Filter)
+    useEffect(() => {
+        if (!settingsLoaded) return;
+        
+        storage.set('viewMode', viewMode);
+        storage.set('isTodayView', String(isTodayView));
+        
+        if (focusMode !== 'None') {
+            storage.set('focusMode', focusMode);
+        } else {
+            storage.remove('focusMode');
+        }
+    }, [viewMode, isTodayView, focusMode, settingsLoaded]);
 
     useEffect(() => {
         storage.set('isFitToScreen', String(isFitToScreen));
@@ -591,7 +611,15 @@ const App: React.FC = () => {
         handleOpenAddTaskModal,
         setShowAIModal,
         setIsTodayView,
-        setViewMode,
+        setViewMode: (newMode) => {
+            // Need a safer cast/check here since Keyboard shortcuts hook expects 2 values but we have 4
+            // For now, toggle between kanban and calendar for shortcut 'V'
+            if (typeof newMode === 'function') {
+                setViewMode(prev => (prev === 'kanban' ? 'calendar' : 'kanban'));
+            } else {
+                setViewMode(newMode as any);
+            }
+        },
         setShowShortcutsModal,
         setZoomLevel,
         closeAllModals: () => {
@@ -624,8 +652,6 @@ const App: React.FC = () => {
         });
     };
 
-    // No gamification logic in handleTaskCompletion anymore
-    // It just remains blank or removes the function call usage
     const handleToggleTimer = (taskId: string) => {
         const now = Date.now();
         const currentlyActiveTask = tasks.find(t => t.currentSessionStartTime);
@@ -658,7 +684,6 @@ const App: React.FC = () => {
              task.currentSessionStartTime = null;
         }
 
-        // Just move the task. No drama.
         moveTask(task.id, newStatus, newIndex);
     }, [moveTask]);
 
@@ -934,14 +959,17 @@ const App: React.FC = () => {
                         
                         {!isLoading && !error && (
                             <>
-                                <TimelineGantt 
-                                    tasks={filteredTasks} 
-                                    onEditTask={handleEditTask}
-                                    onUpdateTask={updateTask}
-                                    addTask={addTask} 
-                                    isVisible={showTimeline}
-                                    timezone={settings.timezone}
-                                />
+                                {/* Only show timeline in Kanban view */}
+                                {viewMode === 'kanban' && (
+                                    <TimelineGantt 
+                                        tasks={filteredTasks} 
+                                        onEditTask={handleEditTask}
+                                        onUpdateTask={updateTask}
+                                        addTask={addTask} 
+                                        isVisible={showTimeline}
+                                        timezone={settings.timezone}
+                                    />
+                                )}
 
                                 {viewMode === 'kanban' && (
                                     <div className="flex-grow">
@@ -1004,6 +1032,21 @@ const App: React.FC = () => {
                                             currentFocusId={focusedGoalId}
                                         />
                                     </div>
+                                )}
+                                {viewMode === 'focus' && (
+                                    <FocusView
+                                        tasks={tasks}
+                                        goals={goals}
+                                        onEditTask={handleEditTask}
+                                        onUpdateTask={updateTask}
+                                        onTogglePin={handleTogglePin}
+                                        onSubtaskToggle={handleSubtaskToggle}
+                                        onDeleteTask={requestDeleteTask}
+                                        isSpaceMode={isSpaceModeActive}
+                                        activeTaskTimer={activeTaskTimer}
+                                        onToggleTimer={handleToggleTimer}
+                                        onReorderTasks={reorderPinnedTasks}
+                                    />
                                 )}
                             </>
                         )}

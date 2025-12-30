@@ -59,6 +59,7 @@ export interface Task {
   goalId?: string;
   // Top 5 Focus Feature
   isPinned?: boolean;
+  focusOrder?: number; // Manual ordering for Focus View
   // K-Teaching: Separation of Action and Observation
   type?: TaskType;
 }

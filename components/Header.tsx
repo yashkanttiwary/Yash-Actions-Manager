@@ -37,8 +37,8 @@ interface HeaderProps {
     gamification: GamificationData;
     settings: Settings;
     onUpdateSettings: (newSettings: Partial<Settings>) => void;
-    currentViewMode: 'kanban' | 'calendar' | 'goals';
-    onViewModeChange: (mode: 'kanban' | 'calendar' | 'goals') => void;
+    currentViewMode: 'kanban' | 'calendar' | 'goals' | 'focus';
+    onViewModeChange: (mode: 'kanban' | 'calendar' | 'goals' | 'focus') => void;
     googleAuthState: GoogleAuthState;
     onGoogleSignIn: () => void;
     onGoogleSignOut: () => void;
@@ -354,7 +354,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
                     
                     {/* Today Toggle - Moved from Expanded Menu */}
-                    {currentViewMode !== 'goals' && (
+                    {currentViewMode !== 'goals' && currentViewMode !== 'focus' && (
                         <button
                             onClick={(e) => { e.stopPropagation(); setIsTodayView(!isTodayView); }}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all border shadow-sm ${
@@ -426,6 +426,9 @@ export const Header: React.FC<HeaderProps> = ({
                             {/* View Toggles */}
                             <div className={`${isSpaceVisualsActive ? 'bg-white/10' : 'bg-gray-200 dark:bg-gray-700'} p-0.5 rounded-lg flex items-center`}>
                                 <button onClick={() => onViewModeChange('kanban')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${currentViewMode === 'kanban' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>Board</button>
+                                <button onClick={() => onViewModeChange('focus')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 ${currentViewMode === 'focus' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>
+                                    <i className="fas fa-bullseye text-[10px]"></i> Focus
+                                </button>
                                 <button onClick={() => onViewModeChange('goals')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${currentViewMode === 'goals' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>Goals</button>
                                 <button onClick={() => onViewModeChange('calendar')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${currentViewMode === 'calendar' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>Calendar</button>
                             </div>
