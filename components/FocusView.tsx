@@ -1,7 +1,8 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Task, Goal, Status, Priority } from '../types';
 import { FocusTaskCard } from './FocusTaskCard';
+import { storage } from '../utils/storage';
 
 interface FocusViewProps {
     tasks: Task[];
@@ -29,68 +30,6 @@ const getPriorityWeight = (p: Priority): number => {
     }
 };
 
-// --- SUB-COMPONENT: Impact Donut Chart ---
-const ImpactDonut: React.FC<{ goal: any, isSpaceMode: boolean }> = ({ goal, isSpaceMode }) => {
-    const radius = 36;
-    const circumference = 2 * Math.PI * radius;
-    const progress = Math.min(100, Math.max(0, goal.focusProgress));
-    const strokeDashoffset = circumference - (progress / 100) * circumference;
-
-    return (
-        <div className={`flex flex-col items-center p-4 rounded-2xl border transition-all hover:scale-[1.02] duration-300 ${
-            isSpaceMode 
-                ? 'bg-white/5 border-white/10 hover:bg-white/10' 
-                : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-md'
-        }`}>
-            <div className="relative w-28 h-28">
-                {/* Background Ring */}
-                <svg className="w-full h-full transform -rotate-90">
-                    <circle
-                        cx="56"
-                        cy="56"
-                        r={radius}
-                        className={isSpaceMode ? "stroke-white/5" : "stroke-gray-100 dark:stroke-gray-700"}
-                        strokeWidth="8"
-                        fill="transparent"
-                    />
-                    {/* Progress Ring */}
-                    <circle
-                        cx="56"
-                        cy="56"
-                        r={radius}
-                        stroke={goal.color}
-                        strokeWidth="8"
-                        fill="transparent"
-                        strokeDasharray={circumference}
-                        strokeDashoffset={strokeDashoffset}
-                        strokeLinecap="round"
-                        className="transition-all duration-1000 ease-out"
-                    />
-                </svg>
-                
-                {/* Center Content */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center animate-in fade-in zoom-in duration-500">
-                    <span className={`text-3xl font-black leading-none ${isSpaceMode ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
-                        {goal.completedCount}
-                    </span>
-                    <span className={`text-[9px] uppercase font-bold tracking-wider mt-1 ${isSpaceMode ? 'text-white/40' : 'text-gray-400'}`}>
-                        OF {goal.taskCount}
-                    </span>
-                </div>
-            </div>
-            
-            <div className="text-center mt-2 w-full">
-                <div className="text-sm font-bold truncate px-2" style={{ color: goal.color }}>
-                    {goal.title}
-                </div>
-                <div className={`text-[10px] mt-1 font-medium ${isSpaceMode ? 'text-slate-400' : 'text-gray-400'}`}>
-                    {Math.round(progress)}% Impact
-                </div>
-            </div>
-        </div>
-    );
-};
-
 export const FocusView: React.FC<FocusViewProps> = ({
     tasks, goals, onEditTask, onUpdateTask, onTogglePin, onSubtaskToggle, onDeleteTask, isSpaceMode,
     activeTaskTimer, onToggleTimer, onReorderTasks
@@ -98,6 +37,23 @@ export const FocusView: React.FC<FocusViewProps> = ({
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [dragOverFocus, setDragOverFocus] = useState(false);
     const [dragOverSidebar, setDragOverSidebar] = useState(false);
+
+    // Load sidebar state on mount
+    useEffect(() => {
+        const loadSidebarState = async () => {
+            const savedState = await storage.get('focusSidebarOpen');
+            if (savedState !== null) {
+                setIsSidebarOpen(savedState === 'true');
+            }
+        };
+        loadSidebarState();
+    }, []);
+
+    const toggleSidebar = () => {
+        const newState = !isSidebarOpen;
+        setIsSidebarOpen(newState);
+        storage.set('focusSidebarOpen', String(newState));
+    };
 
     // 1. Filter Pinned Tasks and Sort by focusOrder
     const pinnedTasks = useMemo(() => {
@@ -126,27 +82,6 @@ export const FocusView: React.FC<FocusViewProps> = ({
             .filter(t => !t.isPinned && t.status !== 'Done' && t.status !== "Won't Complete")
             .sort((a, b) => getPriorityWeight(b.priority) - getPriorityWeight(a.priority));
     }, [tasks]);
-
-    // 3. Goal Impact Calculation
-    const impactGoals = useMemo(() => {
-        const uniqueGoalIds = Array.from(new Set(pinnedTasks.map(t => t.goalId).filter(Boolean)));
-        
-        return uniqueGoalIds.map(goalId => {
-            const goal = goals.find(g => g.id === goalId);
-            if (!goal) return null;
-            
-            const relevantTasks = pinnedTasks.filter(t => t.goalId === goalId);
-            const completedCount = relevantTasks.filter(t => t.status === 'Done').length;
-            const progress = relevantTasks.length > 0 ? (completedCount / relevantTasks.length) * 100 : 0;
-            
-            return {
-                ...goal,
-                focusProgress: progress,
-                taskCount: relevantTasks.length,
-                completedCount
-            };
-        }).filter(Boolean) as (Goal & { focusProgress: number, taskCount: number, completedCount: number })[];
-    }, [pinnedTasks, goals]);
 
     // Drag Handlers
     const handleDragStart = (e: React.DragEvent, taskId: string, source: 'sidebar' | 'focus') => {
@@ -201,14 +136,15 @@ export const FocusView: React.FC<FocusViewProps> = ({
             
             {/* MAIN FOCUS AREA */}
             <div 
-                className={`flex-1 overflow-y-auto custom-scrollbar p-6 md:p-12 flex flex-col items-center relative transition-colors ${dragOverFocus ? 'bg-indigo-50/50 dark:bg-indigo-900/20' : ''}`}
+                className={`flex-1 overflow-y-auto custom-scrollbar p-6 md:p-12 flex flex-col items-center relative transition-all duration-300 ${dragOverFocus ? 'bg-indigo-50/50 dark:bg-indigo-900/20' : ''}`}
+                style={{ paddingRight: isSidebarOpen ? '340px' : '40px' }}
                 onDragOver={(e) => { e.preventDefault(); !isFull && setDragOverFocus(true); }}
                 onDragLeave={() => setDragOverFocus(false)}
                 onDrop={(e) => handleDropOnList(e)} // Drop on background appends
             >
                 
                 {/* Header */}
-                <div className="w-full max-w-3xl mb-12 text-center">
+                <div className="w-full max-w-3xl mb-8 text-center">
                     <h1 className={`text-5xl font-black mb-3 tracking-tight ${isSpaceMode ? 'text-white drop-shadow-md' : 'text-gray-900 dark:text-white'}`}>
                         Daily Focus
                     </h1>
@@ -225,11 +161,11 @@ export const FocusView: React.FC<FocusViewProps> = ({
                 {/* ZONE A: CORE 3 */}
                 <div className="w-full max-w-3xl space-y-8 mb-16">
                     <div className="flex items-center gap-6 mb-6">
-                        <div className="h-px bg-indigo-500/30 flex-1"></div>
+                        <div className={`h-px flex-1 ${isSpaceMode ? 'bg-indigo-500/30' : 'bg-indigo-200 dark:bg-indigo-900'}`}></div>
                         <h2 className={`text-sm font-bold uppercase tracking-[0.2em] ${isSpaceMode ? 'text-indigo-300' : 'text-indigo-600 dark:text-indigo-400'}`}>
                             The Core 3
                         </h2>
-                        <div className="h-px bg-indigo-500/30 flex-1"></div>
+                        <div className={`h-px flex-1 ${isSpaceMode ? 'bg-indigo-500/30' : 'bg-indigo-200 dark:bg-indigo-900'}`}></div>
                     </div>
 
                     {coreTasks.length === 0 ? (
@@ -304,31 +240,6 @@ export const FocusView: React.FC<FocusViewProps> = ({
                         />
                     ))}
                 </div>
-
-                {/* GOAL IMPACT FOOTER (UPDATED UI) */}
-                {impactGoals.length > 0 && (
-                    <div className={`w-full max-w-3xl rounded-3xl p-8 border mb-12 ${isSpaceMode ? 'bg-slate-900/40 border-white/10 backdrop-blur-md' : 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 shadow-inner'}`}>
-                        <div className="flex items-center gap-3 mb-8">
-                            <div className={`p-2 rounded-lg ${isSpaceMode ? 'bg-indigo-500/20 text-indigo-400' : 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400'}`}>
-                                <i className="fas fa-chart-pie text-lg"></i>
-                            </div>
-                            <div>
-                                <h3 className={`text-lg font-bold ${isSpaceMode ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
-                                    Strategic Impact
-                                </h3>
-                                <p className={`text-xs ${isSpaceMode ? 'text-slate-400' : 'text-gray-500 dark:text-gray-400'}`}>
-                                    How your current focus aligns with your goals
-                                </p>
-                            </div>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                            {impactGoals.map(goal => (
-                                <ImpactDonut key={goal.id} goal={goal} isSpaceMode={isSpaceMode} />
-                            ))}
-                        </div>
-                    </div>
-                )}
             </div>
 
             {/* SIDEBAR: BACKLOG */}
@@ -348,16 +259,21 @@ export const FocusView: React.FC<FocusViewProps> = ({
                 onDragLeave={() => setDragOverSidebar(false)}
                 onDrop={handleDropOnSidebar}
             >
+                {/* PROMINENT TOGGLE TAB */}
                 <button 
-                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                    className={`absolute -left-8 top-24 w-8 h-10 flex items-center justify-center rounded-l-lg shadow-md border-l border-t border-b cursor-pointer
+                    onClick={toggleSidebar}
+                    className={`absolute -left-10 top-1/2 -translate-y-1/2 w-10 h-32 flex flex-col items-center justify-center rounded-l-xl shadow-lg border-y border-l cursor-pointer transition-all duration-300 group
                         ${isSpaceMode 
-                            ? 'bg-slate-800 border-slate-700 text-white' 
-                            : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300'
+                            ? 'bg-indigo-600/90 border-indigo-400/50 text-white hover:bg-indigo-500' 
+                            : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-indigo-600 dark:text-indigo-400 hover:bg-gray-50 dark:hover:bg-gray-700'
                         }
                     `}
+                    title={isSidebarOpen ? "Close Tasks Panel" : "Open Available Tasks"}
                 >
-                    <i className={`fas fa-chevron-${isSidebarOpen ? 'right' : 'left'}`}></i>
+                    <i className={`fas fa-chevron-${isSidebarOpen ? 'right' : 'left'} text-lg mb-2`}></i>
+                    <span className="text-[10px] font-bold uppercase tracking-widest [writing-mode:vertical-rl] rotate-180 opacity-80 group-hover:opacity-100">
+                        {isSidebarOpen ? 'Close' : 'Tasks'}
+                    </span>
                 </button>
 
                 <div className="h-full flex flex-col p-4">
