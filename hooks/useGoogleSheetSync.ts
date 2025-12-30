@@ -103,7 +103,9 @@ export const useGoogleSheetSync = (
                     googleClientId: currentLocalSettings.googleClientId || remoteMetadata.settings.googleClientId,
                     // Preserve script URL/Sheet ID if locally set (though usually they match context)
                     googleAppsScriptUrl: currentLocalSettings.googleAppsScriptUrl || remoteMetadata.settings.googleAppsScriptUrl,
-                    googleSheetId: currentLocalSettings.googleSheetId || remoteMetadata.settings.googleSheetId
+                    googleSheetId: currentLocalSettings.googleSheetId || remoteMetadata.settings.googleSheetId,
+                    // FIX: Preserve local Audio settings to avoid overwriting user preference with stale remote data on boot
+                    audio: currentLocalSettings.audio || remoteMetadata.settings.audio
                 };
 
                 setSettings(mergedSettings);
@@ -288,7 +290,9 @@ export const useGoogleSheetSync = (
                                     googleApiKey: currentLocalSettings.googleApiKey || remoteMetadata.settings.googleApiKey,
                                     googleClientId: currentLocalSettings.googleClientId || remoteMetadata.settings.googleClientId,
                                     googleAppsScriptUrl: currentLocalSettings.googleAppsScriptUrl || remoteMetadata.settings.googleAppsScriptUrl,
-                                    googleSheetId: currentLocalSettings.googleSheetId || remoteMetadata.settings.googleSheetId
+                                    googleSheetId: currentLocalSettings.googleSheetId || remoteMetadata.settings.googleSheetId,
+                                    // FIX: Preserve local Audio settings to avoid overwriting user preference with stale remote data
+                                    audio: currentLocalSettings.audio || remoteMetadata.settings.audio
                                 };
                                 setSettings(mergedSettings);
                             }
