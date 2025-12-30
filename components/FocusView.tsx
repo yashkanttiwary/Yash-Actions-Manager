@@ -29,6 +29,68 @@ const getPriorityWeight = (p: Priority): number => {
     }
 };
 
+// --- SUB-COMPONENT: Impact Donut Chart ---
+const ImpactDonut: React.FC<{ goal: any, isSpaceMode: boolean }> = ({ goal, isSpaceMode }) => {
+    const radius = 36;
+    const circumference = 2 * Math.PI * radius;
+    const progress = Math.min(100, Math.max(0, goal.focusProgress));
+    const strokeDashoffset = circumference - (progress / 100) * circumference;
+
+    return (
+        <div className={`flex flex-col items-center p-4 rounded-2xl border transition-all hover:scale-[1.02] duration-300 ${
+            isSpaceMode 
+                ? 'bg-white/5 border-white/10 hover:bg-white/10' 
+                : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-md'
+        }`}>
+            <div className="relative w-28 h-28">
+                {/* Background Ring */}
+                <svg className="w-full h-full transform -rotate-90">
+                    <circle
+                        cx="56"
+                        cy="56"
+                        r={radius}
+                        className={isSpaceMode ? "stroke-white/5" : "stroke-gray-100 dark:stroke-gray-700"}
+                        strokeWidth="8"
+                        fill="transparent"
+                    />
+                    {/* Progress Ring */}
+                    <circle
+                        cx="56"
+                        cy="56"
+                        r={radius}
+                        stroke={goal.color}
+                        strokeWidth="8"
+                        fill="transparent"
+                        strokeDasharray={circumference}
+                        strokeDashoffset={strokeDashoffset}
+                        strokeLinecap="round"
+                        className="transition-all duration-1000 ease-out"
+                    />
+                </svg>
+                
+                {/* Center Content */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center animate-in fade-in zoom-in duration-500">
+                    <span className={`text-3xl font-black leading-none ${isSpaceMode ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
+                        {goal.completedCount}
+                    </span>
+                    <span className={`text-[9px] uppercase font-bold tracking-wider mt-1 ${isSpaceMode ? 'text-white/40' : 'text-gray-400'}`}>
+                        OF {goal.taskCount}
+                    </span>
+                </div>
+            </div>
+            
+            <div className="text-center mt-2 w-full">
+                <div className="text-sm font-bold truncate px-2" style={{ color: goal.color }}>
+                    {goal.title}
+                </div>
+                <div className={`text-[10px] mt-1 font-medium ${isSpaceMode ? 'text-slate-400' : 'text-gray-400'}`}>
+                    {Math.round(progress)}% Impact
+                </div>
+            </div>
+        </div>
+    );
+};
+
 export const FocusView: React.FC<FocusViewProps> = ({
     tasks, goals, onEditTask, onUpdateTask, onTogglePin, onSubtaskToggle, onDeleteTask, isSpaceMode,
     activeTaskTimer, onToggleTimer, onReorderTasks
@@ -243,35 +305,33 @@ export const FocusView: React.FC<FocusViewProps> = ({
                     ))}
                 </div>
 
-                {/* GOAL IMPACT FOOTER */}
+                {/* GOAL IMPACT FOOTER (UPDATED UI) */}
                 {impactGoals.length > 0 && (
-                    <div className={`w-full max-w-3xl rounded-3xl p-8 border mb-12 ${isSpaceMode ? 'bg-white/5 border-white/10 backdrop-blur-md' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-lg'}`}>
-                        <h3 className={`text-xs font-bold uppercase tracking-wider mb-6 flex items-center gap-2 ${isSpaceMode ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
-                            <i className="fas fa-chart-pie text-indigo-500"></i> Today's Strategic Impact
-                        </h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className={`w-full max-w-3xl rounded-3xl p-8 border mb-12 ${isSpaceMode ? 'bg-slate-900/40 border-white/10 backdrop-blur-md' : 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 shadow-inner'}`}>
+                        <div className="flex items-center gap-3 mb-8">
+                            <div className={`p-2 rounded-lg ${isSpaceMode ? 'bg-indigo-500/20 text-indigo-400' : 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400'}`}>
+                                <i className="fas fa-chart-pie text-lg"></i>
+                            </div>
+                            <div>
+                                <h3 className={`text-lg font-bold ${isSpaceMode ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
+                                    Strategic Impact
+                                </h3>
+                                <p className={`text-xs ${isSpaceMode ? 'text-slate-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                                    How your current focus aligns with your goals
+                                </p>
+                            </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                             {impactGoals.map(goal => (
-                                <div key={goal.id} className="flex flex-col gap-2">
-                                    <div className="flex justify-between items-center text-xs font-medium">
-                                        <span style={{ color: goal.color }} className="font-bold text-sm">{goal.title}</span>
-                                        <span className={isSpaceMode ? 'text-slate-400' : 'text-gray-500'}>
-                                            {goal.completedCount}/{goal.taskCount}
-                                        </span>
-                                    </div>
-                                    <div className={`h-3 rounded-full overflow-hidden ${isSpaceMode ? 'bg-slate-700' : 'bg-gray-100 dark:bg-gray-700'}`}>
-                                        <div 
-                                            className="h-full transition-all duration-500 ease-out rounded-full"
-                                            style={{ width: `${goal.focusProgress}%`, backgroundColor: goal.color }}
-                                        ></div>
-                                    </div>
-                                </div>
+                                <ImpactDonut key={goal.id} goal={goal} isSpaceMode={isSpaceMode} />
                             ))}
                         </div>
                     </div>
                 )}
             </div>
 
-            {/* SIDEBAR: BACKLOG (DROP ZONE FOR REMOVAL) */}
+            {/* SIDEBAR: BACKLOG */}
             <div 
                 className={`fixed right-0 top-0 bottom-0 pt-16 z-20 w-80 shadow-2xl transition-transform duration-300 transform border-l
                     ${isSpaceMode 

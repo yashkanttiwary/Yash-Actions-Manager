@@ -41,6 +41,10 @@ export const FocusTaskCard: React.FC<FocusTaskCardProps> = ({
     const isActiveTimer = activeTaskTimer?.taskId === task.id;
     const [currentSessionTime, setCurrentSessionTime] = useState(0);
 
+    // Subtask Edit State
+    const [isEditingSteps, setIsEditingSteps] = useState(false);
+    const [newStepText, setNewStepText] = useState('');
+
     // Timer Sync
     useEffect(() => {
         if (isActiveTimer && task.currentSessionStartTime) {
@@ -69,6 +73,29 @@ export const FocusTaskCard: React.FC<FocusTaskCardProps> = ({
         e.preventDefault();
         e.stopPropagation();
         onDrop(e, task.id); // Drop ONTO this task
+    };
+
+    // --- Subtask Handlers ---
+    const handleStepUpdate = (subtaskId: string, newTitle: string) => {
+        const updated = task.subtasks?.map(st => st.id === subtaskId ? { ...st, title: newTitle } : st) || [];
+        onUpdateTask({ ...task, subtasks: updated });
+    };
+
+    const handleStepDelete = (subtaskId: string) => {
+        const updated = task.subtasks?.filter(st => st.id !== subtaskId) || [];
+        onUpdateTask({ ...task, subtasks: updated });
+    };
+
+    const handleStepAdd = () => {
+        if (!newStepText.trim()) return;
+        const newStep = {
+            id: `sub-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            title: newStepText.trim(),
+            isCompleted: false
+        };
+        const updated = [...(task.subtasks || []), newStep];
+        onUpdateTask({ ...task, subtasks: updated });
+        setNewStepText('');
     };
 
     // Card Styling Logic
@@ -167,26 +194,87 @@ export const FocusTaskCard: React.FC<FocusTaskCardProps> = ({
                     </div>
                 </div>
 
-                {/* Always Visible Subtasks */}
-                {task.subtasks && task.subtasks.length > 0 && (
-                    <div className={`mt-6 pl-12 space-y-3`}>
-                        <h4 className={`text-xs font-bold uppercase tracking-widest mb-3 ${isSpaceMode ? 'text-slate-500' : 'text-gray-400'}`}>Steps</h4>
-                        {task.subtasks.map(st => (
-                            <div 
-                                key={st.id} 
-                                onClick={() => onSubtaskToggle(task.id, st.id)}
-                                className={`group/sub flex items-start gap-3 cursor-pointer select-none transition-opacity ${st.isCompleted ? 'opacity-50' : 'opacity-100'}`}
-                            >
-                                <div className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center transition-colors ${st.isCompleted ? 'bg-green-500 border-green-500' : (isSpaceMode ? 'border-slate-600 group-hover/sub:border-white' : 'border-gray-300 dark:border-gray-600 group-hover/sub:border-indigo-500')}`}>
-                                    {st.isCompleted && <i className="fas fa-check text-[10px] text-white"></i>}
-                                </div>
-                                <span className={`text-sm ${st.isCompleted ? 'line-through' : ''} ${isSpaceMode ? 'text-slate-300' : 'text-gray-700 dark:text-gray-300'}`}>
-                                    {st.title}
-                                </span>
-                            </div>
-                        ))}
+                {/* Subtasks Section with Inline Edit */}
+                <div className="mt-6 pl-0 md:pl-12">
+                    <div className="flex items-center justify-between mb-3">
+                        <h4 className={`text-xs font-bold uppercase tracking-widest ${isSpaceMode ? 'text-slate-500' : 'text-gray-400'}`}>
+                            Steps
+                        </h4>
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); setIsEditingSteps(!isEditingSteps); }}
+                            className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${isEditingSteps ? 'bg-green-500 text-white' : (isSpaceMode ? 'hover:bg-white/10 text-slate-500' : 'hover:bg-gray-100 text-gray-400')}`}
+                            title={isEditingSteps ? "Done Editing" : "Edit Steps"}
+                        >
+                            <i className={`fas ${isEditingSteps ? 'fa-check' : 'fa-pen'} text-xs`}></i>
+                        </button>
                     </div>
-                )}
+
+                    {isEditingSteps ? (
+                        <div className="space-y-2 animate-fadeIn">
+                            {task.subtasks?.map(st => (
+                                <div key={st.id} className="flex items-center gap-2">
+                                    <button 
+                                        onClick={() => handleStepDelete(st.id)}
+                                        className="text-red-400 hover:text-red-500 px-1"
+                                        title="Delete step"
+                                    >
+                                        <i className="fas fa-minus-circle"></i>
+                                    </button>
+                                    <input 
+                                        type="text" 
+                                        value={st.title}
+                                        onChange={(e) => handleStepUpdate(st.id, e.target.value)}
+                                        className={`flex-1 text-sm bg-transparent border-b ${isSpaceMode ? 'border-white/20 text-white focus:border-white' : 'border-gray-300 text-gray-800 focus:border-indigo-500'} focus:outline-none py-1 transition-colors`}
+                                    />
+                                </div>
+                            ))}
+                            <div className="flex items-center gap-2 mt-2">
+                                <i className={`fas fa-plus text-xs ${isSpaceMode ? 'text-slate-500' : 'text-gray-400'} pl-1.5`}></i>
+                                <input 
+                                    type="text" 
+                                    value={newStepText}
+                                    onChange={(e) => setNewStepText(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleStepAdd()}
+                                    placeholder="Add a new step..."
+                                    className={`flex-1 text-sm bg-transparent border-b ${isSpaceMode ? 'border-white/10 text-slate-300 placeholder-slate-600 focus:border-white/50' : 'border-gray-200 text-gray-800 placeholder-gray-400 focus:border-indigo-500'} focus:outline-none py-1 transition-colors`}
+                                />
+                                <button 
+                                    onClick={handleStepAdd}
+                                    disabled={!newStepText.trim()}
+                                    className={`text-xs font-bold px-2 py-1 rounded ${!newStepText.trim() ? 'opacity-50 cursor-not-allowed' : ''} ${isSpaceMode ? 'bg-indigo-500/20 text-indigo-300' : 'bg-indigo-100 text-indigo-600'}`}
+                                >
+                                    Add
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {task.subtasks && task.subtasks.length > 0 ? (
+                                task.subtasks.map(st => (
+                                    <div 
+                                        key={st.id} 
+                                        onClick={() => onSubtaskToggle(task.id, st.id)}
+                                        className={`group/sub flex items-start gap-3 cursor-pointer select-none transition-opacity ${st.isCompleted ? 'opacity-50' : 'opacity-100'}`}
+                                    >
+                                        <div className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center transition-colors ${st.isCompleted ? 'bg-green-500 border-green-500' : (isSpaceMode ? 'border-slate-600 group-hover/sub:border-white' : 'border-gray-300 dark:border-gray-600 group-hover/sub:border-indigo-500')}`}>
+                                            {st.isCompleted && <i className="fas fa-check text-[10px] text-white"></i>}
+                                        </div>
+                                        <span className={`text-sm ${st.isCompleted ? 'line-through' : ''} ${isSpaceMode ? 'text-slate-300' : 'text-gray-700 dark:text-gray-300'}`}>
+                                            {st.title}
+                                        </span>
+                                    </div>
+                                ))
+                            ) : (
+                                <div 
+                                    onClick={() => setIsEditingSteps(true)}
+                                    className={`text-sm italic cursor-pointer transition-colors ${isSpaceMode ? 'text-slate-600 hover:text-slate-400' : 'text-gray-400 hover:text-gray-600'}`}
+                                >
+                                    No steps defined. Click to add breakdown.
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
 
                 {/* Footer Metadata */}
                 <div className="mt-8 flex flex-wrap items-center gap-3 pt-4 border-t border-dashed border-gray-200 dark:border-gray-700/50">
