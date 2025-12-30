@@ -350,9 +350,27 @@ export const Header: React.FC<HeaderProps> = ({
                     <div className={`w-12 h-1 rounded-full mb-1 transition-colors ${isMenuLocked ? (isSpaceVisualsActive ? 'bg-cyan-400' : 'bg-indigo-500') : (isSpaceVisualsActive ? 'bg-white/50' : 'bg-gray-300 dark:bg-gray-600')}`}></div>
                 </div>
 
-                {/* Right: Essential Status (AI & Sync) */}
+                {/* Right: Essential Status (AI & Sync) & NOW TODAY BUTTON */}
                 <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
                     
+                    {/* Today Toggle - Moved from Expanded Menu */}
+                    {currentViewMode !== 'goals' && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); setIsTodayView(!isTodayView); }}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all border shadow-sm ${
+                                isTodayView
+                                    ? 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800'
+                                    : isSpaceVisualsActive 
+                                        ? 'bg-white/10 text-white border-white/20 hover:bg-white/20'
+                                        : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
+                            }`}
+                            title="Show tasks due today only"
+                        >
+                            <i className="far fa-calendar-check"></i>
+                            <span className="hidden sm:inline">Today</span>
+                        </button>
+                    )}
+
                     <button
                         onClick={(e) => { e.stopPropagation(); onOpenAIAssistant(); }}
                         className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 group ${isSpaceVisualsActive ? 'bg-white/20 text-white hover:bg-white/40 hover:shadow-[0_0_15px_rgba(255,255,255,0.6)]' : 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-800 hover:shadow-md'} active:scale-90`}
@@ -412,23 +430,7 @@ export const Header: React.FC<HeaderProps> = ({
                                 <button onClick={() => onViewModeChange('calendar')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${currentViewMode === 'calendar' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>Calendar</button>
                             </div>
 
-                            {/* Today Toggle */}
-                            {currentViewMode !== 'goals' && (
-                                <button
-                                    onClick={() => setIsTodayView(!isTodayView)}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
-                                        isTodayView
-                                            ? 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800 shadow-sm'
-                                            : isSpaceVisualsActive 
-                                                ? 'bg-white/10 text-white border-white/20 hover:bg-white/20'
-                                                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
-                                    }`}
-                                    title="Show tasks due today only"
-                                >
-                                    <i className="far fa-calendar-check mr-1.5"></i>
-                                    Today
-                                </button>
-                            )}
+                            {/* Today Toggle Removed from here */}
 
                             {/* Zoom */}
                             <div className={`${isSpaceVisualsActive ? 'bg-white/10 text-white' : 'bg-gray-200 dark:bg-gray-700'} p-0.5 rounded-lg flex items-center gap-0.5`}>
