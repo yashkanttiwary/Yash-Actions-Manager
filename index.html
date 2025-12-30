@@ -31,11 +31,16 @@
     <script>
         // Immediately set the theme on page load to prevent FOUC
         // Checks for 'dark' OR 'space' to apply dark mode classes
-        const savedTheme = localStorage.getItem('theme');
-        if (savedTheme === 'dark' || savedTheme === 'space') {
-            document.documentElement.classList.add('dark');
-        } else {
-            document.documentElement.classList.remove('dark');
+        try {
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'dark' || savedTheme === 'space') {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        } catch (e) {
+            // Silently fail if localStorage is blocked
+            console.warn("Theme persistence restricted:", e);
         }
     </script>
 

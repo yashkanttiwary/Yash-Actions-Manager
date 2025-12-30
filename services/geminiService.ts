@@ -13,14 +13,62 @@ export const AI_MODELS = {
     OPENAI: "gpt-4o-mini"
 };
 
-// --- PROVIDER DETECTION ---
+// --- HELPER FUNCTIONS ---
 
-type AIProvider = 'google' | 'openai' | 'unknown';
+const getApiKey = (userApiKey?: string): string => {
+    const envKey = getEnvVar('VITE_GEMINI_API_KEY');
+    const finalKey = userApiKey || envKey;
+    if (!finalKey || finalKey === 'undefined') throw new Error("API Key is missing.");
+    return finalKey;
+};
 
-const detectProvider = (apiKey: string): AIProvider => {
-    if (apiKey.startsWith('AIza')) return 'google';
-    if (apiKey.startsWith('sk-')) return 'openai'; 
-    return 'unknown';
+// Robust JSON Parsing Helper
+const safeParseJSON = (text: string) => {
+    if (!text) throw new Error("Empty response from AI");
+    
+    // 1. Try direct parse
+    try {
+        return JSON.parse(text);
+    } catch (e) {
+        // 2. Try extracting from markdown code block
+        const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        if (match && match[1]) {
+            try {
+                return JSON.parse(match[1]);
+            } catch (e2) {
+                // fall through
+            }
+        }
+        
+        // 3. Try finding first { and last } or [ and ]
+        const firstOpenBrace = text.indexOf('{');
+        const lastCloseBrace = text.lastIndexOf('}');
+        const firstOpenBracket = text.indexOf('[');
+        const lastCloseBracket = text.lastIndexOf(']');
+        
+        // Determine if it's likely an object or array
+        let start = -1;
+        let end = -1;
+        
+        if (firstOpenBrace !== -1 && (firstOpenBracket === -1 || firstOpenBrace < firstOpenBracket)) {
+            start = firstOpenBrace;
+            end = lastCloseBrace;
+        } else if (firstOpenBracket !== -1) {
+            start = firstOpenBracket;
+            end = lastCloseBracket;
+        }
+
+        if (start !== -1 && end !== -1) {
+             try {
+                return JSON.parse(text.substring(start, end + 1));
+            } catch (e3) {
+                // fall through
+            }
+        }
+        
+        console.error("Failed to parse JSON:", text);
+        throw new Error("Failed to parse AI response as JSON. Response might be malformed.");
+    }
 };
 
 // --- SCHEMA DEFINITIONS ---
@@ -169,15 +217,6 @@ The user is speaking a task. The transcription might be weak, contain typos, or 
 
 **Output**: Strict JSON object.`;
 
-// --- HELPER FUNCTIONS ---
-
-const getApiKey = (userApiKey?: string): string => {
-    const envKey = getEnvVar('VITE_GEMINI_API_KEY');
-    const finalKey = userApiKey || envKey;
-    if (!finalKey || finalKey === 'undefined') throw new Error("API Key is missing.");
-    return finalKey;
-};
-
 // --- GOOGLE IMPLEMENTATION ---
 
 const callGoogleAI = async (apiKey: string, model: string, systemPrompt: string, userPrompt: string, schema?: any, isJsonMode: boolean = false): Promise<string> => {
@@ -260,8 +299,7 @@ export const manageTasksWithAI = async (command: string, currentTasks: Task[], u
     }));
     
     const jsonText = await executeAIRequest(userApiKey, 'manage', { command, currentTasks: enrichedTasks });
-    const cleanJson = jsonText.replace(/```json/g, '').replace(/```/g, '');
-    return JSON.parse(cleanJson) as TaskDiff;
+    return safeParseJSON(jsonText) as TaskDiff;
 };
 
 export const generateTaskSummary = async (currentTasks: Task[], userApiKey?: string): Promise<string> => {
@@ -270,8 +308,7 @@ export const generateTaskSummary = async (currentTasks: Task[], userApiKey?: str
 
 export const breakDownTask = async (taskTitle: string, userApiKey?: string): Promise<Subtask[]> => {
     const jsonText = await executeAIRequest(userApiKey, 'breakdown', { taskTitle });
-    const cleanJson = jsonText.replace(/```json/g, '').replace(/```/g, '');
-    const steps = JSON.parse(cleanJson);
+    const steps = safeParseJSON(jsonText);
     const list = Array.isArray(steps) ? steps : (steps.steps || []);
     return list.map((step: any) => ({
         id: `sub-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
@@ -282,6 +319,5 @@ export const breakDownTask = async (taskTitle: string, userApiKey?: string): Pro
 
 export const parseTaskFromVoice = async (transcript: string, userApiKey?: string, goals: Goal[] = []): Promise<any> => {
     const jsonText = await executeAIRequest(userApiKey, 'parse', { transcript, goals });
-    const cleanJson = jsonText.replace(/```json/g, '').replace(/```/g, '');
-    return JSON.parse(cleanJson);
+    return safeParseJSON(jsonText);
 };

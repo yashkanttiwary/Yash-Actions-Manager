@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { playTimerSound } from '../utils/audio';
+import { storage } from '../utils/storage';
 
 interface PomodoroSettings {
     pomodoroFocus: number;
@@ -31,34 +32,37 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ settings, classNam
     
     // Load State
     useEffect(() => {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-            try {
-                const parsed = JSON.parse(saved);
-                const dur = modeDurations(settings)[parsed.mode as TimerMode] * 60;
-                
-                if (parsed.targetTime && parsed.isActive) {
-                    const now = Date.now();
-                    const remaining = Math.ceil((parsed.targetTime - now) / 1000);
-                    if (remaining > 0) {
-                        setMode(parsed.mode);
-                        setIsActive(true);
-                        setTime(remaining);
-                        setSessionCount(parsed.sessionCount || 0);
+        const loadState = async () => {
+            const saved = await storage.get(STORAGE_KEY);
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    const dur = modeDurations(settings)[parsed.mode as TimerMode] * 60;
+                    
+                    if (parsed.targetTime && parsed.isActive) {
+                        const now = Date.now();
+                        const remaining = Math.ceil((parsed.targetTime - now) / 1000);
+                        if (remaining > 0) {
+                            setMode(parsed.mode);
+                            setIsActive(true);
+                            setTime(remaining);
+                            setSessionCount(parsed.sessionCount || 0);
+                        } else {
+                            // Expired while away
+                            handleNextMode(parsed.mode, parsed.sessionCount);
+                        }
                     } else {
-                        // Expired while away
-                        handleNextMode(parsed.mode, parsed.sessionCount);
+                        setMode(parsed.mode);
+                        setIsActive(false);
+                        setTime(parsed.savedTime || dur);
+                        setSessionCount(parsed.sessionCount || 0);
                     }
-                } else {
-                    setMode(parsed.mode);
-                    setIsActive(false);
-                    setTime(parsed.savedTime || dur);
-                    setSessionCount(parsed.sessionCount || 0);
+                } catch (e) {
+                    console.error("Failed to load timer", e);
                 }
-            } catch (e) {
-                console.error("Failed to load timer", e);
             }
-        }
+        };
+        loadState();
     }, []);
 
     // Save State
@@ -70,7 +74,7 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ settings, classNam
             targetTime: active ? Date.now() + (currentTime * 1000) : null,
             savedTime: currentTime
         };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        storage.set(STORAGE_KEY, JSON.stringify(state));
     }, []);
 
     // Timer Logic
@@ -92,7 +96,7 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ settings, classNam
         }, 1000);
 
         return () => clearInterval(interval);
-    }, [isActive, mode, sessionCount, settings]);
+    }, [isActive, mode, sessionCount, settings, saveState]);
 
     const handleNextMode = (currentMode: TimerMode, currentCount: number) => {
         setIsActive(false);

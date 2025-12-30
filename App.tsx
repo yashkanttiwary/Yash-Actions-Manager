@@ -29,18 +29,7 @@ import { getEnvVar } from './utils/env';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { StarField } from './components/StarField';
 
-// Confetti removed: "Why celebrate a simple fact?"
-// Sounds removed: "Why condition the mind like a dog?"
-
-const setCookie = (name: string, value: string, days: number) => {
-    try {
-        const expires = new Date(Date.now() + days * 864e5).toUTCString();
-        document.cookie = name + '=' + encodeURIComponent(value) + '; expires=' + expires + '; path=/; SameSite=Strict; Secure';
-    } catch (e) {
-        console.error("Failed to set cookie", e);
-    }
-}
-
+// Helper to get cookie only for legacy migration
 const getCookie = (name: string) => {
     try {
         return document.cookie.split('; ').reduce((r, v) => {
@@ -288,6 +277,7 @@ const App: React.FC = () => {
                 if (savedFocusMode) setFocusMode(savedFocusMode as any);
 
                 const savedSettings = await storage.get('taskMasterSettings_v2'); 
+                // Migration: Check cookie one last time
                 const cookieUrl = getCookie('tm_script_url');
 
                 if (savedSettings) {
@@ -362,15 +352,7 @@ const App: React.FC = () => {
         if (settingsLoaded) {
             const saveSettings = async () => {
                 try {
-                    const settingsToSave = { ...settings };
-                    if (settingsToSave.googleAppsScriptUrl) {
-                        setCookie('tm_script_url', settingsToSave.googleAppsScriptUrl, 365);
-                        delete settingsToSave.googleAppsScriptUrl;
-                    } else {
-                        setCookie('tm_script_url', '', -1);
-                    }
-                    
-                    await storage.set('taskMasterSettings_v2', JSON.stringify(settingsToSave));
+                    await storage.set('taskMasterSettings_v2', JSON.stringify(settings));
                     setUserTimeOffset(settings.userTimeOffset);
                 } catch (e) {
                     console.error("Failed to save settings", e);
