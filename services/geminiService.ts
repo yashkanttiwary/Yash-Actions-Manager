@@ -249,7 +249,7 @@ The user is speaking a task. The transcription might be weak, contain typos, or 
 
 // --- GOOGLE IMPLEMENTATION ---
 
-const callGoogleAI = async (apiKey: string, model: string, systemPrompt: string, userPrompt: string, schema?: any, isJsonMode: boolean = false): Promise<string> => {
+const callGoogleAI = async (apiKey: string, model: string, systemPrompt: string, userPrompt: string, schema?: any, isJsonMode: boolean = false, allowFallback: boolean = true): Promise<string> => {
     const ai = new GoogleGenAI({ apiKey });
     
     const config: any = {
@@ -261,13 +261,35 @@ const callGoogleAI = async (apiKey: string, model: string, systemPrompt: string,
         if (schema) config.responseSchema = schema;
     }
 
-    const response = await ai.models.generateContent({
-        model: model,
-        contents: userPrompt,
-        config: config
-    });
-    
-    return response.text || "";
+    try {
+        const response = await ai.models.generateContent({
+            model: model,
+            contents: userPrompt,
+            config: config
+        });
+        
+        return response.text || "";
+    } catch (error: any) {
+        // DETECT QUOTA ERRORS (429) OR OVERLOAD (503)
+        // Note: Google's library might wrap the error, so we check status, code, and message.
+        const isQuotaError = error.status === 429 || 
+                             error.code === 429 || 
+                             (error.message && (error.message.includes('429') || error.message.includes('quota') || error.message.includes('RESOURCE_EXHAUSTED')));
+        
+        // AUTOMATIC FALLBACK LOGIC
+        // If we hit a limit on the "Smart" model (Pro), silently fallback to the "Fast" model (Flash).
+        // Flash has significantly higher rate limits.
+        if (allowFallback && isQuotaError && model !== AI_MODELS.FAST) {
+            console.warn(`[AI Service] Model ${model} rate limited. Automatically falling back to ${AI_MODELS.FAST}...`);
+            return callGoogleAI(apiKey, AI_MODELS.FAST, systemPrompt, userPrompt, schema, isJsonMode, false);
+        }
+
+        console.error("AI Service Error:", error);
+        if (error.message && error.message.includes("404")) {
+             throw new Error("Model not found. Please check your API key or use a valid model.");
+        }
+        throw new Error(error.message || "Failed to communicate with AI.");
+    }
 };
 
 // --- PUBLIC METHODS ---
@@ -284,6 +306,7 @@ const executeAIRequest = async (userApiKey: string | undefined, type: 'manage' |
             resultText = await callGoogleAI(apiKey, AI_MODELS.SMART, MANAGE_SYSTEM_INSTRUCTION, prompt, manageResponseSchema, true);
         } else if (type === 'summary') {
             const prompt = `Here is the current list of tasks:\n${JSON.stringify(payload.currentTasks, null, 2)}`;
+            // Summary uses FAST by default, so it's less likely to hit limits, but fallback protects it anyway
             resultText = await callGoogleAI(apiKey, AI_MODELS.FAST, SUMMARY_SYSTEM_INSTRUCTION, prompt);
         } else if (type === 'breakdown') {
             const prompt = `Task to break down: "${payload.taskTitle}"`;
@@ -304,11 +327,7 @@ const executeAIRequest = async (userApiKey: string | undefined, type: 'manage' |
         return resultText ? resultText.trim() : "";
 
     } catch (error: any) {
-        console.error("AI Service Error:", error);
-        if (error.message && error.message.includes("404")) {
-             throw new Error("Model not found. Please check your API key or use a valid model.");
-        }
-        throw new Error(error.message || "Failed to communicate with AI.");
+        throw error;
     }
 };
 
