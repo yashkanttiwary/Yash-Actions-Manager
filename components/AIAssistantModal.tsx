@@ -115,28 +115,53 @@ const ProposalCard: React.FC<{ diff: TaskDiff; onConfirm: () => void; onCancel: 
 };
 
 // --- SUB-COMPONENT: Summary Message (Enhanced) ---
-// Simple inline markdown parser for bolding
+// Enhanced markdown parser for bolding and italics
 const renderFormattedText = (text: string) => {
-    // Split by **bold**
+    // 1. Split by **bold**
     const parts = text.split(/(\*\*.*?\*\*)/g);
+    
     return parts.map((part, i) => {
         if (part.startsWith('**') && part.endsWith('**')) {
             return <strong key={i} className="font-black text-indigo-700 dark:text-indigo-300">{part.slice(2, -2)}</strong>;
         }
+        
+        // 2. Handle *italics* within non-bold parts
+        // Note: This matches *word* but tries to avoid matching * bullet points at start of line (handled by parent)
+        const italicParts = part.split(/(\*[^*\s].*?\*)/g);
+        if (italicParts.length > 1) {
+            return (
+                <React.Fragment key={i}>
+                    {italicParts.map((subPart, j) => {
+                        if (subPart.startsWith('*') && subPart.endsWith('*') && subPart.length > 2) {
+                            return <em key={j} className="italic text-gray-600 dark:text-gray-400 font-serif">{subPart.slice(1, -1)}</em>;
+                        }
+                        return subPart;
+                    })}
+                </React.Fragment>
+            );
+        }
+
         return part;
     });
 };
 
 const SummaryMessage: React.FC<{ text: string }> = ({ text }) => {
+    // FIX: Robustly normalize newlines.
+    // JSON responses sometimes escape newlines as "\\n", which React renders as literal text "\n".
+    // We replace them with real newlines before splitting.
+    const cleanText = (text || "").replace(/\\n/g, '\n').replace(/\r/g, '');
+
     return (
         <div className="prose prose-sm dark:prose-invert max-w-none text-xs leading-relaxed text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-            {text.split('\n').map((line, i) => {
+            {cleanText.split('\n').map((line, i) => {
                 const trimmed = line.trim();
                 if (trimmed === '') return <br key={i} />;
                 
+                // Headers
                 if (trimmed.startsWith('## ')) return <h3 key={i} className="text-indigo-700 dark:text-indigo-400 font-bold mt-4 mb-2 text-sm border-b border-indigo-100 dark:border-indigo-900/30 pb-1">{renderFormattedText(trimmed.substring(3))}</h3>;
                 if (trimmed.startsWith('### ')) return <h4 key={i} className="text-gray-900 dark:text-gray-100 font-bold mt-3 mb-1 text-xs uppercase tracking-wide">{renderFormattedText(trimmed.substring(4))}</h4>;
                 
+                // Lists
                 if (trimmed.startsWith('* ') || trimmed.startsWith('- ')) {
                     return (
                         <div key={i} className="flex items-start gap-2 mb-1 pl-2">
@@ -146,6 +171,7 @@ const SummaryMessage: React.FC<{ text: string }> = ({ text }) => {
                     );
                 }
                 
+                // Numbered Lists
                 if (trimmed.match(/^\d+\./)) {
                     const content = trimmed.replace(/^\d+\.\s/, '');
                     const num = trimmed.match(/^\d+/)?.[0];
@@ -157,6 +183,7 @@ const SummaryMessage: React.FC<{ text: string }> = ({ text }) => {
                     );
                 }
 
+                // Blockquotes
                 if (trimmed.startsWith('> ')) {
                     return (
                         <blockquote key={i} className="border-l-2 border-indigo-300 dark:border-indigo-700 pl-3 py-1 my-2 italic text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 rounded-r">
@@ -165,6 +192,7 @@ const SummaryMessage: React.FC<{ text: string }> = ({ text }) => {
                     );
                 }
 
+                // Regular Paragraph
                 return <p key={i} className="mb-1.5">{renderFormattedText(line)}</p>;
             })}
         </div>
