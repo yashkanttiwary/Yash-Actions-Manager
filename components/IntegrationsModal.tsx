@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Settings, SettingsTab } from '../types';
 import { initGoogleClient } from '../services/googleAuthService';
@@ -34,7 +34,7 @@ type ConnectionStatus = 'idle' | 'testing' | 'success' | 'error';
 
 // --- Helper Components ---
 
-const CopyButton: React.FC<{ text: string; label?: string; compact?: boolean }> = ({ text, label, compact }) => {
+const CopyButton: React.FC<{ text: string; label?: string }> = ({ text, label }) => {
     const [copied, setCopied] = useState(false);
 
     const handleCopy = () => {
@@ -47,11 +47,11 @@ const CopyButton: React.FC<{ text: string; label?: string; compact?: boolean }> 
         <button 
             type="button"
             onClick={handleCopy}
-            className={`group flex items-center gap-2 font-semibold bg-gray-100 dark:bg-gray-800 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-gray-700 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg border border-gray-200 dark:border-gray-700 transition-all ${compact ? 'p-1.5' : 'px-3 py-1.5 text-xs'}`}
+            className="group flex items-center gap-2 px-3 py-1.5 text-xs font-semibold bg-gray-100 dark:bg-gray-800 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-gray-700 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg border border-gray-200 dark:border-gray-700 transition-all"
             title="Copy to clipboard"
         >
             <i className={`fas ${copied ? 'fa-check text-green-500' : 'fa-copy'}`}></i>
-            {!compact && label && <span>{copied ? 'Copied!' : label}</span>}
+            {label && <span>{copied ? 'Copied!' : label}</span>}
         </button>
     );
 };
@@ -83,49 +83,16 @@ const Step: React.FC<{ num: number; title: string; children: React.ReactNode }> 
     </div>
 );
 
-// --- SIMPLE CODE VIEWER (Highlighter) ---
-// Highlights keywords to make code more readable
-const SimpleCodeViewer: React.FC<{ code: string }> = ({ code }) => {
-    
-    const highlightedCode = useMemo(() => {
-        // Simple regex-based tokenizer for JS
-        // Order matters: Comments and Strings first to avoid matching keywords inside them
-        const tokens = code.split(/(\/\/.*|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`[^`]*`|\b(?:function|var|const|let|if|else|return|try|catch|finally|true|false|null|undefined|for|while|switch|case|break|continue|new|this)\b|[{}()[\],.;])/g);
-        
-        return tokens.map((token, i) => {
-            if (!token) return null;
-            
-            let colorClass = "text-gray-300"; // Default
-            
-            if (token.startsWith('//') || token.startsWith('/*')) {
-                colorClass = "text-green-400 italic"; // Comments
-            } else if (token.startsWith('"') || token.startsWith("'") || token.startsWith('`')) {
-                colorClass = "text-yellow-300"; // Strings
-            } else if (/^(function|var|const|let|if|else|return|try|catch|finally|true|false|null|undefined|for|while|switch|case|break|continue|new|this)$/.test(token)) {
-                colorClass = "text-purple-400 font-bold"; // Keywords
-            } else if (/^[A-Z][a-zA-Z0-9_]*$/.test(token)) {
-                colorClass = "text-blue-300"; // Likely Class/Type
-            } else if (token === 'AUTH_TOKEN') {
-                colorClass = "text-red-400 font-bold"; // Highlight our token var
-            } else if (/[{}()[\]]/.test(token)) {
-                colorClass = "text-gray-500"; // Brackets
-            }
-
-            return <span key={i} className={colorClass}>{token}</span>;
-        });
-    }, [code]);
-
-    return (
-        <div className="relative group rounded-lg overflow-hidden border border-gray-700 bg-[#1e1e1e] mt-2 w-full max-w-full shadow-inner">
-            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                <CopyButton text={code} label="Copy Code" />
-            </div>
-            <pre className="p-4 text-xs font-mono overflow-x-auto whitespace-pre-wrap break-words leading-relaxed">
-                {highlightedCode}
-            </pre>
+const CodeBlock: React.FC<{ code: string }> = ({ code }) => (
+    <div className="relative group rounded-lg overflow-hidden border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 mt-2 w-full max-w-full">
+        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+            <CopyButton text={code} label="Copy Code" />
         </div>
-    );
-};
+        <pre className="p-4 text-xs font-mono text-gray-700 dark:text-gray-300 overflow-x-auto whitespace-pre-wrap break-words">
+            {code}
+        </pre>
+    </div>
+);
 
 // --- NEW: Info Tooltip Component (Portal Version) ---
 const ModeComparisonTooltip: React.FC = () => {
@@ -269,54 +236,53 @@ const ModeComparisonTooltip: React.FC = () => {
 // --- Content Constants ---
 
 const APPS_SCRIPT_CODE = `
-// 🚀 TASK MANAGER DATABASE SCRIPT (SECURE EDITION v10)
+// 🚀 TASK MANAGER DATABASE SCRIPT (SECURE EDITION v10 - WITH TOKEN)
 
 // --- CONFIGURATION ---
 // IMPORTANT: Replace this with the token generated in the App settings.
-const AUTH_TOKEN = "PASTE_YOUR_TOKEN_HERE"; 
+var AUTH_TOKEN = "Paste_Your_Token_Here"; 
 // ---------------------
 
 function doGet(e) { return handleRequest(e); }
 function doPost(e) { return handleRequest(e); }
 
 function handleRequest(e) {
-  const lock = LockService.getScriptLock();
-  if (!lock.tryLock(10000)) return jsonResponse({status: 'error', message: 'Busy'});
-  
+  var lock = LockService.getScriptLock();
+  lock.tryLock(10000); 
   try {
-    // 1. SECURITY CHECK
-    const params = e.parameter || {};
-    const postData = e.postData ? JSON.parse(e.postData.contents) : {};
-    const reqToken = params.token || postData.token;
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var params = e.parameter || {};
+    var postData = e.postData ? JSON.parse(e.postData.contents) : {};
+    var action = params.action || postData.action || 'sync_down';
 
-    if (AUTH_TOKEN !== "PASTE_YOUR_TOKEN_HERE" && reqToken !== AUTH_TOKEN) {
+    // --- SECURITY CHECK ---
+    var reqToken = params.token || postData.token;
+    if (AUTH_TOKEN !== "Paste_Your_Token_Here" && reqToken !== AUTH_TOKEN) {
        return jsonResponse({status: 'error', message: 'Unauthorized: Invalid Token'});
     }
-
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const action = params.action || postData.action || 'sync_down';
+    // ----------------------
 
     if (action === 'check') { return jsonResponse({status: 'ok'}); }
 
     if (action === 'sync_up') {
-      // 2. SYNC TASKS
-      const taskSheet = getOrCreateSheet(ss, 'Sheet1');
+      // 1. SYNC TASKS
+      var taskSheet = getOrCreateSheet(ss, 'Sheet1');
       taskSheet.clear();
-      // UPDATED HEADERS
-      const taskHeaders = ['ID', 'Title', 'Status', 'Priority', 'Due Date', 'Time Est (h)', 'Actual Time (s)', 'Tags', 'Scheduled Start', 'Blockers', 'Dependencies', 'Subtasks', 'Description', 'Last Modified', 'Goal ID', 'Goal Title', 'JSON_DATA'];
+      // UPDATED HEADERS: Added 'Goal Title' at col 16 (index 15)
+      var taskHeaders = ['ID', 'Title', 'Status', 'Priority', 'Due Date', 'Time Est (h)', 'Actual Time (s)', 'Tags', 'Scheduled Start', 'Blockers', 'Dependencies', 'Subtasks', 'Description', 'Last Modified', 'Goal ID', 'Goal Title', 'JSON_DATA'];
       taskSheet.appendRow(taskHeaders);
-      const taskRows = postData.rows;
+      var taskRows = postData.rows;
       if (taskRows && taskRows.length > 0) { 
         taskSheet.getRange(2, 1, taskRows.length, taskRows[0].length).setValues(taskRows); 
       }
       formatTaskSheet(taskSheet);
 
-      // 3. SYNC GOALS
-      const goalSheet = getOrCreateSheet(ss, 'Goals');
+      // 2. SYNC GOALS
+      var goalSheet = getOrCreateSheet(ss, 'Goals');
       goalSheet.clear();
-      const goalHeaders = ['ID', 'Title', 'Color', 'Description', 'Created Date'];
+      var goalHeaders = ['ID', 'Title', 'Color', 'Description', 'Created Date'];
       goalSheet.appendRow(goalHeaders);
-      const goalRows = postData.goals;
+      var goalRows = postData.goals;
       if (goalRows && goalRows.length > 0) {
         goalSheet.getRange(2, 1, goalRows.length, goalRows[0].length).setValues(goalRows);
       }
@@ -325,13 +291,13 @@ function handleRequest(e) {
       return jsonResponse({status: 'success', tasksWritten: taskRows ? taskRows.length : 0, goalsWritten: goalRows ? goalRows.length : 0});
     }
 
-    // 4. SYNC DOWN
-    const taskSheet = getOrCreateSheet(ss, 'Sheet1');
-    const taskData = taskSheet.getDataRange().getValues();
+    // SYNC DOWN
+    var taskSheet = getOrCreateSheet(ss, 'Sheet1');
+    var taskData = taskSheet.getDataRange().getValues();
     if (taskData.length > 0 && taskData[0][0] === 'ID') { taskData.shift(); }
 
-    const goalSheet = getOrCreateSheet(ss, 'Goals');
-    const goalData = goalSheet.getDataRange().getValues();
+    var goalSheet = getOrCreateSheet(ss, 'Goals');
+    var goalData = goalSheet.getDataRange().getValues();
     if (goalData.length > 0 && goalData[0][0] === 'ID') { goalData.shift(); }
 
     return jsonResponse({
@@ -343,7 +309,7 @@ function handleRequest(e) {
 }
 
 function getOrCreateSheet(ss, name) {
-  let sheet = ss.getSheetByName(name);
+  var sheet = ss.getSheetByName(name);
   if (!sheet) { sheet = ss.insertSheet(name); }
   return sheet;
 }
@@ -352,12 +318,12 @@ function jsonResponse(data) { return ContentService.createTextOutput(JSON.string
 
 function formatTaskSheet(sheet) {
   try {
-    const lastRow = sheet.getLastRow();
-    const headerRange = sheet.getRange(1, 1, 1, 17); 
+    var lastRow = sheet.getLastRow();
+    var headerRange = sheet.getRange(1, 1, 1, 17); // Updated range for new column
     headerRange.setBackground("#1e293b").setFontColor("#f8fafc").setFontWeight("bold").setHorizontalAlignment("center").setVerticalAlignment("middle").setWrap(true);
     sheet.setFrozenRows(1);
     if (lastRow > 1) {
-       const range = sheet.getRange(2, 1, lastRow - 1, 17);
+       var range = sheet.getRange(2, 1, lastRow - 1, 17);
        range.applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY);
     }
   } catch(e) {}
@@ -365,8 +331,8 @@ function formatTaskSheet(sheet) {
 
 function formatGoalSheet(sheet) {
   try {
-    const lastRow = sheet.getLastRow();
-    const headerRange = sheet.getRange(1, 1, 1, 5);
+    var lastRow = sheet.getLastRow();
+    var headerRange = sheet.getRange(1, 1, 1, 5);
     headerRange.setBackground("#4f46e5").setFontColor("#ffffff").setFontWeight("bold");
     sheet.setFrozenRows(1);
     sheet.setColumnWidth(1, 150); sheet.setColumnWidth(2, 200); sheet.setColumnWidth(4, 300);
@@ -893,10 +859,10 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                                 >
                                                     <i className="fas fa-random"></i>
                                                 </button>
-                                                <CopyButton text={scriptTokenInput} compact />
+                                                <CopyButton text={scriptTokenInput} />
                                             </div>
                                             <p className="text-xs text-gray-500 mt-1">
-                                                You MUST paste this token into the <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">AUTH_TOKEN</code> variable in the Apps Script code below.
+                                                You MUST paste this token into the <code>AUTH_TOKEN</code> variable in the Apps Script code below.
                                             </p>
                                         </div>
 
@@ -968,7 +934,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                     </Step>
                                     <Step num={2} title="Paste the Magic Code">
                                         <p>Delete any code there and paste this exactly. <strong>Don't forget to replace the Token!</strong></p>
-                                        <SimpleCodeViewer code={APPS_SCRIPT_CODE} />
+                                        <CodeBlock code={APPS_SCRIPT_CODE} />
                                     </Step>
                                     <Step num={3} title="Deploy as Web App (Crucial Step!)">
                                         <div className="space-y-3">
