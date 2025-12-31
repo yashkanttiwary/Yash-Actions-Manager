@@ -8,6 +8,7 @@ interface TaskCardProps {
     allTasks: Task[]; // All tasks needed for dependency tooltips
     goals?: Goal[]; // New Prop: Pass all goals to find color/title
     onEditTask: (task: Task) => void;
+    onUpdateTask: (task: Task) => void; // Added for Dismiss Action
     activeTaskTimer: any; // Kept for interface compatibility but ignored
     onToggleTimer: (taskId:string) => void;
     onOpenContextMenu: (e: React.MouseEvent, task: Task) => void;
@@ -48,7 +49,7 @@ const formatTimeSince = (dateStr: string): string => {
 };
 
 
-export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], onEditTask, onToggleTimer, onOpenContextMenu, onDeleteTask, onSubtaskToggle, onBreakDownTask, isCompactMode, onTaskSizeChange }) => {
+export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], onEditTask, onUpdateTask, onToggleTimer, onOpenContextMenu, onDeleteTask, onSubtaskToggle, onBreakDownTask, isCompactMode, onTaskSizeChange }) => {
     const priorityClasses = PRIORITY_COLORS[task.priority];
     const statusStyle = STATUS_STYLES[task.status] || STATUS_STYLES['To Do'];
     const [currentSessionTime, setCurrentSessionTime] = useState(0);
@@ -388,10 +389,22 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                     </div>
                 </div>
                 
-                {/* WARNING MESSAGE FOR BECOMING */}
+                {/* WARNING MESSAGE FOR BECOMING - WITH DISMISS ACTION */}
                 {isBecoming && task.becomingWarning && (
-                    <div className="mt-2 p-2 bg-red-100 dark:bg-red-900/30 border-l-2 border-red-500 text-xs italic text-red-800 dark:text-red-200">
-                        <i className="fas fa-exclamation-circle mr-1"></i> {task.becomingWarning}
+                    <div className="mt-2 p-2 bg-red-100 dark:bg-red-900/30 border-l-2 border-red-500 text-xs italic text-red-800 dark:text-red-200 flex justify-between items-start gap-2">
+                        <div>
+                            <i className="fas fa-exclamation-circle mr-1"></i> {task.becomingWarning}
+                        </div>
+                        <button 
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onUpdateTask({ ...task, isBecoming: false, becomingWarning: undefined });
+                            }}
+                            className="text-red-600 hover:text-red-800 dark:text-red-300 dark:hover:text-white transition-colors whitespace-nowrap font-bold px-1 rounded hover:bg-red-200 dark:hover:bg-red-800"
+                            title="Dismiss Warning (Mark as Valid Action)"
+                        >
+                            <i className="fas fa-times"></i>
+                        </button>
                     </div>
                 )}
                 

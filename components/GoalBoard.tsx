@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from 'react';
 import { Task, Goal } from '../types';
 import { GoalColumn } from './GoalColumn';
@@ -9,6 +8,7 @@ interface GoalBoardProps {
     goals: Goal[];
     onTaskMove: (taskId: string, newGoalId: string) => void;
     onEditTask: (task: Task) => void;
+    onUpdateTask: (task: Task) => void; // Added prop
     onDeleteTask: (taskId: string) => void;
     onAddGoal: (goal: Omit<Goal, 'id' | 'createdDate'>) => void;
     onEditGoal: (goal: Goal) => void;
@@ -25,7 +25,7 @@ interface GoalBoardProps {
 }
 
 export const GoalBoard: React.FC<GoalBoardProps> = ({
-    tasks, goals, onTaskMove, onEditTask, onDeleteTask, onAddGoal, onEditGoal, onDeleteGoal,
+    tasks, goals, onTaskMove, onEditTask, onUpdateTask, onDeleteTask, onAddGoal, onEditGoal, onDeleteGoal,
     activeTaskTimer, onToggleTimer, onSubtaskToggle, isCompactMode, isSpaceMode, zoomLevel,
     onFocusGoal, currentFocusId
 }) => {
@@ -159,6 +159,7 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
                         allTasks={tasks}
                         onTaskMove={(tid) => onTaskMove(tid, undefined!)} // Sending undefined removes goalId
                         onEditTask={onEditTask}
+                        onUpdateTask={onUpdateTask}
                         onDeleteTask={onDeleteTask}
                         onEditGoal={() => {}} // Can't edit unassigned
                         onDeleteGoal={() => {}} // Can't delete unassigned
@@ -180,6 +181,7 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
                             allTasks={tasks}
                             onTaskMove={(tid) => onTaskMove(tid, goal.id)}
                             onEditTask={onEditTask}
+                            onUpdateTask={onUpdateTask}
                             onDeleteTask={onDeleteTask}
                             onEditGoal={onEditGoal}
                             onDeleteGoal={onDeleteGoal}

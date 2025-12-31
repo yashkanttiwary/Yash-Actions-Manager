@@ -264,27 +264,9 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
             <div className="bg-white dark:bg-gray-800/80 border border-gray-300 dark:border-gray-600 rounded-2xl shadow-2xl w-full max-w-2xl p-6 sm:p-8" onClick={e => e.stopPropagation()}>
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{isNewTask ? 'New Entry' : 'Edit Entry'}</h2>
-                    
-                    {/* TYPE SWITCHER */}
-                    <div className="bg-gray-200 dark:bg-gray-700 p-1 rounded-lg flex text-xs font-bold">
-                        <button
-                            type="button"
-                            onClick={() => handleInputChange('type', 'action')}
-                            className={`px-3 py-1.5 rounded-md transition-all ${!isObservation ? 'bg-white dark:bg-gray-600 shadow text-indigo-600 dark:text-indigo-400' : 'text-gray-500'}`}
-                        >
-                            Factual Action
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => handleInputChange('type', 'observation')}
-                            className={`px-3 py-1.5 rounded-md transition-all ${isObservation ? 'bg-white dark:bg-gray-600 shadow text-purple-600 dark:text-purple-400' : 'text-gray-500'}`}
-                        >
-                            Observation
-                        </button>
-                    </div>
                 </div>
-                
-                <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-4">
+
+                <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-4 custom-scrollbar">
                     <div>
                         <label htmlFor="task-title" className={labelClasses}>{isObservation ? 'Observation' : 'Task Title'} <span className="text-red-500">*</span></label>
                         <input 
@@ -482,7 +464,7 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
                     {/* Subtasks Section - Observations don't have subtasks usually, but can keep as "notes" */}
                     <div className="mt-6 pt-4 border-t border-gray-300 dark:border-gray-700">
                         <h3 className="text-lg font-semibold mb-3 text-gray-700 dark:text-gray-300">{isObservation ? 'Details / Points' : 'Subtasks'}</h3>
-                        <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+                        <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
                             {editedTask.subtasks?.map(subtask => (
                                 <div key={subtask.id} className="flex items-center justify-between bg-gray-100 dark:bg-gray-900/50 p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700/50 transition-colors">
                                     <div className="flex items-center flex-1">
@@ -527,6 +509,77 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
                             >
                                 Add
                             </button>
+                        </div>
+                    </div>
+
+                    {/* Bottom Section: Type Switcher & Info */}
+                    <div className="pt-6 border-t border-gray-200 dark:border-gray-700 mt-6">
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Entry Type & Psychology</label>
+                        
+                        <div className="flex flex-col gap-4">
+                            {/* TYPE SWITCHER */}
+                            <div className="bg-gray-200 dark:bg-gray-700 p-1 rounded-lg flex text-xs font-bold self-start">
+                                <button
+                                    type="button"
+                                    onClick={() => handleInputChange('type', 'action')}
+                                    className={`px-3 py-1.5 rounded-md transition-all ${!isObservation ? 'bg-white dark:bg-gray-600 shadow text-indigo-600 dark:text-indigo-400' : 'text-gray-500'}`}
+                                >
+                                    Factual Action
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleInputChange('type', 'observation')}
+                                    className={`px-3 py-1.5 rounded-md transition-all ${isObservation ? 'bg-white dark:bg-gray-600 shadow text-purple-600 dark:text-purple-400' : 'text-gray-500'}`}
+                                >
+                                    Observation
+                                </button>
+                            </div>
+
+                            {/* Educational Info Block */}
+                            <div className={`p-3 rounded-lg text-xs leading-relaxed border ${!isObservation ? 'bg-indigo-50 border-indigo-100 text-indigo-800 dark:bg-indigo-900/20 dark:border-indigo-800 dark:text-indigo-300' : 'bg-purple-50 border-purple-100 text-purple-800 dark:bg-purple-900/20 dark:border-purple-800 dark:text-purple-300'}`}>
+                                <div className="flex gap-3">
+                                    <div className={`mt-0.5 w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${!isObservation ? 'bg-indigo-200 dark:bg-indigo-800 text-indigo-700 dark:text-indigo-300' : 'bg-purple-200 dark:bg-purple-800 text-purple-700 dark:text-purple-300'}`}>
+                                        <i className={`fas ${!isObservation ? 'fa-check' : 'fa-eye'} text-[10px]`}></i>
+                                    </div>
+                                    <div>
+                                        <strong className="block mb-1">{!isObservation ? 'Chronological Time (Action)' : 'Psychological Time (Insight)'}</strong>
+                                        <p className="opacity-90">
+                                            {!isObservation 
+                                                ? "Use this for concrete tasks that must be done in the real world (e.g., 'Pay Bills', 'Write Code'). These have deadlines and completion states."
+                                                : "Use this to note mental traps, fears, or realizations (e.g., 'I am procrastinating because I fear failure'). These are for awareness only, not completion."
+                                            }
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Psychological Trap Toggle */}
+                            {(!isObservation) && (
+                                <div>
+                                    <label className="flex items-center space-x-2 cursor-pointer p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors border border-transparent hover:border-gray-200 dark:hover:border-gray-600">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={!!editedTask.isBecoming}
+                                            onChange={(e) => {
+                                                handleInputChange('isBecoming', e.target.checked);
+                                                if (!e.target.checked) {
+                                                    handleInputChange('becomingWarning', undefined);
+                                                }
+                                            }}
+                                            className="w-4 h-4 text-red-600 rounded border-gray-300 focus:ring-red-500"
+                                        />
+                                        <span className={`text-sm font-medium ${editedTask.isBecoming ? 'text-red-600 dark:text-red-400 font-bold' : 'text-gray-600 dark:text-gray-400'}`}>
+                                            <i className="fas fa-biohazard mr-1.5"></i>
+                                            Flagged as Psychological Trap ("Becoming")
+                                        </span>
+                                    </label>
+                                    {editedTask.isBecoming && (
+                                        <p className="text-xs text-red-500 ml-8 mt-1 italic">
+                                            This task is marked as an ambition of the ego rather than a functional necessity.
+                                        </p>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

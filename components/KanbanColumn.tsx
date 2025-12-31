@@ -15,6 +15,7 @@ interface KanbanColumnProps {
     onAddTask: (status: Status) => void;
     onQuickAddTask: (title: string) => void; 
     onSmartAddTask: (transcript: string) => Promise<void>;
+    onUpdateTask: (task: Task) => void; // Passed down
     isCollapsed: boolean;
     onToggleCollapse: () => void;
     sortOption: SortOption;
@@ -51,7 +52,7 @@ const LIMIT_IN_PROGRESS = 3;
 const LIMIT_DEFAULT = 5;
 
 export const KanbanColumn: React.FC<KanbanColumnProps> = ({ 
-    status, tasks, allTasks, goals, onTaskMove, onEditTask, onAddTask, onQuickAddTask, onSmartAddTask,
+    status, tasks, allTasks, goals, onTaskMove, onEditTask, onAddTask, onQuickAddTask, onSmartAddTask, onUpdateTask,
     isCollapsed, onToggleCollapse, sortOption, onSortChange, onMouseDown, 
     activeTaskTimer, onToggleTimer, onOpenContextMenu, onDeleteTask, onSubtaskToggle, onBreakDownTask,
     isCompactMode, onTaskSizeChange, width, height, onResize, zoomLevel = 1, isSpaceMode = false
@@ -426,6 +427,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                                     allTasks={allTasks}
                                     goals={goals} // Pass goals down
                                     onEditTask={onEditTask}
+                                    onUpdateTask={onUpdateTask}
                                     activeTaskTimer={activeTaskTimer}
                                     onToggleTimer={onToggleTimer}
                                     onOpenContextMenu={onOpenContextMenu}

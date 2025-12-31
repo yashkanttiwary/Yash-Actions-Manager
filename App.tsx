@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { KanbanBoard } from './components/KanbanBoard';
 import { Header } from './components/Header';
@@ -973,6 +972,7 @@ const App: React.FC = () => {
                                             onAddTask={(status) => handleOpenAddTaskModal(status)}
                                             onQuickAddTask={handleQuickAddTask}
                                             onSmartAddTask={handleVoiceTaskAdd}
+                                            onUpdateTask={updateTask} // Pass updater to board
                                             onUpdateColumnLayout={updateColumnLayout}
                                             activeTaskTimer={activeTaskTimer}
                                             onToggleTimer={handleToggleTimer}
@@ -1011,6 +1011,7 @@ const App: React.FC = () => {
                                             onDeleteTask={requestDeleteTask}
                                             onAddGoal={addGoal}
                                             onEditGoal={updateGoal}
+                                            onUpdateTask={updateTask} // Pass the task updater
                                             onDeleteGoal={handleGoalDelete} 
                                             activeTaskTimer={activeTaskTimer}
                                             onToggleTimer={handleToggleTimer}

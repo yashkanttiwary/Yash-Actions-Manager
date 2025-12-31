@@ -15,6 +15,7 @@ interface KanbanBoardProps {
     onAddTask: (status: Status) => void;
     onQuickAddTask: (title: string, status: Status) => void; 
     onSmartAddTask: (transcript: string, status: Status) => Promise<void>; 
+    onUpdateTask: (task: Task) => void; // New prop for card actions
     onUpdateColumnLayout: (id: Status, newLayout: Omit<ColumnLayout, 'id'>) => void;
     activeTaskTimer: {taskId: string, startTime: number} | null;
     onToggleTimer: (taskId: string) => void;
@@ -66,7 +67,7 @@ const sortTasks = (tasks: Task[], option: SortOption): Task[] => {
     }
 };
 
-export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, columnLayouts, getTasksByStatus, onTaskMove, onEditTask, onAddTask, onQuickAddTask, onSmartAddTask, onUpdateColumnLayout, activeTaskTimer, onToggleTimer, onOpenContextMenu, focusMode, onDeleteTask, onSubtaskToggle, onBreakDownTask, isCompactMode, isFitToScreen, zoomLevel, isSpaceMode = false, goals, onTogglePin }) => {
+export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, columnLayouts, getTasksByStatus, onTaskMove, onEditTask, onAddTask, onQuickAddTask, onSmartAddTask, onUpdateTask, onUpdateColumnLayout, activeTaskTimer, onToggleTimer, onOpenContextMenu, focusMode, onDeleteTask, onSubtaskToggle, onBreakDownTask, isCompactMode, isFitToScreen, zoomLevel, isSpaceMode = false, goals, onTogglePin }) => {
     const [collapsedColumns, setCollapsedColumns] = useState<Set<Status>>(new Set());
     const [sortOptions, setSortOptions] = useState<Record<Status, SortOption>>(
         columns.reduce((acc, status) => ({...acc, [status]: 'Default'}), {}) as Record<Status, SortOption>
@@ -328,6 +329,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                             onAddTask={onAddTask}
                             onQuickAddTask={(title) => onQuickAddTask(title, focusMode)}
                             onSmartAddTask={(transcript) => onSmartAddTask(transcript, focusMode)}
+                            onUpdateTask={onUpdateTask}
                             isCollapsed={false}
                             onToggleCollapse={() => {}}
                             sortOption={sortOptions[focusMode] || 'Default'}
@@ -389,6 +391,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                                     onAddTask={onAddTask}
                                     onQuickAddTask={(title) => onQuickAddTask(title, status)}
                                     onSmartAddTask={(transcript) => onSmartAddTask(transcript, status)}
+                                    onUpdateTask={onUpdateTask}
                                     isCollapsed={collapsedColumns.has(status)}
                                     onToggleCollapse={() => toggleColumnCollapse(status)}
                                     sortOption={sortOptions[status] || 'Default'}
@@ -463,6 +466,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                                     onAddTask={onAddTask}
                                     onQuickAddTask={(title) => onQuickAddTask(title, status)}
                                     onSmartAddTask={(transcript) => onSmartAddTask(transcript, status)}
+                                    onUpdateTask={onUpdateTask}
                                     isCollapsed={collapsedColumns.has(status)}
                                     onToggleCollapse={() => toggleColumnCollapse(status)}
                                     sortOption={sortOptions[status] || 'Default'}
