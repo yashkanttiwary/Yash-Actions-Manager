@@ -16,55 +16,61 @@ const getApiKey = (userApiKey?: string): string => {
 };
 
 // Robust JSON Parsing Helper
-// MED-002 FIX: Better extraction logic
-const safeParseJSON = (text: string) => {
-    if (!text) throw new Error("Empty response from AI");
-    
-    // 1. Try direct parse (Best Case)
-    try {
-        return JSON.parse(text);
-    } catch (e) {
-        // Continue to fallback strategies
-    }
+// Fixes "AI not giving output answer" by separating JSON data from conversational text
+const extractJsonAndText = (text: string) => {
+    if (!text) return { json: null, remainder: "" };
 
-    // 2. Try extracting from markdown code block (Common AI pattern)
-    const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    if (match && match[1]) {
+    let json: any = null;
+    let cleanText = text;
+
+    // 1. Try Code Block extraction first (Most reliable)
+    const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (codeBlockMatch) {
         try {
-            return JSON.parse(match[1]);
-        } catch (e2) {
-            // Fallback
+            json = JSON.parse(codeBlockMatch[1]);
+            // Remove code block from text to get "remainder" (conversational part)
+            cleanText = text.replace(codeBlockMatch[0], '').trim();
+        } catch (e) {
+            // Failed to parse code block, continue
         }
-    }
-    
-    // 3. Robust Search for JSON object or array
-    // Find the first '{' or '['
-    const firstOpenBrace = text.indexOf('{');
-    const firstOpenBracket = text.indexOf('[');
-    
-    let start = -1;
-    let end = -1;
-    
-    // Determine if we are looking for object or array
-    if (firstOpenBrace !== -1 && (firstOpenBracket === -1 || firstOpenBrace < firstOpenBracket)) {
-        start = firstOpenBrace;
-        end = text.lastIndexOf('}');
-    } else if (firstOpenBracket !== -1) {
-        start = firstOpenBracket;
-        end = text.lastIndexOf(']');
     }
 
-    if (start !== -1 && end !== -1 && end > start) {
-         const jsonCandidate = text.substring(start, end + 1);
-         try {
-            return JSON.parse(jsonCandidate);
-        } catch (e3) {
-            console.error("Failed to parse extracted JSON candidate:", jsonCandidate);
+    // 2. Try raw Braces search if code block failed
+    if (!json) {
+        const firstOpenBrace = text.indexOf('{');
+        const lastCloseBrace = text.lastIndexOf('}');
+        
+        if (firstOpenBrace !== -1 && lastCloseBrace !== -1 && lastCloseBrace > firstOpenBrace) {
+            const candidate = text.substring(firstOpenBrace, lastCloseBrace + 1);
+            try {
+                json = JSON.parse(candidate);
+                // Remove JSON from text to get remainder
+                const pre = text.substring(0, firstOpenBrace);
+                const post = text.substring(lastCloseBrace + 1);
+                cleanText = (pre + "\n" + post).trim();
+            } catch (e) {
+                console.warn("Failed to parse extracted JSON candidate");
+            }
         }
     }
     
-    console.error("Critical JSON Parsing Failure. Raw Text:", text);
-    throw new Error("Failed to parse AI response. The model output was not valid JSON.");
+    // 3. Fallback: Try parsing the whole text
+    if (!json) {
+        try {
+            json = JSON.parse(text);
+            cleanText = ""; // Entire text was JSON
+        } catch (e) {
+            // Not JSON
+        }
+    }
+
+    return { json, remainder: cleanText };
+};
+
+const safeParseJSON = (text: string) => {
+    const { json } = extractJsonAndText(text);
+    if (!json) throw new Error("Failed to parse AI response. The model output was not valid JSON.");
+    return json;
 };
 
 // --- SCHEMA DEFINITIONS ---
@@ -344,14 +350,28 @@ export const manageTasksWithAI = async (command: string, currentTasks: Task[], u
         timeEstimate: t.timeEstimate
     }));
     
-    const jsonText = await executeAIRequest(userApiKey, 'manage', { command, currentTasks: enrichedTasks });
-    const rawDiff = safeParseJSON(jsonText) as TaskDiff;
+    const responseText = await executeAIRequest(userApiKey, 'manage', { command, currentTasks: enrichedTasks });
+    
+    // Robust Extraction: Get JSON AND potentially lost conversational text
+    const { json: rawDiff, remainder } = extractJsonAndText(responseText);
+
+    // If NO JSON at all, assume the entire response is a summary/chat message
+    if (!rawDiff) {
+        return {
+            summary: responseText,
+            added: [],
+            updated: [],
+            deletedIds: []
+        };
+    }
 
     // SANITIZATION FIX:
-    // AI sometimes hallucinating empty objects in 'added' or 'updated' arrays when it only means to reply conversationally.
-    // We strictly filter out any task actions that don't have essential fields (title for added, id for updated).
+    // AI sometimes hallucinating empty objects in 'added' or 'updated' arrays.
+    // We strictly filter out any task actions that don't have essential fields.
+    // Also, if JSON 'summary' is empty, we fallback to the 'remainder' text found outside the JSON block.
+    
     const cleanDiff: TaskDiff = {
-        summary: rawDiff.summary,
+        summary: (rawDiff.summary && rawDiff.summary.trim()) ? rawDiff.summary : remainder,
         added: Array.isArray(rawDiff.added) 
             ? rawDiff.added.filter(t => t && typeof t === 'object' && t.title && t.title.trim() !== '') 
             : [],
@@ -372,8 +392,8 @@ export const generateTaskSummary = async (currentTasks: Task[], userApiKey?: str
 
 export const breakDownTask = async (taskTitle: string, userApiKey?: string): Promise<Subtask[]> => {
     const jsonText = await executeAIRequest(userApiKey, 'breakdown', { taskTitle });
-    const steps = safeParseJSON(jsonText);
-    const list = Array.isArray(steps) ? steps : (steps.steps || []);
+    const { json: steps } = extractJsonAndText(jsonText);
+    const list = Array.isArray(steps) ? steps : (steps?.steps || []);
     return list.map((step: any) => ({
         id: `sub-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
         title: step.title,
