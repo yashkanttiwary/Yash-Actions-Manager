@@ -171,7 +171,7 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
                         isFocused={currentFocusId === UNASSIGNED_GOAL_ID}
                     />
 
-                    {/* Actual Goal Columns */}
+                    {/* Actual Context Columns */}
                     {goals.map(goal => (
                         <GoalColumn
                             key={goal.id}
@@ -193,11 +193,11 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
                         />
                     ))}
 
-                    {/* Add Goal Button / Form */}
+                    {/* Add Context Button / Form */}
                     <div className="flex-shrink-0 w-80">
                         {isCreating ? (
                             <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-lg border border-indigo-200 dark:border-indigo-800 animate-fadeIn">
-                                <h3 className="font-bold mb-3 text-gray-800 dark:text-white">New Goal Strategy</h3>
+                                <h3 className="font-bold mb-3 text-gray-800 dark:text-white">New Context</h3>
                                 <form onSubmit={handleCreateSubmit}>
                                     <div className="mb-3">
                                         <input
@@ -205,7 +205,7 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
                                             type="text"
                                             value={newGoalTitle}
                                             onChange={e => setNewGoalTitle(e.target.value)}
-                                            placeholder="Goal Title (e.g. Launch Product)"
+                                            placeholder="Context Title (e.g. Health, Work)"
                                             className="w-full p-2 bg-gray-100 dark:bg-gray-700 rounded border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                                         />
                                     </div>
@@ -288,7 +288,7 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
                                             type="submit" 
                                             className="flex-1 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 rounded text-sm font-bold text-white shadow-md transition-colors"
                                         >
-                                            Create Goal
+                                            Create Context
                                         </button>
                                     </div>
                                 </form>
@@ -301,8 +301,8 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
                                 <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform shadow-sm">
                                     <i className="fas fa-plus text-2xl"></i>
                                 </div>
-                                <span className="font-bold text-lg">Add New Goal</span>
-                                <span className="text-xs mt-1 opacity-70">Define a new strategy</span>
+                                <span className="font-bold text-lg">Add New Context</span>
+                                <span className="text-xs mt-1 opacity-70">Group tasks by context</span>
                             </button>
                         )}
                     </div>

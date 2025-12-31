@@ -90,7 +90,7 @@ export const GoalColumn: React.FC<GoalColumnProps> = ({
         setIsDraggingOver(true);
     };
 
-    const handleDragLeave = () => {
+    const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
         setIsDraggingOver(false);
     };
 
@@ -103,8 +103,6 @@ export const GoalColumn: React.FC<GoalColumnProps> = ({
         }
     };
 
-    const progress = goal.progress || 0;
-    
     const containerClasses = isSpaceMode
         ? 'bg-slate-900/60 backdrop-blur-md border border-slate-700/50'
         : 'bg-gray-100/80 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700';
@@ -113,8 +111,6 @@ export const GoalColumn: React.FC<GoalColumnProps> = ({
     const safeColor = goal.color.startsWith('#') ? goal.color : '#6366f1'; 
     
     // Determine effective text color
-    // Use user-specified color OR calculate contrast.
-    // In space mode, default to white unless user overrode it.
     const effectiveTextColor = goal.textColor 
         ? goal.textColor 
         : (isSpaceMode ? 'white' : getContrastColor(safeColor));
@@ -143,8 +139,6 @@ export const GoalColumn: React.FC<GoalColumnProps> = ({
                     className="absolute inset-0 transition-all duration-300"
                     style={{ 
                         backgroundColor: safeColor,
-                        // In space mode, use low opacity to let the dark glass background show through, creating a "darker version"
-                        // Increased opacity slightly for better visibility
                         opacity: isSpaceMode ? 0.45 : 1, 
                     }}
                 />
@@ -187,15 +181,9 @@ export const GoalColumn: React.FC<GoalColumnProps> = ({
                         </div>
                     </div>
                     
-                    {/* Progress Bar */}
-                    <div className="w-full bg-black/30 rounded-full h-2 mb-1 backdrop-blur-sm">
-                        <div 
-                            className="bg-white/90 h-2 rounded-full transition-all duration-500 shadow-sm"
-                            style={{ width: `${progress}%` }}
-                        ></div>
-                    </div>
-                    <div className="flex justify-between text-xs opacity-90 font-mono drop-shadow-sm">
-                        <span>{progress}% Complete</span>
+                    {/* K-Mode: Removed Progress Bar. Facts only. */}
+                    <div className="flex justify-between text-xs opacity-90 font-mono drop-shadow-sm mt-1">
+                        <span>Context</span>
                         <span>{tasks.length} Tasks</span>
                     </div>
                 </div>

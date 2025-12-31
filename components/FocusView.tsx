@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState, useEffect } from 'react';
 import { Task, Goal, Status, Priority } from '../types';
 import { FocusTaskCard } from './FocusTaskCard';
@@ -72,9 +71,10 @@ export const FocusView: React.FC<FocusViewProps> = ({
             });
     }, [tasks]);
 
+    // Split tasks into sections for display (but keep them unlimited)
     const coreTasks = pinnedTasks.slice(0, 3);
     const bonusTasks = pinnedTasks.slice(3, 5);
-    const isFull = pinnedTasks.length >= 5;
+    const additionalTasks = pinnedTasks.slice(5);
 
     // 2. Backlog Tasks (Unpinned, not Done)
     const backlogTasks = useMemo(() => {
@@ -90,8 +90,9 @@ export const FocusView: React.FC<FocusViewProps> = ({
         e.dataTransfer.effectAllowed = 'move';
         
         if (e.target instanceof HTMLElement) {
+            const target = e.target;
             setTimeout(() => {
-                e.target.classList.add('opacity-50');
+                target.classList.add('opacity-50');
             }, 0);
         }
     };
@@ -108,11 +109,7 @@ export const FocusView: React.FC<FocusViewProps> = ({
                 onReorderTasks(sourceId, targetId);
             }
         } else if (source === 'sidebar') {
-            // Adding from Sidebar
-            if (isFull) {
-                alert("Daily Limit Reached (5 Tasks). Please remove a task first.");
-                return;
-            }
+            // Adding from Sidebar - Unlimited in K-Mode
             if (sourceId) {
                 onTogglePin(sourceId);
             }
@@ -138,7 +135,7 @@ export const FocusView: React.FC<FocusViewProps> = ({
             <div 
                 className={`flex-1 overflow-y-auto custom-scrollbar p-6 md:p-12 flex flex-col items-center relative transition-all duration-300 ${dragOverFocus ? 'bg-indigo-50/50 dark:bg-indigo-900/20' : ''}`}
                 style={{ paddingRight: isSidebarOpen ? '340px' : '40px' }}
-                onDragOver={(e) => { e.preventDefault(); !isFull && setDragOverFocus(true); }}
+                onDragOver={(e) => { e.preventDefault(); setDragOverFocus(true); }}
                 onDragLeave={() => setDragOverFocus(false)}
                 onDrop={(e) => handleDropOnList(e)} // Drop on background appends
             >
@@ -146,24 +143,19 @@ export const FocusView: React.FC<FocusViewProps> = ({
                 {/* Header */}
                 <div className="w-full max-w-3xl mb-8 text-center">
                     <h1 className={`text-5xl font-black mb-3 tracking-tight ${isSpaceMode ? 'text-white drop-shadow-md' : 'text-gray-900 dark:text-white'}`}>
-                        Daily Focus
+                        Current Action
                     </h1>
                     <p className={`text-xl font-light tracking-wide ${isSpaceMode ? 'text-indigo-200' : 'text-indigo-600 dark:text-indigo-400'}`}>
-                        The 3 + 2 Method
+                        Do the necessary
                     </p>
-                    {isFull && (
-                        <div className="mt-6 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-xs font-bold uppercase tracking-wider shadow-sm">
-                            <i className="fas fa-lock"></i> Maximum Capacity Reached
-                        </div>
-                    )}
                 </div>
 
                 {/* ZONE A: CORE 3 */}
-                <div className="w-full max-w-3xl space-y-8 mb-16">
+                <div className="w-full max-w-3xl space-y-6 mb-12">
                     <div className="flex items-center gap-6 mb-6">
                         <div className={`h-px flex-1 ${isSpaceMode ? 'bg-indigo-500/30' : 'bg-indigo-200 dark:bg-indigo-900'}`}></div>
                         <h2 className={`text-sm font-bold uppercase tracking-[0.2em] ${isSpaceMode ? 'text-indigo-300' : 'text-indigo-600 dark:text-indigo-400'}`}>
-                            The Core 3
+                            Core Three
                         </h2>
                         <div className={`h-px flex-1 ${isSpaceMode ? 'bg-indigo-500/30' : 'bg-indigo-200 dark:bg-indigo-900'}`}></div>
                     </div>
@@ -173,8 +165,8 @@ export const FocusView: React.FC<FocusViewProps> = ({
                             <div className="w-20 h-20 rounded-full bg-black/5 dark:bg-white/5 flex items-center justify-center mx-auto mb-4">
                                 <i className="far fa-star text-4xl opacity-50"></i>
                             </div>
-                            <p className="text-xl font-medium mb-1">Your canvas is empty.</p>
-                            <p className="text-sm opacity-70">Drag critical tasks here from the sidebar.</p>
+                            <p className="text-xl font-medium mb-1">Silence before action.</p>
+                            <p className="text-sm opacity-70">Drag necessary tasks here.</p>
                         </div>
                     ) : (
                         coreTasks.map(task => (
@@ -187,7 +179,7 @@ export const FocusView: React.FC<FocusViewProps> = ({
                                 onSubtaskToggle={onSubtaskToggle}
                                 onDeleteTask={onDeleteTask}
                                 onUnpin={onTogglePin}
-                                isCore={true}
+                                isCore={true} 
                                 isSpaceMode={isSpaceMode}
                                 activeTaskTimer={activeTaskTimer}
                                 onToggleTimer={onToggleTimer}
@@ -198,48 +190,69 @@ export const FocusView: React.FC<FocusViewProps> = ({
                     )}
                 </div>
 
-                {/* DIVIDER */}
-                {pinnedTasks.length > 3 && (
-                    <div className="w-full max-w-xl my-8 flex items-center justify-center opacity-30">
-                        <div className="h-24 w-px border-l-2 border-dashed border-gray-400 dark:border-gray-500"></div>
+                {/* ZONE B: BONUS 2 */}
+                {bonusTasks.length > 0 && (
+                    <div className="w-full max-w-3xl space-y-6 mb-12">
+                        <div className="flex items-center gap-6 mb-6">
+                            <div className={`h-px flex-1 ${isSpaceMode ? 'bg-gray-700' : 'bg-gray-300'}`}></div>
+                            <h2 className={`text-xs font-bold uppercase tracking-[0.2em] ${isSpaceMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                Bonus Two
+                            </h2>
+                            <div className={`h-px flex-1 ${isSpaceMode ? 'bg-gray-700' : 'bg-gray-300'}`}></div>
+                        </div>
+
+                        {bonusTasks.map(task => (
+                            <FocusTaskCard 
+                                key={task.id} 
+                                task={task} 
+                                goals={goals}
+                                onEditTask={onEditTask} 
+                                onUpdateTask={onUpdateTask}
+                                onSubtaskToggle={onSubtaskToggle}
+                                onDeleteTask={onDeleteTask}
+                                onUnpin={onTogglePin}
+                                isCore={false}
+                                isSpaceMode={isSpaceMode}
+                                activeTaskTimer={activeTaskTimer}
+                                onToggleTimer={onToggleTimer}
+                                onDragStart={(e) => handleDragStart(e, task.id, 'focus')}
+                                onDrop={handleDropOnList}
+                            />
+                        ))}
                     </div>
                 )}
 
-                {/* ZONE B: BONUS 2 */}
-                <div className="w-full max-w-3xl space-y-6 mb-24">
-                    <div className="flex items-center gap-6 mb-6">
-                        <div className="h-px bg-gray-300 dark:bg-gray-700 flex-1"></div>
-                        <h2 className={`text-xs font-bold uppercase tracking-[0.2em] ${isSpaceMode ? 'text-slate-400' : 'text-gray-500'}`}>
-                            The Bonus 2
-                        </h2>
-                        <div className="h-px bg-gray-300 dark:bg-gray-700 flex-1"></div>
-                    </div>
-
-                    {bonusTasks.length === 0 && coreTasks.length === 3 && (
-                        <div className={`border-2 border-dashed rounded-2xl p-8 text-center opacity-60 ${isSpaceMode ? 'border-slate-700 text-slate-500' : 'border-gray-200 dark:border-gray-800 text-gray-400'}`}>
-                            <p className="text-sm">Optional: Add up to 2 secondary tasks.</p>
+                {/* ZONE C: ADDITIONAL (UNLIMITED) */}
+                {additionalTasks.length > 0 && (
+                    <div className="w-full max-w-3xl space-y-6 mb-16">
+                        <div className="flex items-center gap-6 mb-6">
+                            <div className={`h-px flex-1 ${isSpaceMode ? 'bg-gray-800' : 'bg-gray-200'}`}></div>
+                            <h2 className={`text-xs font-bold uppercase tracking-[0.2em] ${isSpaceMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                                Additional Focus
+                            </h2>
+                            <div className={`h-px flex-1 ${isSpaceMode ? 'bg-gray-800' : 'bg-gray-200'}`}></div>
                         </div>
-                    )}
 
-                    {bonusTasks.map(task => (
-                        <FocusTaskCard 
-                            key={task.id} 
-                            task={task} 
-                            goals={goals}
-                            onEditTask={onEditTask} 
-                            onUpdateTask={onUpdateTask}
-                            onSubtaskToggle={onSubtaskToggle}
-                            onDeleteTask={onDeleteTask}
-                            onUnpin={onTogglePin}
-                            isCore={false}
-                            isSpaceMode={isSpaceMode}
-                            activeTaskTimer={activeTaskTimer}
-                            onToggleTimer={onToggleTimer}
-                            onDragStart={(e) => handleDragStart(e, task.id, 'focus')}
-                            onDrop={handleDropOnList}
-                        />
-                    ))}
-                </div>
+                        {additionalTasks.map(task => (
+                            <FocusTaskCard 
+                                key={task.id} 
+                                task={task} 
+                                goals={goals}
+                                onEditTask={onEditTask} 
+                                onUpdateTask={onUpdateTask}
+                                onSubtaskToggle={onSubtaskToggle}
+                                onDeleteTask={onDeleteTask}
+                                onUnpin={onTogglePin}
+                                isCore={false}
+                                isSpaceMode={isSpaceMode}
+                                activeTaskTimer={activeTaskTimer}
+                                onToggleTimer={onToggleTimer}
+                                onDragStart={(e) => handleDragStart(e, task.id, 'focus')}
+                                onDrop={handleDropOnList}
+                            />
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* SIDEBAR: BACKLOG */}
@@ -291,18 +304,18 @@ export const FocusView: React.FC<FocusViewProps> = ({
                         {backlogTasks.map(task => (
                             <div
                                 key={task.id}
-                                draggable={!isFull}
+                                draggable
                                 onDragStart={(e) => handleDragStart(e, task.id, 'sidebar')}
                                 className={`p-3 rounded-lg border text-sm cursor-grab active:cursor-grabbing transition-all hover:translate-x-1
                                     ${isSpaceMode 
                                         ? 'bg-white/5 border-white/10 hover:bg-white/10 text-slate-300' 
                                         : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:bg-white dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200'
                                     }
-                                    ${isFull ? 'opacity-50 cursor-not-allowed' : ''}
                                 `}
                             >
                                 <div className="flex items-center justify-between mb-1">
                                     <span className="font-semibold truncate flex-1">{task.title}</span>
+                                    {/* K-Mode: Simple Priority Display */}
                                     <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${task.priority === 'Critical' ? 'bg-red-100 text-red-600' : 'bg-gray-200 text-gray-600'}`}>
                                         {task.priority}
                                     </span>

@@ -13,11 +13,20 @@ export const COLUMN_STATUSES: Status[] = [
     'Done'
 ];
 
+// K-Mode: Removed "glow" to reduce nervous system arousal. Colors are flat and functional.
 export const PRIORITY_COLORS: { [key in Priority]: { bg: string; text: string; glow: string } } = {
-    'Critical': { bg: 'bg-red-500/20', text: 'text-red-400', glow: 'hover:shadow-red-500/40' },
-    'High': { bg: 'bg-orange-500/20', text: 'text-orange-400', glow: 'hover:shadow-orange-500/40' },
-    'Medium': { bg: 'bg-yellow-500/20', text: 'text-yellow-400', glow: 'hover:shadow-yellow-500/40' },
-    'Low': { bg: 'bg-blue-500/20', text: 'text-blue-400', glow: 'hover:shadow-blue-500/40' }
+    'Critical': { bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-700 dark:text-red-300', glow: '' },
+    'High': { bg: 'bg-orange-100 dark:bg-orange-900/30', text: 'text-orange-700 dark:text-orange-300', glow: '' },
+    'Medium': { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-300', glow: '' },
+    'Low': { bg: 'bg-gray-100 dark:bg-gray-800', text: 'text-gray-600 dark:text-gray-400', glow: '' }
+};
+
+// K-Mode: Shift from emotional pressure to chronological fact.
+export const PRIORITY_LABELS: Record<Priority, string> = {
+    'Critical': 'Immediate',
+    'High': 'Necessary',
+    'Medium': 'Normal',
+    'Low': 'Low'
 };
 
 export const STATUS_STYLES: { [key in Status]: { header: string; body: string; cardBorder: string; } } = {

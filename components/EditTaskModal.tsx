@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Task, Priority, Status, Subtask, Blocker, Goal, TaskType } from '../types';
-import { COLUMN_STATUSES } from '../constants';
+import { COLUMN_STATUSES, PRIORITY_LABELS } from '../constants';
 import { ConfirmModal } from './ConfirmModal';
 import { storage } from '../utils/storage';
 
@@ -225,7 +225,7 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
         setEditedTask(prev => ({ ...prev, dependencies: selectedIds }));
     };
     
-    // --- GOAL CREATION HANDLER ---
+    // --- CONTEXT CREATION HANDLER ---
     const handleCreateGoal = () => {
         if (!newGoalName.trim() || !onAddGoal) return;
         
@@ -315,7 +315,9 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
                              <div>
                                 <label htmlFor="task-priority" className={labelClasses}>Priority</label>
                                 <select id="task-priority" value={editedTask.priority} onChange={e => handleInputChange('priority', e.target.value as Priority)} className={inputClasses}>
-                                    {['Critical', 'High', 'Medium', 'Low'].map(p => <option key={p} value={p}>{p}</option>)}
+                                    {['Critical', 'High', 'Medium', 'Low'].map(p => (
+                                        <option key={p} value={p}>{PRIORITY_LABELS[p as Priority]}</option>
+                                    ))}
                                 </select>
                              </div>
                          )}
@@ -344,7 +346,7 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
                          )}
                     </div>
                     
-                    {/* Goal Selector */}
+                    {/* Context Selector */}
                     <div>
                         <label htmlFor="task-goal" className={labelClasses}>Assigned Context</label>
                         <div className="relative">
@@ -354,7 +356,7 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
                                         type="text" 
                                         value={newGoalName} 
                                         onChange={(e) => setNewGoalName(e.target.value)}
-                                        placeholder="New Context..." 
+                                        placeholder="New Context Name..." 
                                         className={inputClasses}
                                         autoFocus
                                         onKeyDown={(e) => {
@@ -369,7 +371,7 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
                                     <button 
                                         onClick={handleCreateGoal}
                                         className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 rounded-md transition-colors"
-                                        title="Create Goal"
+                                        title="Create Context"
                                     >
                                         <i className="fas fa-check"></i>
                                     </button>

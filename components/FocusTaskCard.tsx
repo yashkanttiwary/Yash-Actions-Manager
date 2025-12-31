@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Task, Goal } from '../types';
-import { PRIORITY_COLORS, TAG_COLORS } from '../constants';
+import { PRIORITY_COLORS, TAG_COLORS, PRIORITY_LABELS } from '../constants';
 
 interface FocusTaskCardProps {
     task: Task;
@@ -11,7 +11,7 @@ interface FocusTaskCardProps {
     onSubtaskToggle: (taskId: string, subtaskId: string) => void;
     onDeleteTask: (taskId: string) => void;
     onUnpin: (taskId: string) => void;
-    isCore: boolean;
+    isCore: boolean; // Retained for compatibility but ignored visually
     isSpaceMode: boolean;
     // Timer props
     activeTaskTimer: {taskId: string, startTime: number} | null;
@@ -31,7 +31,7 @@ const getTagColor = (tagName: string) => {
 };
 
 export const FocusTaskCard: React.FC<FocusTaskCardProps> = ({ 
-    task, goals, onEditTask, onUpdateTask, onSubtaskToggle, onUnpin, isCore, isSpaceMode,
+    task, goals, onEditTask, onUpdateTask, onSubtaskToggle, onUnpin, isSpaceMode,
     activeTaskTimer, onToggleTimer, onDragStart, onDrop
 }) => {
     const priorityColors = PRIORITY_COLORS[task.priority];
@@ -99,9 +99,10 @@ export const FocusTaskCard: React.FC<FocusTaskCardProps> = ({
     };
 
     // Card Styling Logic
+    // K-Mode: Removed "isCore" border distinction. All tasks are equal in potential.
     const baseClasses = isSpaceMode 
-        ? `bg-slate-900/80 backdrop-blur-xl border ${isActiveTimer ? 'border-green-500 shadow-[0_0_30px_rgba(34,197,94,0.3)]' : isCore ? 'border-indigo-500/50 shadow-[0_0_30px_rgba(99,102,241,0.15)]' : 'border-slate-700/50'}`
-        : `bg-white dark:bg-gray-800 border ${isActiveTimer ? 'border-green-500 ring-2 ring-green-100 dark:ring-green-900' : isCore ? 'border-indigo-200 dark:border-indigo-900 shadow-xl' : 'border-gray-200 dark:border-gray-700 shadow-md'}`;
+        ? `bg-slate-900/80 backdrop-blur-xl border ${isActiveTimer ? 'border-green-500 shadow-[0_0_30px_rgba(34,197,94,0.3)]' : 'border-slate-700/50'}`
+        : `bg-white dark:bg-gray-800 border ${isActiveTimer ? 'border-green-500 ring-2 ring-green-100 dark:ring-green-900' : 'border-gray-200 dark:border-gray-700 shadow-md'}`;
 
     return (
         <div 
@@ -119,9 +120,11 @@ export const FocusTaskCard: React.FC<FocusTaskCardProps> = ({
             {/* Header / Status Bar */}
             <div className={`px-6 py-4 border-b flex justify-between items-center ${isSpaceMode ? 'border-white/10 bg-white/5' : 'border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50'}`}>
                 <div className="flex items-center gap-3">
-                    <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-md ${isCore ? (isSpaceMode ? 'bg-indigo-500/20 text-indigo-300' : 'bg-indigo-100 text-indigo-700') : (isSpaceMode ? 'bg-slate-700 text-slate-300' : 'bg-gray-200 text-gray-600')}`}>
-                        {isCore ? 'Must Do' : 'Nice to Do'}
+                    {/* K-Mode: Use factual priority label, remove "Must Do" badge */}
+                    <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-md ${priorityColors.bg} ${priorityColors.text}`}>
+                        {PRIORITY_LABELS[task.priority]}
                     </span>
+                    
                     {assignedGoal && (
                         <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-black/5 dark:bg-white/5">
                             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: assignedGoal.color }}></div>
@@ -278,10 +281,6 @@ export const FocusTaskCard: React.FC<FocusTaskCardProps> = ({
 
                 {/* Footer Metadata */}
                 <div className="mt-8 flex flex-wrap items-center gap-3 pt-4 border-t border-dashed border-gray-200 dark:border-gray-700/50">
-                    <span className={`text-xs px-2.5 py-1 rounded-full font-bold uppercase ${priorityColors.bg} ${priorityColors.text}`}>
-                        {task.priority} Priority
-                    </span>
-                    
                     {task.timeEstimate && (
                         <span className={`text-xs flex items-center gap-1.5 px-2 py-1 rounded-md ${isSpaceMode ? 'bg-white/5 text-slate-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'}`}>
                             <i className="far fa-clock"></i> {task.timeEstimate}h Estimate

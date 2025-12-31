@@ -235,7 +235,7 @@ export const useTaskManager = (enableLoading: boolean = true) => {
         });
     }, []);
     
-    // --- TOP 5 FOCUS LOGIC ---
+    // --- FOCUS LOGIC (Unlimited + Auto In Progress) ---
     const toggleTaskPin = useCallback((taskId: string) => {
         let result = { success: true, message: '' };
         
@@ -245,17 +245,26 @@ export const useTaskManager = (enableLoading: boolean = true) => {
 
             // If pinning (currently false)
             if (!task.isPinned) {
-                const pinnedTasks = prevTasks.filter(t => t.isPinned);
-                if (pinnedTasks.length >= 5) {
-                    result = { success: false, message: 'Top 5 Focus is full. Unpin one task first.' };
-                    return prevTasks;
-                }
+                // Unlimited Pinning: No check for length >= 5.
                 
+                const pinnedTasks = prevTasks.filter(t => t.isPinned);
                 // Assign a new order index at the end
                 const maxOrder = pinnedTasks.reduce((max, t) => Math.max(max, t.focusOrder || 0), -1);
                 
+                // ACTION: Move to 'In Progress' if not Blocked or Done
+                let newStatus = task.status;
+                if (task.status !== 'Blocker' && task.status !== 'Done') {
+                    newStatus = 'In Progress';
+                }
+
                 return prevTasks.map(t => 
-                    t.id === taskId ? { ...t, isPinned: true, focusOrder: maxOrder + 1, lastModified: new Date().toISOString() } : t
+                    t.id === taskId ? { 
+                        ...t, 
+                        isPinned: true, 
+                        focusOrder: maxOrder + 1, 
+                        status: newStatus,
+                        lastModified: new Date().toISOString() 
+                    } : t
                 );
             }
 

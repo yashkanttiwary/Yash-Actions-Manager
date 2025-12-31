@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useCallback } from 'react';
 import { Task, Status, Goal } from '../types';
-import { PRIORITY_COLORS, TAG_COLORS, STATUS_STYLES } from '../constants';
+import { PRIORITY_COLORS, TAG_COLORS, STATUS_STYLES, PRIORITY_LABELS } from '../constants';
 
 interface TaskCardProps {
     task: Task;
@@ -260,12 +260,12 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                     <div className="flex items-center gap-2 flex-shrink-0">
                         {/* Pin Icon Indicator (No Button) */}
                         {task.isPinned && (
-                            <i className="fas fa-thumbtack text-[10px] text-indigo-500 transform rotate-45" title="Pinned to Top 5"></i>
+                            <i className="fas fa-thumbtack text-[10px] text-indigo-500 transform rotate-45" title="Pinned to Focus"></i>
                         )}
 
                         {/* Priority Badge */}
                         <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded flex-shrink-0 uppercase ${priorityClasses.bg} ${priorityClasses.text} border ${priorityClasses.text.replace('text-', 'border-')} border-opacity-30`} title={`Priority: ${task.priority}`}>
-                            {task.priority}
+                            {PRIORITY_LABELS[task.priority]}
                         </span>
 
                         {/* Goal Dot */}
@@ -348,7 +348,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
 
                         {/* Priority First */}
                         <span className={`text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap ${priorityClasses.bg} ${priorityClasses.text}`}>
-                            {task.priority}
+                            {PRIORITY_LABELS[task.priority]}
                         </span>
 
                         {/* Goal Second */}
