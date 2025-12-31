@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { KanbanBoard } from './components/KanbanBoard';
 import { Header } from './components/Header';
@@ -857,6 +858,8 @@ const App: React.FC = () => {
     };
 
     const activeFocusGoalId = focusedGoalId || null;
+    
+    // Dynamic Header height for mobile/desktop
     const headerHeight = (isMenuLocked || isMenuHovered) ? '200px' : '50px';
 
     return (
@@ -1130,7 +1133,7 @@ const App: React.FC = () => {
                         className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
                     >
                         <i className={`fas fa-thumbtack w-4 ${contextMenu.task.isPinned ? 'text-indigo-500' : 'text-gray-400'}`}></i> 
-                        {contextMenu.task.isPinned ? 'Unpin Task' : 'Pin to Top 5'}
+                        {contextMenu.task.isPinned ? 'Unpin' : 'Pin'}
                     </button>
 
                     <button

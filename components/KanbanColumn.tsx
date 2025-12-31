@@ -29,7 +29,7 @@ interface KanbanColumnProps {
     onBreakDownTask?: (taskId: string) => Promise<void>; 
     isCompactMode: boolean;
     onTaskSizeChange?: () => void; 
-    width?: number; 
+    width?: number | string; 
     height?: number; 
     onResize?: (width: number, height: number) => void;
     zoomLevel?: number;
@@ -273,7 +273,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
         checkScrollIndicator();
     };
     
-    const currentWidth = isCollapsed ? 80 : (width || 320);
+    const currentWidth = isCollapsed ? '80px' : (width !== undefined ? (typeof width === 'number' ? `${width}px` : width) : '320px');
     const currentHeight = height ? height : 'auto';
     const isCustomHeight = !!height;
     
@@ -282,7 +282,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
             ref={colRef}
             className={`flex-shrink-0 rounded-xl flex flex-col ${containerClasses} ${isResizing ? 'transition-none select-none' : 'transition-all duration-300 ease-in-out'} relative`}
             style={{ 
-                width: `${currentWidth}px`, 
+                width: currentWidth, 
                 height: typeof currentHeight === 'number' ? `${currentHeight}px` : undefined,
             }}
         >
@@ -291,7 +291,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                 onMouseDown={onMouseDown}
             >
                 <h2
-                    className="font-bold text-lg cursor-grab select-none text-white"
+                    className="font-bold text-base md:text-lg cursor-grab select-none text-white"
                     style={{ 
                         writingMode: isCollapsed ? 'vertical-rl' : 'initial', 
                         transform: isCollapsed ? 'rotate(180deg)' : 'none',

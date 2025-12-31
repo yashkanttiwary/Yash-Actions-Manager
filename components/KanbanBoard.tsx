@@ -86,6 +86,9 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
 
     // Optimized Dependency Line Calculation (Batch Read -> Batch Write)
     useLayoutEffect(() => {
+        // Skip calculation on mobile as lines aren't shown
+        if (window.innerWidth < 768) return;
+
         if (!boardRef.current) return;
         mainContainerRef.current = document.querySelector('main');
         let animationFrameId: number;
@@ -318,7 +321,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                         transformOrigin: 'top center' 
                     }}
                 >
-                     <div className="h-full">
+                     <div className="h-full w-full px-4 md:w-auto md:px-0">
                         <KanbanColumn
                             status={focusMode}
                             tasks={sortedTasks}
@@ -354,6 +357,138 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
             );
         }
         
+        // MOBILE VIEW (Snap Scrolling) - New Render Path for screens < 768px
+        // Renders columns in a horizontal scroll container instead of absolute positioning
+        const mobileView = (
+            <div className="md:hidden w-full h-full overflow-x-auto overflow-y-hidden snap-x snap-mandatory flex gap-4 px-6 pb-4 items-start pt-2 no-scrollbar">
+                {columns.map(status => {
+                    const tasksForColumn = getTasksByStatus(status);
+                    const sortedTasks = sortTasks(tasksForColumn, sortOptions[status] || 'Default');
+                    
+                    return (
+                        <div key={status} className="snap-center flex-shrink-0 w-[85vw] max-w-[340px] h-full overflow-hidden flex flex-col rounded-xl">
+                            <KanbanColumn
+                                status={status}
+                                tasks={sortedTasks}
+                                allTasks={tasks}
+                                goals={goals}
+                                onTaskMove={handleTaskMoveWithSortReset}
+                                onEditTask={onEditTask}
+                                onAddTask={onAddTask}
+                                onQuickAddTask={(title) => onQuickAddTask(title, status)}
+                                onSmartAddTask={(transcript) => onSmartAddTask(transcript, status)}
+                                onUpdateTask={onUpdateTask}
+                                isCollapsed={false} // Never collapse on mobile snap view
+                                onToggleCollapse={() => {}}
+                                sortOption={sortOptions[status] || 'Default'}
+                                onSortChange={handleSortChange}
+                                onMouseDown={(e) => {}}
+                                activeTaskTimer={activeTaskTimer}
+                                onToggleTimer={onToggleTimer}
+                                onOpenContextMenu={onOpenContextMenu}
+                                onDeleteTask={onDeleteTask}
+                                onSubtaskToggle={onSubtaskToggle}
+                                onBreakDownTask={onBreakDownTask}
+                                isCompactMode={isCompactMode}
+                                onTaskSizeChange={triggerLayoutUpdate}
+                                width="100%" // Let flex/css control width
+                                height={undefined} // Let flex control height
+                                onResize={() => {}}
+                                zoomLevel={1}
+                                isSpaceMode={isSpaceMode}
+                            />
+                        </div>
+                    );
+                })}
+                {/* Spacer to allow last item to snap center easily if needed */}
+                <div className="w-1 flex-shrink-0 snap-center"></div>
+            </div>
+        );
+
+        // DESKTOP VIEW (Absolute Positioning) - Preserved exactly
+        if (!isFitToScreen) {
+            return (
+                <>
+                    {/* Mobile Only View */}
+                    {mobileView}
+
+                    {/* Desktop Only View */}
+                    <div 
+                        className="hidden md:block w-full h-full relative"
+                        onMouseMove={handleMouseMove}
+                        onMouseUp={handleMouseUp}
+                        onMouseLeave={handleMouseUp}
+                        style={{ 
+                            minWidth: '100%', 
+                            minHeight: '100%' 
+                        }}
+                    >
+                        <div
+                            ref={boardRef}
+                            className="relative"
+                            style={{
+                                transform: `scale(${zoomLevel})`,
+                                transformOrigin: '0 0',
+                                width: `${boardContentWidth}px`, 
+                                minWidth: zoomLevel < 1 ? `${100 / zoomLevel}%` : '100%',
+                                height: zoomLevel < 1 ? `${Math.max(boardHeight, window.innerHeight)}px` : `${boardHeight}px`,
+                            }}
+                        >
+                            <DependencyLines lines={lineCoordinates} />
+                            {columnLayouts.map(layout => {
+                                const status = layout.id;
+                                const tasksForColumn = getTasksByStatus(status);
+                                const sortedTasks = sortTasks(tasksForColumn, sortOptions[status] || 'Default');
+                                
+                                return (
+                                    <div
+                                        key={status}
+                                        className="absolute transition-transform duration-75 ease-linear"
+                                        style={{
+                                            transform: `translate(${layout.x}px, ${layout.y}px)`,
+                                            zIndex: layout.zIndex
+                                        }}
+                                    >
+                                        <KanbanColumn
+                                            status={status}
+                                            tasks={sortedTasks}
+                                            allTasks={tasks}
+                                            goals={goals} // Pass goals
+                                            onTaskMove={handleTaskMoveWithSortReset}
+                                            onEditTask={onEditTask}
+                                            onAddTask={onAddTask}
+                                            onQuickAddTask={(title) => onQuickAddTask(title, status)}
+                                            onSmartAddTask={(transcript) => onSmartAddTask(transcript, status)}
+                                            onUpdateTask={onUpdateTask}
+                                            isCollapsed={collapsedColumns.has(status)}
+                                            onToggleCollapse={() => toggleColumnCollapse(status)}
+                                            sortOption={sortOptions[status] || 'Default'}
+                                            onSortChange={handleSortChange}
+                                            onMouseDown={(e) => handleColumnMouseDown(e, status)}
+                                            activeTaskTimer={activeTaskTimer}
+                                            onToggleTimer={onToggleTimer}
+                                            onOpenContextMenu={onOpenContextMenu}
+                                            onDeleteTask={onDeleteTask}
+                                            onSubtaskToggle={onSubtaskToggle}
+                                            onBreakDownTask={onBreakDownTask}
+                                            isCompactMode={isCompactMode}
+                                            onTaskSizeChange={triggerLayoutUpdate}
+                                            width={layout.w}
+                                            height={layout.h}
+                                            onResize={(w, h) => handleColumnResize(status, w, h)}
+                                            zoomLevel={zoomLevel}
+                                            isSpaceMode={isSpaceMode}
+                                        />
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </>
+            );
+        }
+        
+        // FIT TO SCREEN VIEW (Flex Grid)
         if (isFitToScreen) {
             const INVERSE_WIDTH = 100 / Math.max(0.1, zoomLevel);
 
@@ -369,7 +504,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                             width: `${INVERSE_WIDTH}%`,
                             minHeight: '100%' 
                         }}
-                        className="flex flex-wrap justify-center items-start content-start p-8 gap-8"
+                        className="flex flex-wrap justify-center items-start content-start p-4 md:p-8 gap-4 md:gap-8"
                     >
                      {columns.map(status => {
                          const tasksForColumn = getTasksByStatus(status);
@@ -380,7 +515,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                          const height = layout?.h || 350;
 
                          return (
-                             <div key={status} className="flex-shrink-0 mb-4">
+                             <div key={status} className="flex-shrink-0 mb-4 w-full md:w-auto">
                                  <KanbanColumn
                                     status={status}
                                     tasks={sortedTasks}
@@ -418,80 +553,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                 </div>
             )
         }
-
-        return (
-            <div 
-                className="w-full h-full relative"
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
-                style={{ 
-                    minWidth: '100%', 
-                    minHeight: '100%' 
-                }}
-            >
-                <div
-                    ref={boardRef}
-                    className="relative"
-                    style={{
-                        transform: `scale(${zoomLevel})`,
-                        transformOrigin: '0 0',
-                        width: `${boardContentWidth}px`, 
-                        minWidth: zoomLevel < 1 ? `${100 / zoomLevel}%` : '100%',
-                        height: zoomLevel < 1 ? `${Math.max(boardHeight, window.innerHeight)}px` : `${boardHeight}px`,
-                    }}
-                >
-                    <DependencyLines lines={lineCoordinates} />
-                    {columnLayouts.map(layout => {
-                        const status = layout.id;
-                        const tasksForColumn = getTasksByStatus(status);
-                        const sortedTasks = sortTasks(tasksForColumn, sortOptions[status] || 'Default');
-                        
-                        return (
-                            <div
-                                key={status}
-                                className="absolute transition-transform duration-75 ease-linear"
-                                style={{
-                                    transform: `translate(${layout.x}px, ${layout.y}px)`,
-                                    zIndex: layout.zIndex
-                                }}
-                            >
-                                <KanbanColumn
-                                    status={status}
-                                    tasks={sortedTasks}
-                                    allTasks={tasks}
-                                    goals={goals} // Pass goals
-                                    onTaskMove={handleTaskMoveWithSortReset}
-                                    onEditTask={onEditTask}
-                                    onAddTask={onAddTask}
-                                    onQuickAddTask={(title) => onQuickAddTask(title, status)}
-                                    onSmartAddTask={(transcript) => onSmartAddTask(transcript, status)}
-                                    onUpdateTask={onUpdateTask}
-                                    isCollapsed={collapsedColumns.has(status)}
-                                    onToggleCollapse={() => toggleColumnCollapse(status)}
-                                    sortOption={sortOptions[status] || 'Default'}
-                                    onSortChange={handleSortChange}
-                                    onMouseDown={(e) => handleColumnMouseDown(e, status)}
-                                    activeTaskTimer={activeTaskTimer}
-                                    onToggleTimer={onToggleTimer}
-                                    onOpenContextMenu={onOpenContextMenu}
-                                    onDeleteTask={onDeleteTask}
-                                    onSubtaskToggle={onSubtaskToggle}
-                                    onBreakDownTask={onBreakDownTask}
-                                    isCompactMode={isCompactMode}
-                                    onTaskSizeChange={triggerLayoutUpdate}
-                                    width={layout.w}
-                                    height={layout.h}
-                                    onResize={(w, h) => handleColumnResize(status, w, h)}
-                                    zoomLevel={zoomLevel}
-                                    isSpaceMode={isSpaceMode}
-                                />
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
-        );
+        
+        return null;
     };
 
     return (

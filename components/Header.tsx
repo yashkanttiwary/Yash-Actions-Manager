@@ -235,27 +235,27 @@ export const Header: React.FC<HeaderProps> = ({
         >
             {/* DRAG HANDLE / VISIBLE BAR */}
             <div 
-                className="absolute bottom-0 left-0 right-0 h-12 flex items-center justify-between px-4 cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 transition-colors rounded-b-lg"
+                className="absolute bottom-0 left-0 right-0 h-12 flex items-center justify-between px-2 md:px-4 cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 transition-colors rounded-b-lg"
                 onClick={() => setIsMenuLocked(!isMenuLocked)}
                 title={isMenuLocked ? "Unlock Menu" : "Lock Menu"}
             >
                 
                 {/* Left: Clock & Context Pill (Rocket Removed) */}
-                <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex flex-col leading-tight pl-2">
-                        <div className={`text-[10px] font-bold ${textBaseClass} uppercase tracking-wider transition-colors duration-500`}>
+                <div className="flex items-center gap-2 md:gap-4 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex flex-col leading-tight pl-1 md:pl-2">
+                        <div className={`text-[9px] md:text-[10px] font-bold ${textBaseClass} uppercase tracking-wider transition-colors duration-500`}>
                             {headerDateStr}
                         </div>
-                        <div className={`text-base font-black ${textAccentClass} font-mono transition-colors duration-500`}>
+                        <div className={`text-sm md:text-base font-black ${textAccentClass} font-mono transition-colors duration-500`}>
                             {headerTimeStr}
                         </div>
                     </div>
 
-                    {/* Focus Context Pill */}
-                    <div className="relative flex items-center gap-2 ml-2 pl-4 border-l border-gray-300 dark:border-gray-700 h-8 animate-fadeIn" ref={focusDropdownRef}>
+                    {/* Focus Context Pill - Hidden on very small mobile if taking too much space, or truncated */}
+                    <div className="relative flex items-center gap-2 ml-1 md:ml-2 pl-2 md:pl-4 border-l border-gray-300 dark:border-gray-700 h-8 animate-fadeIn" ref={focusDropdownRef}>
                         <button
                             onClick={() => setIsFocusMenuOpen(!isFocusMenuOpen)}
-                            className={`flex items-center gap-2 px-3 py-1 rounded-full border shadow-sm backdrop-blur-sm transition-all group hover:brightness-110 active:scale-95 cursor-pointer ${
+                            className={`flex items-center gap-2 px-2 md:px-3 py-1 rounded-full border shadow-sm backdrop-blur-sm transition-all group hover:brightness-110 active:scale-95 cursor-pointer ${
                                 !activeFocusGoal 
                                     ? (isSpaceVisualsActive ? 'bg-white/10 border-white/20 text-white' : 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700') 
                                     : ''
@@ -270,10 +270,10 @@ export const Header: React.FC<HeaderProps> = ({
                                 style={{ color: activeFocusGoal ? (pillTextColor || activeFocusGoal.color) : undefined }}
                             ></i>
                             <span 
-                                className={`text-xs font-bold truncate max-w-[120px] hidden sm:block ${isSpaceVisualsActive ? 'text-white' : ''}`}
+                                className={`text-xs font-bold truncate max-w-[80px] md:max-w-[120px] ${isSpaceVisualsActive ? 'text-white' : ''}`}
                                 style={{ color: pillTextColor }}
                             >
-                                {activeFocusGoal ? activeFocusGoal.title : 'All Contexts'}
+                                {activeFocusGoal ? activeFocusGoal.title : 'Context'}
                             </span>
                             <i className={`fas fa-chevron-down text-[10px] ml-1 transition-transform duration-200 ${isFocusMenuOpen ? 'rotate-180' : ''} ${isSpaceVisualsActive ? 'text-white/70' : 'text-gray-500'}`} style={{ color: pillTextColor }}></i>
                         </button>
@@ -290,7 +290,7 @@ export const Header: React.FC<HeaderProps> = ({
 
                         {/* Dropdown Menu */}
                         {isFocusMenuOpen && (
-                            <div className={`absolute top-full left-4 mt-2 w-60 rounded-xl shadow-2xl border backdrop-blur-xl z-[100] overflow-hidden ${
+                            <div className={`absolute top-full left-0 mt-2 w-60 rounded-xl shadow-2xl border backdrop-blur-xl z-[100] overflow-hidden ${
                                 isSpaceVisualsActive 
                                     ? 'bg-black/80 border-white/20 text-white' 
                                     : 'bg-white/95 dark:bg-gray-900/95 border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100'
@@ -332,17 +332,17 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
 
                 {/* Center: Pull Down Indicator */}
-                <div className="flex flex-col items-center opacity-50 group-hover:opacity-100 transition-opacity">
-                    <div className={`w-12 h-1 rounded-full mb-1 transition-colors ${isMenuLocked ? (isSpaceVisualsActive ? 'bg-cyan-400' : 'bg-indigo-500') : (isSpaceVisualsActive ? 'bg-white/50' : 'bg-gray-300 dark:bg-gray-600')}`}></div>
+                <div className="flex flex-col items-center opacity-50 group-hover:opacity-100 transition-opacity flex-grow justify-center">
+                    <div className={`w-8 md:w-12 h-1 rounded-full mb-1 transition-colors ${isMenuLocked ? (isSpaceVisualsActive ? 'bg-cyan-400' : 'bg-indigo-500') : (isSpaceVisualsActive ? 'bg-white/50' : 'bg-gray-300 dark:bg-gray-600')}`}></div>
                 </div>
 
                 {/* Right: Essential Status (AI & Sync) & NOW TODAY BUTTON */}
-                <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center gap-2 md:gap-3 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                     
                     {currentViewMode !== 'goals' && currentViewMode !== 'focus' && (
                         <button
                             onClick={(e) => { e.stopPropagation(); setIsTodayView(!isTodayView); }}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all border shadow-sm ${
+                            className={`flex items-center gap-1.5 px-2 md:px-3 py-1.5 rounded-full text-xs font-bold transition-all border shadow-sm ${
                                 isTodayView
                                     ? 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800'
                                     : isSpaceVisualsActive 
@@ -352,7 +352,7 @@ export const Header: React.FC<HeaderProps> = ({
                             title="Show tasks due today only"
                         >
                             <i className="far fa-calendar-check"></i>
-                            <span className="hidden sm:inline">Today</span>
+                            <span className="hidden lg:inline">Today</span>
                         </button>
                     )}
 
@@ -368,7 +368,7 @@ export const Header: React.FC<HeaderProps> = ({
                         <button
                             onClick={(e) => { e.stopPropagation(); onManualPull(); }}
                             disabled={syncStatus === 'syncing'}
-                            className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all border shadow-sm ${syncProps.classes}`}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all border shadow-sm hidden sm:flex ${syncProps.classes}`}
                             title={syncProps.text}
                         >
                             <i className={`fas ${syncProps.icon}`}></i>
@@ -406,27 +406,33 @@ export const Header: React.FC<HeaderProps> = ({
                             <h1 className={`text-xl font-bold tracking-wider hidden sm:block ${isSpaceVisualsActive ? 'text-white' : ''}`}>Practical Order</h1>
                         )}
                         
-                        <div className="flex items-center space-x-2 sm:space-x-3 flex-wrap gap-y-2">
+                        <div className="flex items-center gap-2 sm:gap-3 flex-wrap gap-y-2 w-full sm:w-auto">
                             
-                            {/* View Toggles */}
-                            <div className={`${isSpaceVisualsActive ? 'bg-white/10' : 'bg-gray-200 dark:bg-gray-700'} p-0.5 rounded-lg flex items-center`}>
-                                <button onClick={() => onViewModeChange('kanban')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${currentViewMode === 'kanban' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>Board</button>
-                                <button onClick={() => onViewModeChange('focus')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 ${currentViewMode === 'focus' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>
+                            {/* View Toggles - Scrollable on Mobile */}
+                            <div className={`${isSpaceVisualsActive ? 'bg-white/10' : 'bg-gray-200 dark:bg-gray-700'} p-0.5 rounded-lg flex items-center overflow-x-auto no-scrollbar max-w-full`}>
+                                <button onClick={() => onViewModeChange('kanban')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all whitespace-nowrap ${currentViewMode === 'kanban' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>
+                                    Board
+                                </button>
+                                <button onClick={() => onViewModeChange('focus')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${currentViewMode === 'focus' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>
                                     <i className="fas fa-eye text-[10px]"></i> Attention
                                 </button>
-                                <button onClick={() => onViewModeChange('goals')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${currentViewMode === 'goals' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>Contexts</button>
-                                <button onClick={() => onViewModeChange('calendar')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${currentViewMode === 'calendar' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>Calendar</button>
+                                <button onClick={() => onViewModeChange('goals')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all whitespace-nowrap ${currentViewMode === 'goals' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>
+                                    Contexts
+                                </button>
+                                <button onClick={() => onViewModeChange('calendar')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all whitespace-nowrap ${currentViewMode === 'calendar' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>
+                                    Calendar
+                                </button>
                             </div>
 
-                            {/* Zoom */}
-                            <div className={`${isSpaceVisualsActive ? 'bg-white/10 text-white' : 'bg-gray-200 dark:bg-gray-700'} p-0.5 rounded-lg flex items-center gap-0.5`}>
+                            {/* Zoom - Hidden on Mobile */}
+                            <div className={`${isSpaceVisualsActive ? 'bg-white/10 text-white' : 'bg-gray-200 dark:bg-gray-700'} p-0.5 rounded-lg flex items-center gap-0.5 hidden md:flex`}>
                                 <button onClick={handleZoomOut} className={`w-6 h-6 flex items-center justify-center rounded-md text-xs ${isSpaceVisualsActive ? 'hover:bg-white/20' : 'hover:bg-gray-300 dark:hover:bg-gray-600'}`}><i className="fas fa-minus"></i></button>
                                 <span className="text-[10px] font-bold px-1 min-w-[30px] text-center">{Math.round(zoomLevel * 100)}%</span>
                                 <button onClick={handleZoomIn} className={`w-6 h-6 flex items-center justify-center rounded-md text-xs ${isSpaceVisualsActive ? 'hover:bg-white/20' : 'hover:bg-gray-300 dark:hover:bg-gray-600'}`}><i className="fas fa-plus"></i></button>
                             </div>
 
-                            {/* Compact/Fit */}
-                            <div className={`${isSpaceVisualsActive ? 'bg-white/10' : 'bg-gray-200 dark:bg-gray-700'} p-0.5 rounded-lg flex items-center gap-1`}>
+                            {/* Compact/Fit - Hidden on Mobile */}
+                            <div className={`${isSpaceVisualsActive ? 'bg-white/10' : 'bg-gray-200 dark:bg-gray-700'} p-0.5 rounded-lg items-center gap-1 hidden md:flex`}>
                                 <button onClick={onToggleCompactMode} className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${isCompactMode ? (isSpaceVisualsActive ? 'bg-white/30 text-white' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'hover:bg-gray-300')}`}>
                                     <i className={`fas ${isCompactMode ? 'fa-expand' : 'fa-compress'}`}></i>
                                 </button>
@@ -435,13 +441,13 @@ export const Header: React.FC<HeaderProps> = ({
                                 </button>
                             </div>
 
-                            {/* Timeline Toggle */}
-                            <button onClick={onToggleTimeline} className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${isTimelineVisible ? 'bg-indigo-600 text-white' : (isSpaceVisualsActive ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-gray-200 dark:bg-gray-700')}`}>
+                            {/* Timeline Toggle - Hidden on Mobile */}
+                            <button onClick={onToggleTimeline} className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all hidden md:block ${isTimelineVisible ? 'bg-indigo-600 text-white' : (isSpaceVisualsActive ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-gray-200 dark:bg-gray-700')}`}>
                                 Timeline
                             </button>
 
                             {/* Utility Buttons */}
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1 ml-auto sm:ml-0">
                                 <button onClick={onToggleTheme} className={`w-8 h-8 rounded-lg flex items-center justify-center ${isSpaceVisualsActive ? 'bg-white/10 hover:bg-white/20' : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300'} transition-colors`}>
                                     <i className={`fas ${getThemeIcon()}`}></i>
                                 </button>
