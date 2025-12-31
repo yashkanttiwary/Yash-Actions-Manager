@@ -74,10 +74,6 @@ export const useGoogleSheetSync = (
             delete safeSettings.geminiApiKey;
             delete safeSettings.googleApiKey;
             delete safeSettings.googleClientId;
-            // Token is sensitive but saved in script properties on the other end, so it's safer to not send settings back?
-            // Actually, settings sync is useful. The token is stored locally.
-            // We should strip the token from the metadata sent to the sheet to avoid exposing it in the JSON blob if the sheet is shared.
-            delete safeSettings.googleAppsScriptToken;
 
             const metadata = {
                 gamification: gamificationRef.current,
@@ -87,9 +83,7 @@ export const useGoogleSheetSync = (
             if (syncMethod === 'api' && sheetId) {
                 await sheetService.syncDataToSheet(sheetId, localTasksRef.current, localGoalsRef.current, metadata);
             } else if (syncMethod === 'script' && appsScriptUrl) {
-                // IMP-001: Send token
-                const token = settingsRef.current?.googleAppsScriptToken;
-                await sheetService.syncDataToAppsScript(appsScriptUrl, localTasksRef.current, localGoalsRef.current, metadata, token);
+                await sheetService.syncDataToAppsScript(appsScriptUrl, localTasksRef.current, localGoalsRef.current, metadata);
             }
             setLastSyncTime(new Date().toISOString());
             setStatus('success');
@@ -115,9 +109,7 @@ export const useGoogleSheetSync = (
                 remoteGoals = data.goals;
                 remoteMetadata = data.metadata;
             } else {
-                // IMP-001: Send token
-                const token = settingsRef.current?.googleAppsScriptToken;
-                const data = await sheetService.syncDataFromAppsScript(idOrUrl, token);
+                const data = await sheetService.syncDataFromAppsScript(idOrUrl);
                 remoteTasks = data.tasks;
                 remoteGoals = data.goals;
                 remoteMetadata = data.metadata;
@@ -154,8 +146,6 @@ export const useGoogleSheetSync = (
                         googleClientId: currentLocalSettings.googleClientId || remoteMetadata.settings.googleClientId,
                         googleAppsScriptUrl: currentLocalSettings.googleAppsScriptUrl || remoteMetadata.settings.googleAppsScriptUrl,
                         googleSheetId: currentLocalSettings.googleSheetId || remoteMetadata.settings.googleSheetId,
-                        // Preserve local token
-                        googleAppsScriptToken: currentLocalSettings.googleAppsScriptToken || remoteMetadata.settings.googleAppsScriptToken,
                         audio: currentLocalSettings.audio || remoteMetadata.settings.audio
                     };
                     setSettings(mergedSettings);
@@ -256,8 +246,7 @@ export const useGoogleSheetSync = (
                     
                     if (syncMethod === 'api') data = await sheetService.syncDataFromSheet(target);
                     else {
-                        const token = settingsRef.current?.googleAppsScriptToken;
-                        data = await sheetService.syncDataFromAppsScript(target, token);
+                        data = await sheetService.syncDataFromAppsScript(target);
                     }
 
                     // Polling Logic: Only accept remote changes if they are distinctly newer

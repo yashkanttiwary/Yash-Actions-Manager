@@ -236,12 +236,7 @@ const ModeComparisonTooltip: React.FC = () => {
 // --- Content Constants ---
 
 const APPS_SCRIPT_CODE = `
-// 🚀 TASK MANAGER DATABASE SCRIPT (SECURE EDITION v10 - WITH TOKEN)
-
-// --- CONFIGURATION ---
-// IMPORTANT: Replace this with the token generated in the App settings.
-var AUTH_TOKEN = "Paste_Your_Token_Here"; 
-// ---------------------
+// 🚀 TASK MANAGER DATABASE SCRIPT (EASY MODE v11)
 
 function doGet(e) { return handleRequest(e); }
 function doPost(e) { return handleRequest(e); }
@@ -254,13 +249,6 @@ function handleRequest(e) {
     var params = e.parameter || {};
     var postData = e.postData ? JSON.parse(e.postData.contents) : {};
     var action = params.action || postData.action || 'sync_down';
-
-    // --- SECURITY CHECK ---
-    var reqToken = params.token || postData.token;
-    if (AUTH_TOKEN !== "Paste_Your_Token_Here" && reqToken !== AUTH_TOKEN) {
-       return jsonResponse({status: 'error', message: 'Unauthorized: Invalid Token'});
-    }
-    // ----------------------
 
     if (action === 'check') { return jsonResponse({status: 'ok'}); }
 
@@ -368,7 +356,6 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
     // Sheet ID Local State
     const [sheetIdInput, setSheetIdInput] = useState(settings.googleSheetId || '');
     const [scriptUrlInput, setScriptUrlInput] = useState(settings.googleAppsScriptUrl || '');
-    const [scriptTokenInput, setScriptTokenInput] = useState(settings.googleAppsScriptToken || ''); // IMP-001
     const [sheetStatus, setSheetStatus] = useState<ConnectionStatus>('idle');
     const [sheetErrorDetail, setSheetErrorDetail] = useState('');
 
@@ -413,10 +400,9 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
         }
         if (settings.googleAppsScriptUrl) {
             setScriptUrlInput(settings.googleAppsScriptUrl);
-            setScriptTokenInput(settings.googleAppsScriptToken || '');
             if (sheetMethod === 'script') setSheetStatus('success');
         }
-    }, [settings.googleSheetId, settings.googleAppsScriptUrl, settings.googleAppsScriptToken]);
+    }, [settings.googleSheetId, settings.googleAppsScriptUrl]);
 
     // Ensure sheetStatus is updated when switching methods if a connection exists
     useEffect(() => {
@@ -457,9 +443,8 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
             // Do NOT manually set sheetStatus to 'idle' here to avoid race conditions with effects
             
             if (sheetMethod === 'script') {
-                 onUpdateSettings({ googleAppsScriptUrl: '', googleAppsScriptToken: '' });
+                 onUpdateSettings({ googleAppsScriptUrl: '' });
                  setScriptUrlInput('');
-                 setScriptTokenInput('');
             } else {
                  onUpdateSettings({ googleSheetId: '' });
                  setSheetIdInput('');
@@ -467,11 +452,6 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
         }
     };
     
-    const generateToken = () => {
-        const randomToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-        setScriptTokenInput(randomToken);
-    };
-
     const handleConnectSheet = async () => {
         setSheetStatus('testing');
         setSheetErrorDetail('');
@@ -505,19 +485,17 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                 setSheetErrorDetail('Please enter the Web App URL.');
                 return;
             }
-            // Token is optional but highly recommended. We check logic handles empty string.
             try {
-                const isValid = await testAppsScriptConnection(scriptUrlInput.trim(), scriptTokenInput.trim());
+                const isValid = await testAppsScriptConnection(scriptUrlInput.trim());
                 if (isValid) {
                     onUpdateSettings({ 
                         googleAppsScriptUrl: scriptUrlInput.trim(), 
-                        googleAppsScriptToken: scriptTokenInput.trim(),
                         googleSheetId: '' 
                     }); // Clear other method
                     // Status will update via effect when props change
                 } else {
                     setSheetStatus('error');
-                    setSheetErrorDetail("Connection test failed. Check URL and ensure your Token matches.");
+                    setSheetErrorDetail("Connection test failed. Check URL.");
                 }
             } catch (error) {
                 setSheetStatus('error');
@@ -821,9 +799,9 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                         <i className="fas fa-exclamation-triangle text-amber-500 text-xl animate-pulse"></i>
                                     </div>
                                     <div>
-                                        <h4 className="font-bold text-gray-900 dark:text-white">Action Required: Update Script! (v10 - Security Token)</h4>
+                                        <h4 className="font-bold text-gray-900 dark:text-white">Action Required: Update Script! (v11 - Token Removed)</h4>
                                         <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
-                                            The script now supports a secure token to prevent unauthorized access. Please update your deployment code.
+                                            The script no longer requires a token. Please copy the new code below and redeploy your Web App.
                                         </p>
                                     </div>
                                 </div>
@@ -838,34 +816,6 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                     </p>
                                     
                                     <div className="space-y-4">
-                                        {/* Token Input */}
-                                        <div>
-                                            <label className={labelClass}>Security Token (IMP-001)</label>
-                                            <div className="flex gap-2">
-                                                <input 
-                                                    type="text" 
-                                                    value={scriptTokenInput} 
-                                                    onChange={(e) => setScriptTokenInput(e.target.value)} 
-                                                    placeholder="Generate or paste a secret token..." 
-                                                    className={inputClass}
-                                                    disabled={sheetStatus === 'testing' || sheetStatus === 'success'}
-                                                />
-                                                <button 
-                                                    type="button"
-                                                    onClick={generateToken}
-                                                    disabled={sheetStatus === 'testing' || sheetStatus === 'success'}
-                                                    className="px-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg transition-colors"
-                                                    title="Generate Random Token"
-                                                >
-                                                    <i className="fas fa-random"></i>
-                                                </button>
-                                                <CopyButton text={scriptTokenInput} />
-                                            </div>
-                                            <p className="text-xs text-gray-500 mt-1">
-                                                You MUST paste this token into the <code>AUTH_TOKEN</code> variable in the Apps Script code below.
-                                            </p>
-                                        </div>
-
                                         <div>
                                             <label className={labelClass}>Web App URL</label>
                                             
@@ -907,7 +857,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                                         <button 
                                                             type="button"
                                                             onClick={handleConnectSheet}
-                                                            disabled={sheetStatus === 'testing' || !scriptUrlInput.trim() || !scriptTokenInput.trim()}
+                                                            disabled={sheetStatus === 'testing' || !scriptUrlInput.trim()}
                                                             className={`w-full sm:w-auto px-6 py-2.5 rounded-lg font-medium transition-colors whitespace-nowrap text-white shadow-md flex items-center justify-center gap-2 ${
                                                                 sheetStatus === 'testing' ? 'bg-indigo-400 cursor-wait' : 'bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400'
                                                             }`}
@@ -933,7 +883,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                         <p>Create a new Google Sheet. Go to <strong>Extensions &gt; Apps Script</strong>.</p>
                                     </Step>
                                     <Step num={2} title="Paste the Magic Code">
-                                        <p>Delete any code there and paste this exactly. <strong>Don't forget to replace the Token!</strong></p>
+                                        <p>Delete any code there and paste this exactly.</p>
                                         <CodeBlock code={APPS_SCRIPT_CODE} />
                                     </Step>
                                     <Step num={3} title="Deploy as Web App (Crucial Step!)">

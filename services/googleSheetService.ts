@@ -298,11 +298,10 @@ export const syncDataFromSheet = async (sheetId: string): Promise<{ tasks: Task[
 
 // --- APPS SCRIPT SYNC ---
 
-export const testAppsScriptConnection = async (url: string, token?: string): Promise<boolean> => {
+export const testAppsScriptConnection = async (url: string): Promise<boolean> => {
     try {
         const separator = url.includes('?') ? '&' : '?';
-        const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
-        const fetchUrl = `${url}${separator}action=check${tokenParam}&t=${Date.now()}`;
+        const fetchUrl = `${url}${separator}action=check&t=${Date.now()}`;
         
         const response = await fetch(fetchUrl, {
             method: 'GET',
@@ -319,7 +318,7 @@ export const testAppsScriptConnection = async (url: string, token?: string): Pro
     }
 };
 
-export const syncDataToAppsScript = async (url: string, tasks: Task[], goals: Goal[], metadata?: any, token?: string) => {
+export const syncDataToAppsScript = async (url: string, tasks: Task[], goals: Goal[], metadata?: any) => {
     try {
         const goalsMap = new Map(goals.map(g => [g.id, g]));
         
@@ -338,7 +337,6 @@ export const syncDataToAppsScript = async (url: string, tasks: Task[], goals: Go
             credentials: 'omit', // Fix for "Failed to fetch"
             body: JSON.stringify({ 
                 action: 'sync_up',
-                token: token, // IMP-001: Send token in body
                 rows: taskRows,
                 goals: goalRows
             })
@@ -349,12 +347,11 @@ export const syncDataToAppsScript = async (url: string, tasks: Task[], goals: Go
     }
 };
 
-export const syncDataFromAppsScript = async (url: string, token?: string): Promise<{ tasks: Task[], goals: Goal[], metadata: any | null }> => {
+export const syncDataFromAppsScript = async (url: string): Promise<{ tasks: Task[], goals: Goal[], metadata: any | null }> => {
     try {
         const timestamp = Date.now();
         const separator = url.includes('?') ? '&' : '?';
-        const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
-        const fetchUrl = `${url}${separator}action=sync_down${tokenParam}&t=${timestamp}`;
+        const fetchUrl = `${url}${separator}action=sync_down&t=${timestamp}`;
 
         const response = await fetch(fetchUrl, {
             method: 'GET',

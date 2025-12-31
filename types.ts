@@ -123,7 +123,6 @@ export interface Settings {
     // Integration Settings
     googleSheetId?: string; // Legacy/Advanced method
     googleAppsScriptUrl?: string; // New "Easy" method (No Client ID)
-    googleAppsScriptToken?: string; // IMP-001: Token for securing Apps Script
     googleCalendarId?: string;
     // Custom API Configuration (for manual setup)
     googleApiKey?: string; // GAPI Key (Drive/Calendar)
