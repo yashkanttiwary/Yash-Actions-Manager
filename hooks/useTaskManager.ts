@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Task, Status, ColumnLayout, Goal } from '../types';
+import { Task, Status, ColumnLayout, Goal, Priority } from '../types';
 import { COLUMN_STATUSES } from '../constants';
 import { storage } from '../utils/storage';
 
@@ -167,17 +167,18 @@ export const useTaskManager = (enableLoading: boolean = true) => {
         }
     }, [tasks, goals, columnLayouts, isLoading, enableLoading]);
 
-    // TYPE FIX: Added statusChangeDate to omitted fields, allowing optional property in input
-    const addTask = useCallback((taskData: Omit<Task, 'id' | 'createdDate' | 'lastModified' | 'statusChangeDate'> & { statusChangeDate?: string }) => {
+    // TYPE FIX: Flexible input allowing full Task or partial data.
+    // Returns the created task so the caller can perform follow-up actions (like AI analysis).
+    const addTask = useCallback((taskData: Partial<Task> & { title: string; status: Status; priority: Priority; dueDate: string }) => {
         const now = new Date().toISOString();
         const newTask: Task = {
-            id: `task-${Date.now()}-${Math.random()}`,
-            createdDate: now,
-            lastModified: now,
+            id: taskData.id || `task-${Date.now()}-${Math.random()}`,
+            createdDate: taskData.createdDate || now,
+            lastModified: taskData.lastModified || now,
+            statusChangeDate: taskData.statusChangeDate || now,
             priority: 'Medium',
             tags: [],
             subtasks: [],
-            statusChangeDate: now,
             actualTimeSpent: 0,
             xpAwarded: false,
             dependencies: [],
@@ -187,6 +188,7 @@ export const useTaskManager = (enableLoading: boolean = true) => {
             ...taskData,
         };
         setTasks(prevTasks => [...prevTasks, newTask]);
+        return newTask;
     }, []);
 
     const updateTask = useCallback((updatedTask: Task) => {

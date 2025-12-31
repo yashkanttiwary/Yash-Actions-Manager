@@ -413,30 +413,54 @@ const App: React.FC = () => {
         });
     }, [focusedGoalId]);
 
+    // CENTRALIZED PSYCHOLOGY CHECK
+    const runPsychologyCheck = useCallback(async (task: Task) => {
+        const apiKey = settings.geminiApiKey || getEnvVar('VITE_GEMINI_API_KEY');
+        if (!apiKey) return;
+
+        try {
+            // Run silent background check
+            const analysis = await analyzeTaskPsychology(task, apiKey);
+            
+            // Only update if it changes the state (prevents loops, though useTaskManager handles object identity)
+            // Or simply if 'isBecoming' is true, update the task to reflect that.
+            if (analysis.isBecoming) {
+                updateTask({
+                    ...task,
+                    isBecoming: true,
+                    becomingWarning: analysis.warning
+                });
+            }
+        } catch (e) {
+            console.error("Psych check failed", e);
+        }
+    }, [settings.geminiApiKey, updateTask]);
+
     const handleQuickAddTask = useCallback((title: string, status: Status) => {
-        addTask({
+        // 1. Create the task explicitly (Optimistic UI)
+        const newTaskData = {
             title,
             status,
-            priority: 'Medium',
+            priority: 'Medium' as Priority,
             dueDate: new Date().toISOString().split('T')[0],
             description: '',
             goalId: focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined, 
-        });
-        // We trigger AI Analysis in handleSaveTask or updateTask wrapper, but quickAdd calls addTask directly.
-        // We need to trigger it here too.
-        // However, we don't have the task ID yet since addTask generates it. 
-        // Best approach: addTask returns the new task or ID. 
-        // For now, let's leave Quick Add un-analyzed or implement a listener in useTaskManager.
-        // Or simpler: Just fire it with the text and update last task.
-        // Actually, let's skip analysis on quick add to keep it fast, 
-        // OR trigger it if we can find the task.
-    }, [addTask, focusedGoalId]);
+        };
+        
+        // 2. Add to board instantly
+        const newTask = addTask(newTaskData);
+        
+        // 3. Trigger Background Analysis
+        runPsychologyCheck(newTask);
+
+    }, [addTask, focusedGoalId, runPsychologyCheck]);
 
     const handleVoiceTaskAdd = useCallback(async (transcript: string, defaultStatus: Status) => {
         const effectiveKey = settings.geminiApiKey || getEnvVar('VITE_GEMINI_API_KEY');
         
         if (!effectiveKey) {
-             addTask({
+             // Fallback: Add basic task
+             const basicTask = addTask({
                 title: transcript,
                 status: defaultStatus,
                 priority: 'Medium',
@@ -444,12 +468,15 @@ const App: React.FC = () => {
                 description: '', 
                 goalId: focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined
              });
+             // Even basic fallback should try analysis if key becomes available or just skip
              return;
         }
 
         try {
             const parsedData = await parseTaskFromVoice(transcript, effectiveKey, goals);
             
+            // Note: Voice parser returns a structure, we need to finalize it for the modal or add it directly
+            // Current flow opens the modal for "Draft" review
             const draftTask: Task = {
                 id: `new-${Date.now()}`,
                 title: parsedData.title || transcript, 
@@ -483,7 +510,8 @@ const App: React.FC = () => {
 
         } catch (error) {
             console.error("Voice parse failed:", error);
-            addTask({
+            // Fallback add
+            const fallbackTask = addTask({
                 title: transcript.length > 60 ? `${transcript.substring(0, 57)}...` : transcript,
                 description: `> 🎙️ **Voice Note**\n> "${transcript}"`,
                 status: defaultStatus,
@@ -491,8 +519,10 @@ const App: React.FC = () => {
                 dueDate: new Date().toISOString().split('T')[0],
                 goalId: focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined
             });
+            // Try check on fallback too
+            runPsychologyCheck(fallbackTask);
         }
-    }, [addTask, handleQuickAddTask, settings.geminiApiKey, focusedGoalId, goals]);
+    }, [addTask, settings.geminiApiKey, focusedGoalId, goals, runPsychologyCheck]);
 
     const handleOpenSettings = (tab: SettingsTab = 'general') => {
         setActiveSettingsTab(tab);
@@ -689,36 +719,20 @@ const App: React.FC = () => {
     const handleSaveTask = async (taskToSave: Task) => {
         let savedTask = taskToSave;
         
-        // LOGIC-001: Resolve race condition by handling new tasks atomically if possible
         if (taskToSave.id.startsWith('new-')) {
             const { id, createdDate, lastModified, ...newTaskData } = taskToSave;
-            let finalTaskData = { ...newTaskData };
-
-            // LOGIC-001 FIX: Analyze BEFORE adding to state
-            if (hasApiKey) {
-                try {
-                    // We await this for new tasks to ensure they enter the board "judged" by the Mirror
-                    const analysis = await analyzeTaskPsychology(taskToSave, settings.geminiApiKey || getEnvVar('VITE_GEMINI_API_KEY'));
-                    finalTaskData = { ...finalTaskData, ...analysis };
-                } catch (e) { console.error(e); }
-            }
-
-            addTask(finalTaskData as any);
+            
+            // 1. Save immediately (Optimistic)
+            const newTask = addTask(newTaskData as any);
+            
+            // 2. Trigger Background Check
+            runPsychologyCheck(newTask);
         } else {
             // Updating existing task
             updateTask(savedTask);
             
             // Trigger AI Analysis in background for edits
-            if (hasApiKey) {
-                // Don't await this, let it run in background to keep UI snappy for edits
-                analyzeTaskPsychology(savedTask, settings.geminiApiKey || getEnvVar('VITE_GEMINI_API_KEY'))
-                    .then(analysis => {
-                        if (analysis.isBecoming !== savedTask.isBecoming) {
-                            updateTask({ ...savedTask, ...analysis });
-                        }
-                    })
-                    .catch(err => console.error("Psych Analysis Failed", err));
-            }
+            runPsychologyCheck(savedTask);
         }
         setEditingTask(null);
     };
@@ -727,6 +741,8 @@ const App: React.FC = () => {
         if (changes.added && changes.added.length > 0) {
             changes.added.forEach(t => {
                 addTask(t as any);
+                // We could run check here too, but AI usually generates 'safe' tasks or we trust it for now.
+                // Or we can invoke runPsychologyCheck on the new tasks if we want to be strict.
             });
         }
         if (changes.updated && changes.updated.length > 0) {

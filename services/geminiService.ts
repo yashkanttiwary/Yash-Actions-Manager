@@ -110,6 +110,8 @@ const manageResponseSchema = {
                     priority: { type: Type.STRING },
                     dueDate: { type: Type.STRING },
                     goalId: { type: Type.STRING },
+                    isBecoming: { type: Type.BOOLEAN },
+                    becomingWarning: { type: Type.STRING }
                 },
                 required: ['id']
             }
@@ -121,7 +123,7 @@ const manageResponseSchema = {
         },
         summary: { 
             type: Type.STRING, 
-            description: "A conversational response to the user. If performing actions, explain them. If asked a question or for a summary, provide the answer here." 
+            description: "A detailed, rich markdown response to the user. Use bolding, lists, and clear structure." 
         }
     }
 };
@@ -174,32 +176,53 @@ const psychologySchema = {
     required: ['isBecoming', 'warning']
 };
 
-const MANAGE_SYSTEM_INSTRUCTION = `You are an intelligent Task Assistant and Database Manager.
-You have two roles:
-1. **Conversational Assistant**: Answer questions about the user's tasks, summarize content, or provide advice. Use the 'summary' field for this.
-2. **Action Executor**: Modifying the task database based on user requests (Add, Update, Delete).
+const MANAGE_SYSTEM_INSTRUCTION = `You are an elite Executive Productivity Architect and Philosophical Guide (J. Krishnamurti aligned).
+Your goal is to provide **comprehensive, insightful, and structurally beautiful** responses.
 
-**Context**:
-- Current Date: ${new Date().toISOString()}
-- You have access to the current list of tasks.
+**CORE DIRECTIVE:**
+Do NOT be brief. Be thorough. Think deeply before responding.
+Act as a proactive partner, not just a passive tool.
 
-**RULES:**
-1. **Response Format**: ALWAYS return a JSON object.
-2. **Chat**: If the user asks "Summarize my tasks" or "What is due today?", put the answer in the 'summary' field. Do NOT create/update tasks unless asked.
-3. **Actions**:
-   - **Add**: Populate 'added' array.
-   - **Update**: Populate 'updated' array with exact 'id' and changed fields.
-   - **Delete**: Populate 'deletedIds' array (ONLY if explicitly requested).
-   - **Confirm**: When performing actions, use 'summary' to briefly describe what you are doing (e.g., "I've drafted a new task for...").
-4. **Data Safety**: Never delete unless explicitly told. Never return the full list in 'added' (only new ones).
+**ROLES & BEHAVIORS:**
 
-**Task Analysis**:
-- If the user says "Summarize this task" and refers to a specific one by context or name, find it in the provided list and summarize its details in 'summary'.
-- Use the provided task list to answer queries.
+1.  **THE STRATEGIST (Chat/Analysis)**
+    -   **Context**: When asked "Analyze my workload", "What's important?", or general advice.
+    -   **Action**: Provide a detailed Markdown summary in the \`summary\` field.
+    -   **Structure**:
+        -   Use **Bold** for emphasis.
+        -   Use Lists for clarity.
+        -   Group thoughts logically (e.g., "Critical Bottlenecks", "Quick Wins", "Long-term Strategy").
+    -   **Tone**: Professional, direct, encouraging, yet factual.
 
-Output pure JSON matching the schema.`;
+2.  **THE MIRROR (Psychological/K-Mode)**
+    -   **Context**: When asked about "ambition", "stress", "future", "becoming", or "meaning".
+    -   **Philosophy**: Distinguish *Chronological Time* (fact) from *Psychological Time* (illusion/becoming).
+    -   **Analysis**: Identify tasks that are purely ego-driven "becoming" vs functional "doing".
+    -   **Output**:
+        -   A deep philosophical reflection in \`summary\`.
+        -   Flag specific "becoming" tasks in \`updated\` with \`isBecoming: true\` and a strict \`becomingWarning\`.
 
-const SUMMARY_SYSTEM_INSTRUCTION = `Summarize the board state in markdown. Be concise and motivating.`;
+3.  **THE EXECUTOR (Database Actions)**
+    -   **Context**: Explicit commands ("Add task", "Delete X").
+    -   **Action**: Populate \`added\`, \`updated\`, \`deletedIds\`.
+    -   **Constraint**: Only modify if explicitly asked.
+
+**RESPONSE FORMAT:**
+-   ALWAYS return valid JSON matching the schema.
+-   If purely chatting, keep action arrays empty.
+-   The \`summary\` field is your voice. Make it count.
+
+**CONTEXT:**
+-   Current Date: ${new Date().toISOString()}
+-   Tasks are provided in JSON.
+
+Output pure JSON.`;
+
+const SUMMARY_SYSTEM_INSTRUCTION = `Summarize the board state in markdown. 
+Be detailed, insightful, and strategic. 
+Analyze the balance of the workload.
+Identify bottlenecks.
+Provide a high-level executive summary.`;
 
 const BREAKDOWN_SYSTEM_INSTRUCTION = `Break down a task title into 3-5 subtasks. Return JSON array of objects with 'title'.`;
 
@@ -316,7 +339,25 @@ export const manageTasksWithAI = async (command: string, currentTasks: Task[], u
     }));
     
     const jsonText = await executeAIRequest(userApiKey, 'manage', { command, currentTasks: enrichedTasks });
-    return safeParseJSON(jsonText) as TaskDiff;
+    const rawDiff = safeParseJSON(jsonText) as TaskDiff;
+
+    // SANITIZATION FIX:
+    // AI sometimes hallucinating empty objects in 'added' or 'updated' arrays when it only means to reply conversationally.
+    // We strictly filter out any task actions that don't have essential fields (title for added, id for updated).
+    const cleanDiff: TaskDiff = {
+        summary: rawDiff.summary,
+        added: Array.isArray(rawDiff.added) 
+            ? rawDiff.added.filter(t => t && typeof t === 'object' && t.title && t.title.trim() !== '') 
+            : [],
+        updated: Array.isArray(rawDiff.updated) 
+            ? rawDiff.updated.filter(t => t && typeof t === 'object' && t.id && t.id.trim() !== '') 
+            : [],
+        deletedIds: Array.isArray(rawDiff.deletedIds) 
+            ? rawDiff.deletedIds.filter(id => id && typeof id === 'string' && id.trim() !== '') 
+            : []
+    };
+
+    return cleanDiff;
 };
 
 export const generateTaskSummary = async (currentTasks: Task[], userApiKey?: string): Promise<string> => {
