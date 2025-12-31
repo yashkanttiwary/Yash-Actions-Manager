@@ -114,50 +114,59 @@ const ProposalCard: React.FC<{ diff: TaskDiff; onConfirm: () => void; onCancel: 
     );
 };
 
-// --- SUB-COMPONENT: Summary Message (Enhanced for Markdown) ---
+// --- SUB-COMPONENT: Summary Message (Enhanced) ---
+// Simple inline markdown parser for bolding
+const renderFormattedText = (text: string) => {
+    // Split by **bold**
+    const parts = text.split(/(\*\*.*?\*\*)/g);
+    return parts.map((part, i) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+            return <strong key={i} className="font-black text-indigo-700 dark:text-indigo-300">{part.slice(2, -2)}</strong>;
+        }
+        return part;
+    });
+};
+
 const SummaryMessage: React.FC<{ text: string }> = ({ text }) => {
-    // Simple parser for bold and lists to create a cleaner look
-    const parseLine = (line: string, i: number) => {
-        // Headers
-        if (line.startsWith('## ')) 
-            return <h3 key={i} className="text-indigo-600 dark:text-indigo-400 font-bold mt-3 mb-1 text-sm">{line.substring(3)}</h3>;
-        if (line.startsWith('### ')) 
-            return <h4 key={i} className="text-gray-800 dark:text-gray-200 font-bold mt-2 mb-1 text-xs uppercase tracking-wide">{line.substring(4)}</h4>;
-        
-        // List Items (Bullet points with * or -)
-        let content = line;
-        let isList = false;
-        if (line.trim().startsWith('* ') || line.trim().startsWith('- ')) {
-            content = line.trim().substring(2);
-            isList = true;
-        }
-
-        // Bold parsing: **text**
-        const parts = content.split(/(\*\*.*?\*\*)/g);
-        const parsedContent = parts.map((part, index) => {
-            if (part.startsWith('**') && part.endsWith('**')) {
-                return <strong key={index} className="font-bold text-gray-900 dark:text-white">{part.slice(2, -2)}</strong>;
-            }
-            return part;
-        });
-
-        if (isList) {
-            return (
-                <div key={i} className="flex items-start gap-2 mb-1 ml-1">
-                    <span className="text-indigo-500 mt-1">•</span>
-                    <span className="flex-1">{parsedContent}</span>
-                </div>
-            );
-        }
-
-        if (line.trim() === '') return <div key={i} className="h-2"></div>;
-
-        return <p key={i} className="mb-1">{parsedContent}</p>;
-    };
-
     return (
-        <div className="prose prose-sm dark:prose-invert max-w-none text-xs leading-relaxed text-gray-700 dark:text-gray-300">
-            {text.split('\n').map((line, i) => parseLine(line, i))}
+        <div className="prose prose-sm dark:prose-invert max-w-none text-xs leading-relaxed text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+            {text.split('\n').map((line, i) => {
+                const trimmed = line.trim();
+                if (trimmed === '') return <br key={i} />;
+                
+                if (trimmed.startsWith('## ')) return <h3 key={i} className="text-indigo-700 dark:text-indigo-400 font-bold mt-4 mb-2 text-sm border-b border-indigo-100 dark:border-indigo-900/30 pb-1">{renderFormattedText(trimmed.substring(3))}</h3>;
+                if (trimmed.startsWith('### ')) return <h4 key={i} className="text-gray-900 dark:text-gray-100 font-bold mt-3 mb-1 text-xs uppercase tracking-wide">{renderFormattedText(trimmed.substring(4))}</h4>;
+                
+                if (trimmed.startsWith('* ') || trimmed.startsWith('- ')) {
+                    return (
+                        <div key={i} className="flex items-start gap-2 mb-1 pl-2">
+                            <span className="text-indigo-400 mt-1.5">•</span>
+                            <span className="flex-1">{renderFormattedText(trimmed.substring(2))}</span>
+                        </div>
+                    );
+                }
+                
+                if (trimmed.match(/^\d+\./)) {
+                    const content = trimmed.replace(/^\d+\.\s/, '');
+                    const num = trimmed.match(/^\d+/)?.[0];
+                    return (
+                        <div key={i} className="flex items-start gap-2 mb-1 pl-2">
+                            <span className="font-mono text-indigo-500 font-bold text-[10px] mt-0.5">{num}.</span>
+                            <span className="flex-1">{renderFormattedText(content)}</span>
+                        </div>
+                    );
+                }
+
+                if (trimmed.startsWith('> ')) {
+                    return (
+                        <blockquote key={i} className="border-l-2 border-indigo-300 dark:border-indigo-700 pl-3 py-1 my-2 italic text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 rounded-r">
+                            {renderFormattedText(trimmed.substring(2))}
+                        </blockquote>
+                    );
+                }
+
+                return <p key={i} className="mb-1.5">{renderFormattedText(line)}</p>;
+            })}
         </div>
     );
 };
@@ -196,7 +205,11 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
         if (!text.trim()) return;
         
         // 1. Add User Message
-        addMessage('user', text);
+        // If the text matches a long query, display the short label if possible, otherwise display text
+        const matchedSuggestion = suggestions.find(s => s.query === text);
+        const displayLabel = matchedSuggestion ? matchedSuggestion.label : text;
+
+        addMessage('user', displayLabel);
         setInputValue('');
         resetTranscript();
         setIsTyping(true);
@@ -241,20 +254,57 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
     // Determine view state
     const hasStartedChat = messages.length > 1;
 
-    // Refined Suggestions - Human Readable Titles mapping to Deep Prompts
+    // REFINED SUGGESTIONS: High-Fidelity Prompt Engineering
+    // The query text is hidden from the user but sent to the AI.
     const suggestions = [
-        { label: "Analyze Workload", query: "Summarize my tasks and tell me if I'm overloaded." },
-        { label: "What's Critical?", query: "How many tasks are Critical priority? List them." },
-        { label: "Am I Chasing a Future Self?", query: "Review all tasks. Identify which ones are factual necessities versus 'psychological ambitions' (becoming). Explain why." },
-        { label: "What Can Be Deleted?", query: "Review my 'To Do' and 'Backlog'. Identify tasks that are not factual necessities but are merely carried over from the past out of habit or fear. Propose deleting them." },
-        { label: "Why am I Delaying?", query: "Look at my oldest tasks. Is the delay caused by a technical blocker, or is it the gap between the observer (me) and the observed (the task)? Tell me where I am procrastinating due to an image." },
-        { label: "Find Inner Conflict", query: "Identify conflicting priorities. Where does one desire (e.g., 'Relax') friction against another desire (e.g., 'Work hard')? Show me the contradiction." },
-        { label: "Order vs. Control", query: "Look at my 'In Progress' column. Am I acting out of intelligence, or am I just suppressing chaos through control? Highlight tasks where I am struggling against the fact." },
-        { label: "Am I Doing This for Ego?", query: "Analyze my task descriptions. Am I doing these for the intrinsic function, or for the reward/recognition (the strengthening of the 'me')?" },
-        { label: "Just The Facts", query: "Summarize my board, but strip away all adjectives, judgments, and anxiety. Just tell me the raw, chronological facts of what must be done today." },
-        { label: "Mirror My Mind", query: "If my task board is a mirror of my mind right now, what does it say about my state of consciousness? Is it fragmented, cluttered, or clear?" },
-        { label: "Stop Accumulating", query: "I have accumulated too much. Help me break down the 'Critical' column into immediate, atomic actions so I can act without the burden of the whole." },
-        { label: "One Thing Completely", query: "Select the single most factually urgent task. Hide everything else. Tell me to do it completely, without the residue of the previous task." }
+        { 
+            label: "Analyze Workload", 
+            query: "Act as a Senior Operations Director. I need a ruthless capacity audit of my board. 1) Sum the total estimated hours. 2) Compare against a realistic 8-hour workday. 3) Identify 'Fake Work' (Low Priority but High Time Estimate). 4) Group tasks by Context and tell me where my energy is leaking. Output as a Markdown report with **Bold** metrics and ### Headers." 
+        },
+        { 
+            label: "What's Critical?", 
+            query: "Act as an ER Triage Nurse. Code Red. Ignore all 'Medium' and 'Low' tasks—they do not exist. Focus ONLY on 'Critical' and 'High'. 1) Are the deadlines realistic? 2) Identify the 'Critical Path'—which task blocks the most others? 3) Rank the top 3 'Must-Do' items to prevent failure. 4) Give me a direct command on the exact first step. Be blunt." 
+        },
+        { 
+            label: "Am I Chasing a Future Self?", 
+            query: "Adopt the persona of J. Krishnamurti. Analyze my list for 'Psychological Time' vs 'Chronological Time'. \n- Functional Action: 'Pay bills', 'Write code'. \n- Becoming/Ambition: 'Become a better leader', 'Get rich', 'Improve myself'. \n\nScan the task titles. Which ones are traps of the ego trying to 'become' something in the future? Warn me about the anxiety of accumulation. Suggest 3 tasks to delete to return to the 'Now'." 
+        },
+        { 
+            label: "What Can Be Deleted?", 
+            query: "Perform a 'Zero-Based' Budgeting audit on my tasks. Assume we are bankrupt on time. The board is wiped clean. You have 4 units of energy. Which tasks would you 'buy back' onto the list? List the chosen few and explain the ROI. For the rest (the bottom 20% or old stale tasks), propose a 'Bankruptcy' action: delete them. List the specific candidates for deletion." 
+        },
+        { 
+            label: "Why am I Delaying?", 
+            query: "Analyze the 'Blocker' and 'In Progress' columns. Look for 'Rotting Tasks' (Status changed > 3 days ago). Diagnoses the root cause: \nA) External (Waiting on others) \nB) Internal (Fear/Perfectionism/Lack of Clarity). \n\nFor the top 2 stuck items, suggest a 'Micro-Action' (2 minutes or less) to break the stasis. Be a behavioral psychologist." 
+        },
+        { 
+            label: "Find Inner Conflict", 
+            query: "Analyze my tasks for competing commitments. Do I have tasks that pull in opposite directions? (e.g., 'Relax' vs 'Grind', 'Save Money' vs 'Buy X', 'Focus Deeply' vs 'Respond to all emails'). Highlight these contradictions. Show me where I am fighting myself and suggest which side of the conflict to drop." 
+        },
+        { 
+            label: "Order vs. Control", 
+            query: "Look at the list structure. Am I organizing for clarity, or just rearranging deck chairs on the Titanic? Check my WIP (Work In Progress). If I have more than 2 items in 'In Progress', demand I move the rest back to 'To Do'. Enforce a WIP limit of 1. Explain why context switching is destroying my IQ." 
+        },
+        { 
+            label: "Am I Doing This for Ego?", 
+            query: "Analyze the semantics of my task titles. Are they 'Input-focused' (e.g., 'Read book', 'Research') or 'Outcome-focused' (e.g., 'Solve problem', 'Ship feature')? Flag tasks that seem to be about maintaining a self-image ('I am a reader') rather than completing a job. Be critical." 
+        },
+        { 
+            label: "Just The Facts", 
+            query: "Strip away all emotion, hope, and anxiety. Give me a raw, chronological list of facts. No adjectives. No 'important'. Just: 'Task X due at Time Y'. 'Task Z blocked by A'. Present the board as a machine would see it. Use a Markdown table with columns: ID, Time, Dependency." 
+        },
+        { 
+            label: "Mirror My Mind", 
+            query: "If this board is a mirror of my mind, describe my current mental state. Is it fragmented? Is it ambitious? Is it fearful (hoarding tasks)? Use the distribution of priorities and the number of overdue tasks as your evidence. Be a philosophical mirror. Use > Blockquotes for the insight." 
+        },
+        { 
+            label: "Stop Accumulating", 
+            query: "I have accumulated too much. I need to subtract. Identify the 3 'High' priority tasks that effectively cancel out the need for 10 'Low' priority tasks. (Pareto Principle). Help me find the leverage point so I can do less but achieve the core result. Tell me what to ignore." 
+        },
+        { 
+            label: "One Thing Completely", 
+            query: "Select the single most factually urgent task. Hide everything else. Tell me to do it completely, without the residue of the previous task and without the anticipation of the next. Provide a breakdown of just this one task into 3 atomic steps and ask me to start step 1." 
+        }
     ];
 
     if (!apiKey) {
