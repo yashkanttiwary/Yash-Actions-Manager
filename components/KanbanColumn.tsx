@@ -47,8 +47,8 @@ const SPACE_TINTS: Record<Status, { body: string, header: string, border: string
 };
 
 // Thresholds for accumulation warnings
-const LIMIT_TODO = 15;
 const LIMIT_IN_PROGRESS = 3;
+const LIMIT_DEFAULT = 5;
 
 export const KanbanColumn: React.FC<KanbanColumnProps> = ({ 
     status, tasks, allTasks, goals, onTaskMove, onEditTask, onAddTask, onQuickAddTask, onSmartAddTask,
@@ -71,10 +71,25 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
     const resizeStartRef = useRef<{ x: number, y: number, w: number, h: number } | null>(null);
 
     // K-Teaching: Accumulation Check
-    const isOverloaded = (status === 'To Do' && tasks.length > LIMIT_TODO) || (status === 'In Progress' && tasks.length > LIMIT_IN_PROGRESS);
-    const overloadMessage = status === 'In Progress' 
-        ? "Fragmentation creates fatigue. One thing at a time."
-        : "Accumulation is a sign to pause. See what is driving this.";
+    // "In Progress" stays strict (3). All others trigger warning at 5.
+    const limit = status === 'In Progress' ? LIMIT_IN_PROGRESS : LIMIT_DEFAULT;
+    const isOverloaded = tasks.length > limit;
+
+    const getOverloadMessage = (s: Status): string => {
+        if (s === 'In Progress') return "Fragmentation creates fatigue. One thing at a time.";
+        
+        switch (s) {
+            case 'To Do': return "The accumulation of the future prevents action in the now.";
+            case 'Review': return "To observe without judgment is the highest form of intelligence.";
+            case 'Blocker': return "Conflict arises when we resist 'what is'.";
+            case 'Hold': return "Psychological time is the enemy of clarity.";
+            case "Won't Complete": return "Negation of the unessential is the beginning of wisdom.";
+            case 'Done': return "Die to the past every moment. Do not carry the burden of achievement.";
+            default: return "Accumulation clouds perception.";
+        }
+    };
+
+    const overloadMessage = getOverloadMessage(status);
 
     // Dynamic styles based on Space Mode
     const containerClasses = isSpaceMode 
@@ -295,7 +310,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
             </div>
             {!isCollapsed && (
                 <>
-                    {/* Accumulation Warning */}
+                    {/* Accumulation Warning - Now applies to ALL columns with specific messages */}
                     {isOverloaded && (
                         <div className="p-3 bg-red-100 dark:bg-red-900/30 border-b border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 text-xs italic font-serif">
                             "{overloadMessage}"
