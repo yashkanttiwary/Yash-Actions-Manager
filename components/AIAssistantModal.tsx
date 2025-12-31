@@ -438,7 +438,10 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                                         {/* Proposal */}
                                         {msg.type === 'proposal' && msg.data && !msg.data.cancelled && (
                                             <>
-                                                <p className="mb-3">{msg.content}</p>
+                                                {/* Use SummaryMessage here to allow markdown rendering even for proposals */}
+                                                <div className="mb-4">
+                                                    <SummaryMessage text={msg.content} />
+                                                </div>
                                                 <ProposalCard 
                                                     diff={msg.data} 
                                                     onConfirm={() => handleProposalConfirm(msg.id, msg.data)}
