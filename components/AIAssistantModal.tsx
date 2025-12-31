@@ -108,9 +108,9 @@ const ProposalCard: React.FC<{ diff: TaskDiff; onConfirm: () => void; onCancel: 
 // --- SUB-COMPONENT: Summary Message ---
 const SummaryMessage: React.FC<{ text: string }> = ({ text }) => {
     return (
-        <div className="prose prose-sm dark:prose-invert max-w-none text-xs bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg border border-gray-100 dark:border-gray-700 whitespace-pre-wrap">
+        <div className="prose prose-sm dark:prose-invert max-w-none text-xs leading-relaxed text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
             {text.split('\n').map((line, i) => {
-                if (line.startsWith('## ')) return <h3 key={i} className="text-indigo-600 dark:text-indigo-400 font-bold mt-2 mb-1">{line.substring(3)}</h3>;
+                if (line.startsWith('## ')) return <h3 key={i} className="text-indigo-600 dark:text-indigo-400 font-bold mt-2 mb-1 text-sm">{line.substring(3)}</h3>;
                 if (line.startsWith('* ')) return <li key={i} className="ml-4">{line.substring(2)}</li>;
                 return <p key={i} className="mb-1">{line}</p>;
             })}
@@ -121,8 +121,9 @@ const SummaryMessage: React.FC<{ text: string }> = ({ text }) => {
 export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({ 
     onClose, onApplyChanges, tasks, apiKey, onSaveApiKey
 }) => {
+    // Initial welcome message isn't shown in the "Hero" view logic, but kept for state consistency if needed
     const [messages, setMessages] = useState<Message[]>([
-        { id: 'welcome', role: 'ai', type: 'text', content: "Hi! I'm your Task Companion. I can help you manage your tasks or just answer questions about them. What's on your mind?" }
+        { id: 'welcome', role: 'ai', type: 'text', content: "Hi! I'm your Task Companion. I can help you manage your tasks or just answer questions about them." }
     ]);
     const [inputValue, setInputValue] = useState('');
     const [isTyping, setIsTyping] = useState(false);
@@ -131,9 +132,9 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
 
     const { isListening, transcript, startListening, stopListening, resetTranscript } = useSpeechRecognition({ continuous: true });
 
-    // Auto-scroll to bottom
+    // Auto-scroll to bottom only if we are in chat mode
     useEffect(() => {
-        if (scrollRef.current) {
+        if (messages.length > 1 && scrollRef.current) {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
     }, [messages, isTyping]);
@@ -193,11 +194,14 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
         setMessages(prev => prev.map(m => m.id === messageId ? { ...m, data: { ...m.data, cancelled: true } } : m));
     };
 
+    // Determine view state
+    const hasStartedChat = messages.length > 1;
+
     const suggestions = [
-        "✨ Add task 'Deploy to Prod' on Friday",
-        "❓ How many tasks are Critical?",
-        "📝 Summarize my 'Work' tasks",
-        "🧹 Clear completed tasks"
+        { label: "Analyze my workload", query: "Summarize my tasks and tell me if I'm overloaded." },
+        { label: "Add 'Deploy' on Friday", query: "Add a high priority task 'Deploy to Prod' for next Friday" },
+        { label: "What's critical?", query: "How many tasks are Critical priority?" },
+        { label: "Clear completed", query: "Delete all tasks that are marked as Done" }
     ];
 
     if (!apiKey) {
@@ -223,127 +227,160 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
     }
 
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 md:p-6" onClick={onClose}>
-            <div className="bg-white dark:bg-gray-900 w-full max-w-2xl h-[80vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700 animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
-                
+        <div className="fixed inset-0 bg-white/30 dark:bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 md:p-6" onClick={onClose}>
+            <div 
+                className="bg-white dark:bg-gray-900 w-full max-w-[500px] h-[650px] max-h-[85vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-white/20 dark:border-gray-700 animate-in zoom-in-95 duration-200 relative" 
+                onClick={e => e.stopPropagation()}
+            >
+                {/* Background Decor */}
+                <div className="absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden z-0">
+                    <div className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-3xl"></div>
+                    <div className="absolute bottom-[-10%] left-[-10%] w-[400px] h-[400px] bg-purple-500/5 rounded-full blur-3xl"></div>
+                </div>
+
                 {/* Header */}
-                <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-800/50">
+                <div className="p-4 flex justify-between items-center z-10">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white shadow-lg">
-                            <i className="fas fa-robot"></i>
-                        </div>
-                        <div>
-                            <h3 className="font-bold text-gray-900 dark:text-white">AI Companion</h3>
-                            <p className="text-xs text-green-500 flex items-center gap-1">
-                                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span> Online
-                            </p>
-                        </div>
+                        <i className="fas fa-sparkles text-indigo-500 text-lg"></i>
+                        <h3 className="font-bold text-gray-900 dark:text-white text-lg">AI Assist</h3>
                     </div>
-                    <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
-                        <i className="fas fa-times text-gray-500"></i>
+                    <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                        <i className="fas fa-times text-gray-400"></i>
                     </button>
                 </div>
 
-                {/* Chat Area */}
-                <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/50 dark:bg-black/20">
-                    {messages.map((msg) => (
-                        <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                            {msg.role === 'ai' && (
-                                <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 mr-2 mt-1 flex-shrink-0">
-                                    <i className="fas fa-robot text-xs"></i>
+                {/* Content Area */}
+                <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-2 z-10 scroll-smooth custom-scrollbar">
+                    
+                    {!hasStartedChat ? (
+                        /* HERO / EMPTY STATE */
+                        <div className="h-full flex flex-col items-center justify-center text-center pb-12 animate-fadeIn">
+                            <div className="relative mb-6">
+                                <div className="absolute inset-0 bg-blue-500/20 blur-2xl rounded-full"></div>
+                                <div className="relative w-20 h-20 bg-gradient-to-tr from-blue-100 to-indigo-100 dark:from-indigo-900/50 dark:to-blue-900/50 rounded-full flex items-center justify-center shadow-lg border border-white/50 dark:border-white/10">
+                                    <i className="fas fa-robot text-3xl text-indigo-600 dark:text-indigo-400"></i>
                                 </div>
-                            )}
+                            </div>
                             
-                            <div className={`max-w-[85%] rounded-2xl p-3 shadow-sm text-sm ${
-                                msg.role === 'user' 
-                                    ? 'bg-indigo-600 text-white rounded-br-none' 
-                                    : msg.role === 'system' 
-                                        ? 'bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400 italic text-xs text-center w-full shadow-none bg-transparent'
-                                        : 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-bl-none border border-gray-100 dark:border-gray-700'
-                            }`}>
-                                {/* Text Message (Normal Chat) */}
-                                {msg.type === 'text' && <SummaryMessage text={msg.content} />}
-                                
-                                {/* Summary Data (Explicit Summary) */}
-                                {msg.type === 'summary' && <SummaryMessage text={msg.data} />}
-                                
-                                {/* Proposal Card (Actions) */}
-                                {msg.type === 'proposal' && msg.data && !msg.data.cancelled && (
-                                    <>
-                                        <p className="mb-2">{msg.content}</p>
-                                        <ProposalCard 
-                                            diff={msg.data} 
-                                            onConfirm={() => handleProposalConfirm(msg.id, msg.data)}
-                                            onCancel={() => handleProposalCancel(msg.id)}
-                                            isConfirmed={msg.data.confirmed}
-                                        />
-                                    </>
-                                )}
-                                {msg.data?.cancelled && <p className="text-gray-400 italic strike-through">Action Cancelled</p>}
+                            <h2 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                                How can I help you today?
+                            </h2>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-8 max-w-xs leading-relaxed">
+                                I can organize your tasks, analyze your workload, or help you break down complex goals.
+                            </p>
+
+                            <div className="w-full space-y-2">
+                                {suggestions.map((s, i) => (
+                                    <button 
+                                        key={i}
+                                        onClick={() => handleSendMessage(s.query)}
+                                        className="w-full text-left p-3 rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800 hover:shadow-sm transition-all group flex items-center justify-between"
+                                    >
+                                        <span className="text-xs font-medium text-gray-700 dark:text-gray-200">{s.label}</span>
+                                        <i className="fas fa-arrow-right text-[10px] text-gray-300 group-hover:text-indigo-500 transition-colors opacity-0 group-hover:opacity-100 transform -translate-x-2 group-hover:translate-x-0 duration-200"></i>
+                                    </button>
+                                ))}
                             </div>
                         </div>
-                    ))}
-                    
-                    {isTyping && (
-                        <div className="flex justify-start">
-                            <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 mr-2">
-                                <i className="fas fa-robot text-xs"></i>
-                            </div>
-                            <div className="bg-white dark:bg-gray-800 p-3 rounded-2xl rounded-bl-none border border-gray-100 dark:border-gray-700 flex gap-1 items-center">
-                                <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></div>
-                                <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-75"></div>
-                                <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-150"></div>
-                            </div>
+                    ) : (
+                        /* CHAT HISTORY */
+                        <div className="space-y-6 pb-4">
+                            {messages.slice(1).map((msg) => (
+                                <div key={msg.id} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                                    <div className={`max-w-[90%] md:max-w-[85%] rounded-2xl p-3 text-sm shadow-sm ${
+                                        msg.role === 'user' 
+                                            ? 'bg-indigo-600 text-white rounded-br-none' 
+                                            : msg.role === 'system' 
+                                                ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-800 w-full text-center italic'
+                                                : 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-bl-none border border-gray-100 dark:border-gray-700'
+                                    }`}>
+                                        {/* Content */}
+                                        {msg.type === 'text' && (
+                                            msg.role === 'user' 
+                                            ? <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                                            : <SummaryMessage text={msg.content} />
+                                        )}
+                                        
+                                        {/* Proposal */}
+                                        {msg.type === 'proposal' && msg.data && !msg.data.cancelled && (
+                                            <>
+                                                <p className="mb-3">{msg.content}</p>
+                                                <ProposalCard 
+                                                    diff={msg.data} 
+                                                    onConfirm={() => handleProposalConfirm(msg.id, msg.data)}
+                                                    onCancel={() => handleProposalCancel(msg.id)}
+                                                    isConfirmed={msg.data.confirmed}
+                                                />
+                                            </>
+                                        )}
+                                        {msg.data?.cancelled && <p className="text-gray-400 italic line-through text-xs mt-1">Action Cancelled</p>}
+                                    </div>
+                                    {msg.role === 'ai' && (
+                                        <span className="text-[10px] text-gray-400 mt-1 ml-2">AI Assistant</span>
+                                    )}
+                                </div>
+                            ))}
+                            
+                            {isTyping && (
+                                <div className="flex justify-start animate-fadeIn">
+                                    <div className="bg-white dark:bg-gray-800 px-4 py-3 rounded-2xl rounded-bl-none border border-gray-100 dark:border-gray-700 shadow-sm flex items-center gap-3">
+                                        {/* Animated Gradient Sparkle Icon */}
+                                        <div className="relative flex items-center justify-center w-5 h-5">
+                                            <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-full animate-ping opacity-25"></div>
+                                            <i className="fas fa-sparkles text-transparent bg-clip-text bg-gradient-to-tr from-indigo-500 to-purple-500 text-sm animate-pulse"></i>
+                                        </div>
+                                        
+                                        {/* Pulse Text */}
+                                        <div className="text-xs font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-purple-600 animate-pulse">
+                                            Thinking...
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
 
-                {/* Suggestions (Only if emptyish) */}
-                {messages.length < 3 && !isTyping && (
-                    <div className="px-4 pb-2">
-                        <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-                            {suggestions.map((s, i) => (
-                                <button 
-                                    key={i} 
-                                    onClick={() => handleSendMessage(s.replace(/✨ |❓ |📝 |🧹 /g, ''))}
-                                    className="whitespace-nowrap px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full text-xs font-medium text-gray-600 dark:text-gray-300 hover:border-indigo-400 hover:text-indigo-500 transition-colors shadow-sm"
-                                >
-                                    {s}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* Input Bar */}
-                <div className="p-4 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
-                    <form onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} className="relative flex items-center gap-2">
-                        <div className="relative flex-grow">
-                            <input
-                                type="text"
-                                value={inputValue}
-                                onChange={(e) => setInputValue(e.target.value)}
-                                placeholder="Type a command..."
-                                className="w-full pl-4 pr-10 py-3 bg-gray-100 dark:bg-gray-800 rounded-xl border-none focus:ring-2 focus:ring-indigo-500 text-gray-900 dark:text-white placeholder-gray-500"
-                                disabled={isTyping}
-                                autoFocus
-                            />
+                {/* Input Area - Floating Pill */}
+                <div className="p-5 pt-2 z-20">
+                    <form 
+                        onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} 
+                        className={`relative flex items-center gap-2 bg-white dark:bg-gray-800 p-1.5 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-100 dark:border-gray-700 transition-shadow hover:shadow-[0_8px_30px_rgb(0,0,0,0.16)] ${isListening ? 'ring-2 ring-red-500' : 'focus-within:ring-2 focus-within:ring-indigo-500/50'}`}
+                    >
+                        <input
+                            type="text"
+                            value={inputValue}
+                            onChange={(e) => setInputValue(e.target.value)}
+                            placeholder="Ask me anything..."
+                            className="flex-grow pl-4 py-2 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-gray-800 dark:text-white placeholder-gray-400 text-sm"
+                            disabled={isTyping}
+                            autoFocus
+                        />
+                        
+                        <div className="flex items-center gap-1 pr-1">
                             <button
                                 type="button"
                                 onClick={isListening ? stopListening : startListening}
-                                className={`absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-lg transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : 'text-gray-400 hover:text-indigo-500'}`}
+                                className={`w-8 h-8 flex items-center justify-center rounded-full transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-600'}`}
+                                title="Voice Input"
                             >
                                 <i className={`fas ${isListening ? 'fa-stop' : 'fa-microphone'}`}></i>
                             </button>
+                            
+                            <button 
+                                type="submit" 
+                                disabled={!inputValue.trim() || isTyping}
+                                className="w-8 h-8 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full flex items-center justify-center transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+                            >
+                                <i className="fas fa-paper-plane text-xs transform translate-x-px translate-y-px"></i>
+                            </button>
                         </div>
-                        <button 
-                            type="submit" 
-                            disabled={!inputValue.trim() || isTyping}
-                            className="w-12 h-12 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl flex items-center justify-center transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-indigo-500/30"
-                        >
-                            <i className="fas fa-paper-plane"></i>
-                        </button>
                     </form>
+                    <div className="text-center mt-2">
+                        <p className="text-[9px] text-gray-400 dark:text-gray-500">
+                            AI can make mistakes. Review generated actions.
+                        </p>
+                    </div>
                 </div>
             </div>
         </div>
