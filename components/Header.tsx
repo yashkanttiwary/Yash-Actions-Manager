@@ -403,7 +403,7 @@ export const Header: React.FC<HeaderProps> = ({
                                 </button>
                             </h1>
                         ) : (
-                            <h1 className={`text-xl font-bold tracking-wider hidden sm:block ${isSpaceVisualsActive ? 'text-white' : ''}`}>The Mirror</h1>
+                            <h1 className={`text-xl font-bold tracking-wider hidden sm:block ${isSpaceVisualsActive ? 'text-white' : ''}`}>Practical Order</h1>
                         )}
                         
                         <div className="flex items-center space-x-2 sm:space-x-3 flex-wrap gap-y-2">
