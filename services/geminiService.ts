@@ -2,7 +2,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Task, Subtask, Goal, TaskDiff } from '../types'; 
 import { getEnvVar } from '../utils/env';
-import { AI_MODELS } from '../constants'; // L-02
+import { AI_MODELS } from '../constants';
 
 export type { TaskDiff };
 
@@ -16,52 +16,55 @@ const getApiKey = (userApiKey?: string): string => {
 };
 
 // Robust JSON Parsing Helper
+// MED-002 FIX: Better extraction logic
 const safeParseJSON = (text: string) => {
     if (!text) throw new Error("Empty response from AI");
     
-    // 1. Try direct parse
+    // 1. Try direct parse (Best Case)
     try {
         return JSON.parse(text);
     } catch (e) {
-        // 2. Try extracting from markdown code block
-        const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-        if (match && match[1]) {
-            try {
-                return JSON.parse(match[1]);
-            } catch (e2) {
-                // fall through
-            }
-        }
-        
-        // 3. Try finding first { and last } or [ and ]
-        const firstOpenBrace = text.indexOf('{');
-        const lastCloseBrace = text.lastIndexOf('}');
-        const firstOpenBracket = text.indexOf('[');
-        const lastCloseBracket = text.lastIndexOf(']');
-        
-        // Determine if it's likely an object or array
-        let start = -1;
-        let end = -1;
-        
-        if (firstOpenBrace !== -1 && (firstOpenBracket === -1 || firstOpenBrace < firstOpenBracket)) {
-            start = firstOpenBrace;
-            end = lastCloseBrace;
-        } else if (firstOpenBracket !== -1) {
-            start = firstOpenBracket;
-            end = lastCloseBracket;
-        }
-
-        if (start !== -1 && end !== -1) {
-             try {
-                return JSON.parse(text.substring(start, end + 1));
-            } catch (e3) {
-                // fall through
-            }
-        }
-        
-        console.error("Failed to parse JSON:", text);
-        throw new Error("Failed to parse AI response as JSON. Response might be malformed.");
+        // Continue to fallback strategies
     }
+
+    // 2. Try extracting from markdown code block (Common AI pattern)
+    const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (match && match[1]) {
+        try {
+            return JSON.parse(match[1]);
+        } catch (e2) {
+            // Fallback
+        }
+    }
+    
+    // 3. Robust Search for JSON object or array
+    // Find the first '{' or '['
+    const firstOpenBrace = text.indexOf('{');
+    const firstOpenBracket = text.indexOf('[');
+    
+    let start = -1;
+    let end = -1;
+    
+    // Determine if we are looking for object or array
+    if (firstOpenBrace !== -1 && (firstOpenBracket === -1 || firstOpenBrace < firstOpenBracket)) {
+        start = firstOpenBrace;
+        end = text.lastIndexOf('}');
+    } else if (firstOpenBracket !== -1) {
+        start = firstOpenBracket;
+        end = text.lastIndexOf(']');
+    }
+
+    if (start !== -1 && end !== -1 && end > start) {
+         const jsonCandidate = text.substring(start, end + 1);
+         try {
+            return JSON.parse(jsonCandidate);
+        } catch (e3) {
+            console.error("Failed to parse extracted JSON candidate:", jsonCandidate);
+        }
+    }
+    
+    console.error("Critical JSON Parsing Failure. Raw Text:", text);
+    throw new Error("Failed to parse AI response. The model output was not valid JSON.");
 };
 
 // --- SCHEMA DEFINITIONS ---

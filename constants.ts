@@ -3,12 +3,12 @@ import { Status, Priority } from './types';
 
 export const UNASSIGNED_GOAL_ID = 'unassigned';
 
-// L-02: Centralized AI Models
+// L-02: Centralized AI Models - UPDATED to Gemini 3 Series
 export const AI_MODELS = {
     // Best model for complex reasoning and JSON structure compliance
-    SMART: "gemini-2.0-flash", 
+    SMART: "gemini-3-pro-preview", 
     // Faster model for simple summaries
-    FAST: "gemini-2.0-flash", 
+    FAST: "gemini-3-flash-preview", 
 };
 
 export const COLUMN_STATUSES: Status[] = [

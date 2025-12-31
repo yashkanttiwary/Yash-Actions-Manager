@@ -271,14 +271,16 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
 
         const msPerPx = tickMs / config.width;
         
-        let cols: { label: string, subLabel?: string, isToday?: boolean, date: Date }[] = [];
+        let cols: { label: string, subLabel?: string, isToday?: boolean }[] = [];
         
-        const current = new Date(start);
+        // LOW-001 FIX: Use timestamp integer loop
+        let currentMs = start.getTime();
         const endMs = end.getTime();
         const nowInZoneStr = accurateNow.toLocaleDateString('en-US', { timeZone: timezone });
 
-        while (current.getTime() <= endMs) {
-            const dateObj = new Date(current);
+        while (currentMs <= endMs) {
+            // Only create Date object inside loop for formatting, then discard
+            const dateObj = new Date(currentMs);
             let label = '';
             let subLabel = '';
 
@@ -302,11 +304,10 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
             cols.push({
                 label,
                 subLabel,
-                isToday: colDateStr === nowInZoneStr,
-                date: dateObj
+                isToday: colDateStr === nowInZoneStr
             });
 
-            current.setTime(current.getTime() + tickMs);
+            currentMs += tickMs;
         }
 
         return { 

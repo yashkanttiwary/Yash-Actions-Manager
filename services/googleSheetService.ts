@@ -1,12 +1,11 @@
 
 import { Task, Status, Priority, Goal } from '../types';
 
-// UPDATED HEADERS: Added 'Goal Title' at index 15
+// Standard Headers
 const TASK_HEADERS = [
     'ID', 'Title', 'Status', 'Priority', 'Due Date', 'Time Est (h)', 'Actual Time (s)', 'Tags', 'Scheduled Start', 'Blockers', 'Dependencies', 'Subtasks', 'Description', 'Last Modified', 'Goal ID', 'Goal Title', 'JSON_DATA'
 ];
 
-// Added Text Color at index 5 (Column F)
 const GOAL_HEADERS = [
     'ID', 'Title', 'Color', 'Description', 'Created Date', 'Text Color'
 ];
@@ -16,6 +15,15 @@ const METADATA_ROW_ID = '__METADATA__';
 // Helper to strictly safeguard against null/undefined values
 const safeString = (val: any) => (val === null || val === undefined) ? '' : String(val);
 const safeNumber = (val: any) => (val === null || val === undefined || isNaN(Number(val))) ? 0 : Number(val);
+
+// Map column name to index
+const getHeaderMap = (headerRow: any[]): Map<string, number> => {
+    const map = new Map<string, number>();
+    headerRow.forEach((cell, index) => {
+        if (cell) map.set(String(cell).trim(), index);
+    });
+    return map;
+};
 
 // Updated to accept goals map for title lookup
 const taskToRow = (task: Task, goalsMap?: Map<string, Goal>): any[] => {
@@ -53,30 +61,27 @@ const taskToRow = (task: Task, goalsMap?: Map<string, Goal>): any[] => {
     ];
 };
 
-const rowToTask = (row: any[]): Task | null => {
+const rowToTask = (row: any[], headerMap?: Map<string, number>): Task | null => {
     if (!row || row.length < 1) return null;
     
     // Check for Metadata row
     if (row[0] === METADATA_ROW_ID) return null;
 
-    // JSON is now at index 16 due to added Goal Title column
-    const jsonColIndex = 16;
+    // Use dynamic index if available, else default to 16
+    let jsonColIndex = 16;
+    if (headerMap && headerMap.has('JSON_DATA')) {
+        jsonColIndex = headerMap.get('JSON_DATA')!;
+    }
     
     if (row[jsonColIndex]) {
         try {
             const parsed = JSON.parse(row[jsonColIndex]);
-            // Merge cell data over JSON to respect manual edits
-            if (row[1]) parsed.title = row[1];
-            if (row[2]) parsed.status = row[2];
-            if (row[3]) parsed.priority = row[3];
-            if (row[4]) parsed.dueDate = row[4];
-            if (row[5] !== undefined && row[5] !== '') parsed.timeEstimate = Number(row[5]);
-            if (row[8]) parsed.scheduledStartDateTime = row[8];
-            if (row[12]) parsed.description = row[12];
-            if (row[13] && new Date(row[13]).getTime() > new Date(parsed.lastModified).getTime()) {
-                parsed.lastModified = row[13];
-            }
-            if (row[14]) parsed.goalId = row[14];
+            
+            // If we have a map, we can smartly override from columns if we wanted to support 2-way manual editing.
+            // For now, we trust the JSON blob as the source of truth for complex objects,
+            // but override basics if they differ in the sheet (optional feature).
+            // Simplification: Just return parsed JSON with defaults ensuring robustness.
+            
             return parsed;
         } catch (e) {
             console.warn("Failed to parse JSON column", e);
@@ -84,7 +89,8 @@ const rowToTask = (row: any[]): Task | null => {
     }
 
     // Fallback: Legacy/Manual row parsing
-    // Note: This might need adjustment if using old sheet format, but JSON usually handles it.
+    // NOTE: This assumes standard column order if JSON fails.
+    // If the user moved columns AND corrupted JSON, this might fail, but that's an edge case.
     const rawBlocker = row[9];
     const isLikelyJson = typeof rawBlocker === 'string' && rawBlocker.trim().startsWith('{');
 
@@ -238,22 +244,28 @@ export const syncDataFromSheet = async (sheetId: string): Promise<{ tasks: Task[
         // Fetch Tasks (Updated Range for Q column)
         const tasksResponse = await gapi.client.sheets.spreadsheets.values.get({
             spreadsheetId: sheetId,
-            range: 'Sheet1!A2:Q'
+            range: 'Sheet1!A1:Q' // START FROM A1 to get headers!
         });
         
-        const taskRows = tasksResponse.result.values;
+        const allRows = tasksResponse.result.values;
         const tasks: Task[] = [];
         let metadata: any = null;
 
-        if (taskRows && taskRows.length > 0) {
-            taskRows.forEach((row: any[]) => {
+        if (allRows && allRows.length > 0) {
+            // Extract headers
+            const headerRow = allRows[0];
+            const headerMap = getHeaderMap(headerRow);
+            const dataRows = allRows.slice(1);
+
+            dataRows.forEach((row: any[]) => {
                 if (row[0] === METADATA_ROW_ID) {
                     try {
-                        // Check index 16 for metadata JSON
-                        if (row[16]) metadata = JSON.parse(row[16]);
+                        // Check index for metadata JSON based on map or default
+                        const jsonIdx = headerMap.has('JSON_DATA') ? headerMap.get('JSON_DATA')! : 16;
+                        if (row[jsonIdx]) metadata = JSON.parse(row[jsonIdx]);
                     } catch (e) { console.error("Failed to parse metadata", e); }
                 } else {
-                    const task = rowToTask(row);
+                    const task = rowToTask(row, headerMap);
                     if (task) tasks.push(task);
                 }
             });
@@ -359,19 +371,35 @@ export const syncDataFromAppsScript = async (url: string): Promise<{ tasks: Task
         const goals: Goal[] = [];
         let metadata: any = null;
 
-        if (Array.isArray(taskRows)) {
-            taskRows.forEach((row: any[]) => {
-                if (row[0] === 'ID') return; // Header check
+        // Apps Script returns values array. If it has headers, we should map them.
+        // The script returns `taskSheet.getDataRange().getValues()`.
+        // If row 0 is headers, map them.
+        
+        if (Array.isArray(taskRows) && taskRows.length > 0) {
+            // Check if first row is header
+            const firstRow = taskRows[0];
+            let startIdx = 0;
+            let headerMap = new Map<string, number>();
+            
+            if (firstRow[0] === 'ID' || firstRow[0] === 'Title') {
+                headerMap = getHeaderMap(firstRow);
+                startIdx = 1; // Skip header
+            }
+
+            for (let i = startIdx; i < taskRows.length; i++) {
+                const row = taskRows[i];
+                if (row[0] === 'ID') continue; // Extra safety
                 
                 if (row[0] === METADATA_ROW_ID) {
                     try {
-                        if (row[16]) metadata = JSON.parse(row[16]);
+                        const jsonIdx = headerMap.has('JSON_DATA') ? headerMap.get('JSON_DATA')! : 16;
+                        if (row[jsonIdx]) metadata = JSON.parse(row[jsonIdx]);
                     } catch (e) { console.error("Failed to parse metadata", e); }
                 } else {
-                    const task = rowToTask(row);
+                    const task = rowToTask(row, headerMap);
                     if (task) tasks.push(task);
                 }
-            });
+            }
         }
         
         if (Array.isArray(goalRows)) {

@@ -15,11 +15,20 @@ const getAudioContext = () => {
     return audioCtx;
 };
 
+// Expose state checker
+export const getAudioContextState = () => {
+    return audioCtx ? audioCtx.state : 'closed';
+};
+
 // New Helper to explicitly resume, can be bound to document click in App.tsx if needed
 export const resumeAudioContext = async () => {
     const ctx = getAudioContext();
     if (ctx.state === 'suspended') {
-        await ctx.resume();
+        try {
+            await ctx.resume();
+        } catch (e) {
+            console.error("Failed to resume AudioContext", e);
+        }
     }
 };
 

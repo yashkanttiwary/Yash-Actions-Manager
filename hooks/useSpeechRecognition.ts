@@ -22,7 +22,7 @@ export const useSpeechRecognition = (props?: UseSpeechRecognitionProps) => {
     // Store accumulated final results here to prevent loss during pauses
     const finalTranscriptBuffer = useRef('');
 
-    // Initialize only once
+    // Re-initialize when continuous prop changes
     useEffect(() => {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRecognition) {
@@ -34,8 +34,6 @@ export const useSpeechRecognition = (props?: UseSpeechRecognitionProps) => {
             recognition.onstart = () => {
                 setIsListening(true);
                 setError(null);
-                // Don't clear buffer on start to allow appending, 
-                // but usually we want a fresh start. Let's clear in startListening.
             };
 
             recognition.onend = () => {
@@ -79,7 +77,18 @@ export const useSpeechRecognition = (props?: UseSpeechRecognitionProps) => {
         } else {
             setError("Browser not supported");
         }
-    }, []); 
+
+        // Cleanup on unmount or prop change
+        return () => {
+            if (recognitionRef.current) {
+                try {
+                    recognitionRef.current.stop();
+                } catch(e) {
+                    // Ignore error if already stopped
+                }
+            }
+        };
+    }, [props?.continuous]); // REACTIVE DEPENDENCY
 
     const startListening = useCallback(() => {
         if (recognitionRef.current && !isListening) {
@@ -87,6 +96,7 @@ export const useSpeechRecognition = (props?: UseSpeechRecognitionProps) => {
             finalTranscriptBuffer.current = '';
             setTranscript('');
             
+            // Ensure continuous setting is current
             if (props?.continuous !== undefined) {
                 recognitionRef.current.continuous = props.continuous;
             }
