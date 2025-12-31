@@ -348,7 +348,7 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
                     
                     {/* Context Selector */}
                     <div>
-                        <label htmlFor="task-goal" className={labelClasses}>Assigned Context</label>
+                        <label htmlFor="task-goal" className={labelClasses}>Context</label>
                         <div className="relative">
                             {isCreatingGoal ? (
                                 <div className="flex gap-2 animate-fadeIn">
@@ -396,7 +396,7 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
                                     }} 
                                     className={inputClasses}
                                 >
-                                    <option value="">Unassigned</option>
+                                    <option value="">General</option>
                                     {availableGoals.map(g => (
                                         <option key={g.id} value={g.id}>{g.title}</option>
                                     ))}
@@ -453,7 +453,7 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
                             className={`${inputClasses} h-20 ${showBlockerWarning ? 'border-amber-500 focus:ring-amber-500' : ''}`}
                         />
                         {showBlockerWarning && (
-                            <p className="text-amber-600 dark:text-amber-400 text-xs mt-1 font-bold">
+                            <p className="text-stone-500 dark:text-stone-400 text-xs mt-1 font-bold">
                                 <i className="fas fa-exclamation-triangle mr-1"></i>
                                 Moving to 'Blocker' column.
                             </p>

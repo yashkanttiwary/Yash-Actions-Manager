@@ -13,6 +13,7 @@ export interface Goal {
     description?: string;
     createdDate: string;
     progress?: number; // Calculated field (0-100)
+    entropy?: number; // New: Measure of disorder/accumulation (0-100)
 }
 
 export interface Subtask {
@@ -62,6 +63,10 @@ export interface Task {
   focusOrder?: number; // Manual ordering for Focus View
   // K-Teaching: Separation of Action and Observation
   type?: TaskType;
+  
+  // THE MIRROR: Psychological Analysis
+  isBecoming?: boolean; // True if task is about "becoming" (future self) vs "doing" (action)
+  becomingWarning?: string; // The AI's explanation of the trap
 }
 
 // Added TaskDiff here to be shared

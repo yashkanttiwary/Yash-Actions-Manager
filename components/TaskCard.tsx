@@ -91,6 +91,12 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
         ? `Blocked by: ${task.dependencies?.map(depId => allTasks.find(t => t.id === depId)?.title).filter(Boolean).join(', ')}`
         : '';
 
+    // THE MIRROR: Psychological Warning Styling
+    const isBecoming = task.isBecoming;
+    const becomingClasses = isBecoming 
+        ? 'ring-2 ring-red-500 shadow-[0_0_15px_rgba(239,68,68,0.4)]' 
+        : '';
+
     useEffect(() => {
         if (isActiveTimer && task.currentSessionStartTime) {
              const interval = setInterval(() => {
@@ -190,7 +196,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                 aria-label={isActiveTimer ? 'Pause timer' : 'Start timer'}
                 disabled={isBlockedByDep}
             >
-                <i className={`fas fa-fw ${isActiveTimer ? 'fa-pause text-red-500' : 'fa-play text-green-500'} ${compact ? 'text-xs' : ''}`}></i>
+                <i className={`fas fa-fw ${isActiveTimer ? 'fa-pause text-neutral-600 dark:text-neutral-300' : 'fa-play text-neutral-600 dark:text-neutral-300'} ${compact ? 'text-xs' : ''}`}></i>
                 {isActiveTimer && <span className="text-xs font-mono animate-pulse">{new Date(currentSessionTime).toISOString().substr(14, 5)}</span>}
             </button>
         );
@@ -232,10 +238,10 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
                 data-task-id={task.id}
-                className={`group task-card relative bg-white dark:bg-gray-800 rounded-md p-2 border border-gray-200 dark:border-gray-700 shadow-sm ${cardCursorClass} hover:shadow-md ${statusStyle.cardBorder} ${isBlockedByDep ? 'opacity-60 saturate-50' : ''}`}
+                className={`group task-card relative bg-white dark:bg-gray-800 rounded-md p-2 border border-gray-200 dark:border-gray-700 shadow-sm ${cardCursorClass} hover:shadow-md ${statusStyle.cardBorder} ${isBlockedByDep ? 'opacity-60 saturate-50' : ''} ${becomingClasses}`}
                 onClick={handleCardClick}
                 onContextMenu={handleContextMenu}
-                title={`${task.title} (Priority: ${task.priority})`}
+                title={`${task.title} (Priority: ${task.priority}) ${isBecoming ? '- Becoming Trap Detected' : ''}`}
                 role="article"
                 aria-label={`Task: ${task.title}`}
             >
@@ -251,7 +257,11 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                              </div>
                          )}
                          
-                         <span className={`text-sm font-medium text-gray-800 dark:text-gray-100 truncate`}>
+                         {isBecoming && (
+                             <i className="fas fa-biohazard text-red-500 text-xs flex-shrink-0 animate-pulse" title="Becoming Trap: This implies future psychological accumulation."></i>
+                         )}
+
+                         <span className={`text-sm font-medium text-gray-800 dark:text-gray-100 truncate ${isBecoming ? 'italic text-red-900 dark:text-red-200' : ''}`}>
                              {task.title}
                          </span>
                     </div>
@@ -260,7 +270,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                     <div className="flex items-center gap-2 flex-shrink-0">
                         {/* Pin Icon Indicator (No Button) */}
                         {task.isPinned && (
-                            <i className="fas fa-thumbtack text-[10px] text-indigo-500 transform rotate-45" title="Pinned to Focus"></i>
+                            <i className="fas fa-thumbtack text-[10px] text-neutral-500 transform rotate-45" title="Pinned to Focus"></i>
                         )}
 
                         {/* Priority Badge */}
@@ -279,7 +289,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
 
                         {/* Status/Blocker Icons */}
                         {activeBlocker && (
-                            <i className="fas fa-exclamation-triangle text-red-500 text-xs" title={`Blocked: ${activeBlocker.reason}`}></i>
+                            <i className="fas fa-exclamation-triangle text-stone-500 text-xs" title={`Blocked: ${activeBlocker.reason}`}></i>
                         )}
                         
                         {totalSubtasks > 0 && (
@@ -319,7 +329,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
             data-task-id={task.id}
-            className={`group task-card task-card-tilt relative bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700 shadow-md ${cardCursorClass} ${priorityClasses.glow} hover:shadow-2xl ${statusStyle.cardBorder} ${isBlockedByDep ? 'opacity-60 saturate-50' : ''}`}
+            className={`group task-card task-card-tilt relative bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700 shadow-md ${cardCursorClass} ${priorityClasses.glow} hover:shadow-2xl ${statusStyle.cardBorder} ${isBlockedByDep ? 'opacity-60 saturate-50' : ''} ${becomingClasses}`}
             onClick={handleCardClick}
             onContextMenu={handleContextMenu}
             title={`Priority: ${task.priority}`}
@@ -329,7 +339,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
             <div className="relative z-10">
                 {/* Header */}
                 <div className="flex justify-between items-start gap-2">
-                    <h3 className="font-bold text-gray-800 dark:text-gray-100 flex-1 flex items-center gap-2 min-w-0 text-base">
+                    <h3 className={`font-bold text-gray-800 dark:text-gray-100 flex-1 flex items-center gap-2 min-w-0 text-base ${isBecoming ? 'italic text-red-700 dark:text-red-300' : ''}`}>
                          {isBlockedByDep ? (
                              <i className="fas fa-lock text-xs text-amber-500 flex-shrink-0" title={blockerTooltip}></i>
                          ) : (
@@ -337,13 +347,14 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                                 <i className="fas fa-grip-vertical"></i>
                             </div>
                          )}
+                         {isBecoming && <i className="fas fa-biohazard text-red-500 animate-pulse"></i>}
                         <span className="break-words leading-tight">{task.title}</span>
                     </h3>
                     
                     <div className="flex items-center gap-1 flex-shrink-0 relative z-20">
                         {/* Pin Indicator */}
                         {task.isPinned && (
-                            <i className="fas fa-thumbtack text-xs text-indigo-500 transform rotate-45 mr-1" title="Pinned"></i>
+                            <i className="fas fa-thumbtack text-xs text-neutral-500 transform rotate-45 mr-1" title="Pinned"></i>
                         )}
 
                         {/* Priority First */}
@@ -377,6 +388,13 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                     </div>
                 </div>
                 
+                {/* WARNING MESSAGE FOR BECOMING */}
+                {isBecoming && task.becomingWarning && (
+                    <div className="mt-2 p-2 bg-red-100 dark:bg-red-900/30 border-l-2 border-red-500 text-xs italic text-red-800 dark:text-red-200">
+                        <i className="fas fa-exclamation-circle mr-1"></i> {task.becomingWarning}
+                    </div>
+                )}
+                
                 {task.description && (
                     <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 line-clamp-3">
                         {task.description}
@@ -384,11 +402,11 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                 )}
 
                 {activeBlocker && (
-                     <div className="mt-2 p-2 bg-red-50 dark:bg-red-900/20 rounded-md border border-red-200 dark:border-red-800">
-                        <p className="text-xs font-bold text-red-600 dark:text-red-400 flex items-center gap-1">
+                     <div className="mt-2 p-2 bg-stone-100 dark:bg-stone-900/20 rounded-md border border-stone-200 dark:border-stone-800">
+                        <p className="text-xs font-bold text-stone-600 dark:text-stone-400 flex items-center gap-1">
                             <i className="fas fa-exclamation-triangle"></i> Blocker
                         </p>
-                        <p className="text-xs text-red-500 dark:text-red-300 mt-0.5">{activeBlocker.reason}</p>
+                        <p className="text-xs text-stone-500 dark:text-stone-300 mt-0.5">{activeBlocker.reason}</p>
                      </div>
                 )}
                 
@@ -398,7 +416,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                     ))}
                 </div>
 
-                {/* Subtasks Section with "I'm Stuck" */}
+                {/* Subtasks Section */}
                 <div className="mt-3 bg-gray-50 dark:bg-gray-900/50 rounded-md p-2 relative">
                     <div className="flex justify-between items-center text-xs text-gray-500 dark:text-gray-400 mb-1.5">
                         <span className="font-semibold">Subtasks</span>
@@ -409,7 +427,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                                 <button
                                     onClick={handleStuckClick}
                                     disabled={isBreakingDown}
-                                    className={`w-5 h-5 flex items-center justify-center rounded-full transition-all border ${isBreakingDown ? 'border-transparent' : 'border-indigo-200 dark:border-indigo-800 hover:border-indigo-400 bg-white dark:bg-gray-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 text-indigo-500'}`}
+                                    className={`w-5 h-5 flex items-center justify-center rounded-full transition-all border ${isBreakingDown ? 'border-transparent' : 'border-neutral-200 dark:border-neutral-800 hover:border-neutral-400 bg-white dark:bg-gray-800 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 text-neutral-500'}`}
                                     title="I'm Stuck (Break down task)"
                                 >
                                     {isBreakingDown ? (
@@ -423,7 +441,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                     </div>
                     {totalSubtasks > 0 && (
                         <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mb-2">
-                            <div className="bg-green-500 h-1.5 rounded-full transition-all duration-300" style={{ width: `${subtaskProgress}%` }}></div>
+                            <div className="bg-emerald-500 h-1.5 rounded-full transition-all duration-300" style={{ width: `${subtaskProgress}%` }}></div>
                         </div>
                     )}
                     {/* Interactive Subtask List (Preview) */}
@@ -435,7 +453,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                                     className="flex items-center gap-2 text-xs hover:bg-gray-200 dark:hover:bg-gray-700/50 p-1 rounded cursor-pointer transition-colors group/subtask"
                                     onClick={(e) => handleSubtaskClick(e, st.id)}
                                 >
-                                    <div className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center transition-colors ${st.isCompleted ? 'bg-green-500 border-green-600' : 'bg-white dark:bg-gray-800 border-gray-400 group-hover/subtask:border-indigo-400'}`}>
+                                    <div className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center transition-colors ${st.isCompleted ? 'bg-emerald-500 border-emerald-600' : 'bg-white dark:bg-gray-800 border-gray-400 group-hover/subtask:border-indigo-400'}`}>
                                         {st.isCompleted && <i className="fas fa-check text-white text-[8px]"></i>}
                                     </div>
                                     <span className={`truncate ${st.isCompleted ? 'line-through text-gray-400' : 'text-gray-600 dark:text-gray-300'}`}>{st.title}</span>
@@ -449,9 +467,9 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                 </div>
                 
                 <div className="mt-3 flex justify-between items-center text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-700/50 pt-2">
-                    <span className={`flex items-center ${isDatePassed ? 'text-amber-600 dark:text-amber-500 font-bold' : ''}`}>
+                    <span className={`flex items-center ${isDatePassed ? 'text-gray-500 italic' : ''}`}>
                         <i className="far fa-calendar-alt mr-1.5"></i>
-                        {isDatePassed ? `Review: ${new Date(task.dueDate).toLocaleDateString()}` : new Date(task.dueDate).toLocaleDateString()}
+                        {new Date(task.dueDate).toLocaleDateString()}
                     </span>
                     <span>{formatTimeSince(task.statusChangeDate)}</span>
                 </div>

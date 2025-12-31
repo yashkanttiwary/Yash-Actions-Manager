@@ -21,12 +21,13 @@ export const COLUMN_STATUSES: Status[] = [
     'Done'
 ];
 
-// K-Mode: Removed "glow" to reduce nervous system arousal. Colors are flat and functional.
+// K-Mode: "If the house is burning, you move. You do not paint the sign red."
+// Colors are functional and factual, not emotional.
 export const PRIORITY_COLORS: { [key in Priority]: { bg: string; text: string; glow: string } } = {
-    'Critical': { bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-700 dark:text-red-300', glow: '' },
-    'High': { bg: 'bg-orange-100 dark:bg-orange-900/30', text: 'text-orange-700 dark:text-orange-300', glow: '' },
-    'Medium': { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-300', glow: '' },
-    'Low': { bg: 'bg-gray-100 dark:bg-gray-800', text: 'text-gray-600 dark:text-gray-400', glow: '' }
+    'Critical': { bg: 'bg-neutral-900 dark:bg-white', text: 'text-white dark:text-black', glow: '' }, // High Contrast Fact
+    'High': { bg: 'bg-neutral-200 dark:bg-neutral-700', text: 'text-neutral-800 dark:text-neutral-200', glow: '' },
+    'Medium': { bg: 'bg-transparent border border-neutral-300 dark:border-neutral-600', text: 'text-neutral-600 dark:text-neutral-400', glow: '' },
+    'Low': { bg: 'bg-transparent', text: 'text-neutral-400 dark:text-neutral-500', glow: '' }
 };
 
 // K-Mode: Shift from emotional pressure to chronological fact.
@@ -44,48 +45,42 @@ export const STATUS_STYLES: { [key in Status]: { header: string; body: string; c
         cardBorder: 'border-l-4 border-l-slate-500'
     },
     'In Progress': {
-        header: 'bg-sky-500',
+        header: 'bg-sky-600', // Deep sky, clarity
         body: 'bg-sky-200/50 dark:bg-sky-800/50',
-        cardBorder: 'border-l-4 border-l-sky-500'
+        cardBorder: 'border-l-4 border-l-sky-600'
     },
     'Review': {
-        header: 'bg-purple-500',
-        body: 'bg-purple-200/50 dark:bg-purple-800/50',
-        cardBorder: 'border-l-4 border-l-purple-500'
+        header: 'bg-indigo-500',
+        body: 'bg-indigo-200/50 dark:bg-indigo-800/50',
+        cardBorder: 'border-l-4 border-l-indigo-500'
     },
     'Blocker': {
-        header: 'bg-red-600',
-        body: 'bg-red-200/50 dark:bg-red-800/50',
-        cardBorder: 'border-l-4 border-l-red-600'
-    },
-    'Hold': {
-        header: 'bg-amber-500',
-        body: 'bg-amber-200/50 dark:bg-amber-800/50',
-        cardBorder: 'border-l-4 border-l-amber-500'
-    },
-    "Won't Complete": {
-        header: 'bg-stone-600',
+        header: 'bg-stone-600', // A rock in the path. Factual. Not alarming red.
         body: 'bg-stone-200/50 dark:bg-stone-800/50',
         cardBorder: 'border-l-4 border-l-stone-600'
     },
+    'Hold': {
+        header: 'bg-neutral-500',
+        body: 'bg-neutral-200/50 dark:bg-neutral-800/50',
+        cardBorder: 'border-l-4 border-l-neutral-500'
+    },
+    "Won't Complete": {
+        header: 'bg-gray-500',
+        body: 'bg-gray-200/50 dark:bg-gray-800/50',
+        cardBorder: 'border-l-4 border-l-gray-500'
+    },
     'Done': {
-        header: 'bg-green-600',
-        body: 'bg-green-200/50 dark:bg-green-800/50',
-        cardBorder: 'border-l-4 border-l-green-600'
+        header: 'bg-emerald-600',
+        body: 'bg-emerald-200/50 dark:bg-emerald-800/50',
+        cardBorder: 'border-l-4 border-l-emerald-600'
     },
 };
 
 export const TAG_COLORS = [
-    'bg-pink-500/80',
-    'bg-purple-500/80',
-    'bg-indigo-500/80',
-    'bg-green-500/80',
-    'bg-teal-500/80',
-    'bg-cyan-500/80',
-    'bg-red-500/80',
-    'bg-orange-500/80',
-    'bg-yellow-500/80',
-    'bg-lime-500/80',
-    'bg-sky-500/80',
-    'bg-rose-500/80'
+    'bg-slate-500/80',
+    'bg-zinc-500/80',
+    'bg-neutral-500/80',
+    'bg-stone-500/80',
+    'bg-sky-600/80', // Keep one or two colors for differentiation, but muted
+    'bg-emerald-600/80'
 ];

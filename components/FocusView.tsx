@@ -146,7 +146,7 @@ export const FocusView: React.FC<FocusViewProps> = ({
                 {/* Header */}
                 <div className="w-full max-w-3xl mb-8 text-center">
                     <h1 className={`text-5xl font-black mb-3 tracking-tight ${isSpaceMode ? 'text-white drop-shadow-md' : 'text-gray-900 dark:text-white'}`}>
-                        Current Action
+                        Action in the Now
                     </h1>
                     <p className={`text-xl font-light tracking-wide ${isSpaceMode ? 'text-indigo-200' : 'text-indigo-600 dark:text-indigo-400'}`}>
                         Do the necessary
@@ -158,7 +158,7 @@ export const FocusView: React.FC<FocusViewProps> = ({
                     <div className="flex items-center gap-6 mb-6">
                         <div className={`h-px flex-1 ${isSpaceMode ? 'bg-indigo-500/30' : 'bg-indigo-200 dark:bg-indigo-900'}`}></div>
                         <h2 className={`text-sm font-bold uppercase tracking-[0.2em] ${isSpaceMode ? 'text-indigo-300' : 'text-indigo-600 dark:text-indigo-400'}`}>
-                            Core Three
+                            Necessary Action
                         </h2>
                         <div className={`h-px flex-1 ${isSpaceMode ? 'bg-indigo-500/30' : 'bg-indigo-200 dark:bg-indigo-900'}`}></div>
                     </div>
@@ -199,7 +199,7 @@ export const FocusView: React.FC<FocusViewProps> = ({
                         <div className="flex items-center gap-6 mb-6">
                             <div className={`h-px flex-1 ${isSpaceMode ? 'bg-gray-700' : 'bg-gray-300'}`}></div>
                             <h2 className={`text-xs font-bold uppercase tracking-[0.2em] ${isSpaceMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                                Bonus Two
+                                Subsidiary Facts
                             </h2>
                             <div className={`h-px flex-1 ${isSpaceMode ? 'bg-gray-700' : 'bg-gray-300'}`}></div>
                         </div>
@@ -231,7 +231,7 @@ export const FocusView: React.FC<FocusViewProps> = ({
                         <div className="flex items-center gap-6 mb-6">
                             <div className={`h-px flex-1 ${isSpaceMode ? 'bg-gray-800' : 'bg-gray-200'}`}></div>
                             <h2 className={`text-xs font-bold uppercase tracking-[0.2em] ${isSpaceMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                                Additional Focus
+                                Further Action
                             </h2>
                             <div className={`h-px flex-1 ${isSpaceMode ? 'bg-gray-800' : 'bg-gray-200'}`}></div>
                         </div>

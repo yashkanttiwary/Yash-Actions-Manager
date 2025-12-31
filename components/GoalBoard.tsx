@@ -78,7 +78,7 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
     // Virtual "Unassigned" Goal
     const unassignedGoal: Goal = {
         id: UNASSIGNED_GOAL_ID,
-        title: 'Unassigned Tasks',
+        title: 'General', // K-Mode: General tasks instead of "Unassigned"
         color: '#64748b', // Slate
         createdDate: new Date().toISOString(),
         progress: 0
@@ -111,7 +111,7 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
                     }
                 `}>
                     <h4 className={`text-[10px] font-bold uppercase tracking-wider mb-3 ${isSpaceMode ? 'text-white/70' : 'text-gray-500 dark:text-gray-400'}`}>
-                        Task Status Guide
+                        Fact Status
                     </h4>
                     <div className="space-y-2.5 min-w-[140px]">
                         <div className="flex items-center gap-2.5">

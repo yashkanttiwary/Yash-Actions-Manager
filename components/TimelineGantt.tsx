@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
 import { Task } from '../types';
-import { STATUS_STYLES, PRIORITY_COLORS } from '../constants';
+import { STATUS_STYLES, PRIORITY_COLORS, PRIORITY_LABELS } from '../constants';
 import { getAccurateCurrentDate, initializeTimeSync } from '../services/timeService';
 import { DependencyLines } from './DependencyLines';
 
@@ -962,7 +962,7 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
                                         <div className="absolute left-0 top-0 bottom-0 w-2 cursor-w-resize opacity-0 group-hover:opacity-100 bg-black/20 hover:bg-black/40 z-30"></div>
                                     )}
                                     <div className="flex items-center w-full overflow-hidden select-none pointer-events-none gap-2">
-                                        <span className={`text-[9px] uppercase font-bold px-1.5 rounded-sm flex-shrink-0 ${priorityConfig.bg} ${priorityConfig.text} bg-opacity-90 border border-white/20 shadow-sm`}>{task.priority}</span>
+                                        <span className={`text-[9px] uppercase font-bold px-1.5 rounded-sm flex-shrink-0 ${priorityConfig.bg} ${priorityConfig.text} bg-opacity-90 border border-white/20 shadow-sm`}>{PRIORITY_LABELS[task.priority]}</span>
                                         {isCompound && <i className="fas fa-layer-group text-white/70 text-xs"></i>}
                                         <span className="text-xs font-bold text-white whitespace-nowrap truncate drop-shadow-md">
                                             {isGhost ? `(Copy) ${task.title}` : task.title}

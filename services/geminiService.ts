@@ -162,6 +162,15 @@ const parsedTaskSchema = {
     required: ['title', 'status', 'priority', 'description', 'subtasks', 'dueDate']
 };
 
+const psychologySchema = {
+    type: Type.OBJECT,
+    properties: {
+        isBecoming: { type: Type.BOOLEAN, description: "True if the task implies 'becoming' (psychological time, ego ambition, future status) rather than simple functional action." },
+        warning: { type: Type.STRING, description: "A strict, philosophical warning about why this is a trap of the mind." }
+    },
+    required: ['isBecoming', 'warning']
+};
+
 const MANAGE_SYSTEM_INSTRUCTION = `You are an intelligent Task Assistant and Database Manager.
 You have two roles:
 1. **Conversational Assistant**: Answer questions about the user's tasks, summarize content, or provide advice. Use the 'summary' field for this.
@@ -190,6 +199,23 @@ Output pure JSON matching the schema.`;
 const SUMMARY_SYSTEM_INSTRUCTION = `Summarize the board state in markdown. Be concise and motivating.`;
 
 const BREAKDOWN_SYSTEM_INSTRUCTION = `Break down a task title into 3-5 subtasks. Return JSON array of objects with 'title'.`;
+
+const PSYCHOLOGY_SYSTEM_INSTRUCTION = `You are "The Mirror". You reflect the user's mind back to them.
+Your job is to detect "Becoming" vs "Action".
+
+**Becoming (True):**
+- Ambition, Self-Improvement, Ego-Projection.
+- "I want to be X". "Get fit". "Be richer". "Learn French (to be smart)".
+- Implies a gap between "what is" and "what should be".
+- Abstract attributes.
+
+**Action (False):**
+- Functional, Logistical, Factual.
+- "Run 5km". "Deposit check". "Read textbook". "Buy groceries".
+- Immediate physical steps.
+
+If it is "Becoming", warn the user sternly but philosophically.
+If it is "Action", return isBecoming: false.`;
 
 const PARSE_TASK_INSTRUCTION = `You are an expert Voice-to-Project Assistant.
 The user is speaking a task. The transcription might be weak, contain typos, or be fragmented.
@@ -234,7 +260,7 @@ const callGoogleAI = async (apiKey: string, model: string, systemPrompt: string,
 
 // --- PUBLIC METHODS ---
 
-const executeAIRequest = async (userApiKey: string | undefined, type: 'manage' | 'summary' | 'breakdown' | 'parse', payload: any) => {
+const executeAIRequest = async (userApiKey: string | undefined, type: 'manage' | 'summary' | 'breakdown' | 'parse' | 'psychology', payload: any) => {
     const apiKey = getApiKey(userApiKey);
     const currentDate = new Date().toISOString();
 
@@ -258,6 +284,9 @@ const executeAIRequest = async (userApiKey: string | undefined, type: 'manage' |
             const prompt = `Current Date: ${currentDate}\n\nVoice Transcript: "${payload.transcript}"${goalContext}`;
             // Use Smart model for deep reconstruction of voice
             resultText = await callGoogleAI(apiKey, AI_MODELS.SMART, PARSE_TASK_INSTRUCTION, prompt, parsedTaskSchema, true);
+        } else if (type === 'psychology') {
+            const prompt = `Analyze this task:\nTitle: "${payload.title}"\nDescription: "${payload.description || ''}"`;
+            resultText = await callGoogleAI(apiKey, AI_MODELS.FAST, PSYCHOLOGY_SYSTEM_INSTRUCTION, prompt, psychologySchema, true);
         }
 
         return resultText ? resultText.trim() : "";
@@ -304,5 +333,10 @@ export const breakDownTask = async (taskTitle: string, userApiKey?: string): Pro
 
 export const parseTaskFromVoice = async (transcript: string, userApiKey?: string, goals: Goal[] = []): Promise<any> => {
     const jsonText = await executeAIRequest(userApiKey, 'parse', { transcript, goals });
+    return safeParseJSON(jsonText);
+};
+
+export const analyzeTaskPsychology = async (task: Task, userApiKey?: string): Promise<{ isBecoming: boolean; warning: string }> => {
+    const jsonText = await executeAIRequest(userApiKey, 'psychology', { title: task.title, description: task.description });
     return safeParseJSON(jsonText);
 };

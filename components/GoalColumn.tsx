@@ -115,6 +115,14 @@ export const GoalColumn: React.FC<GoalColumnProps> = ({
         ? goal.textColor 
         : (isSpaceMode ? 'white' : getContrastColor(safeColor));
 
+    // ENTROPY CALCULATION (Idea #4)
+    // Measures pile-up of active tasks.
+    const activeTaskCount = tasks.filter(t => t.status !== 'Done' && t.status !== "Won't Complete").length;
+    // Threshold for high entropy (decay)
+    const ENTROPY_THRESHOLD = 5; 
+    const entropyLevel = Math.min(100, (activeTaskCount / ENTROPY_THRESHOLD) * 100);
+    const isDecaying = activeTaskCount > ENTROPY_THRESHOLD;
+
     return (
         <div 
             className={`flex-shrink-0 w-80 rounded-xl flex flex-col ${containerClasses} shadow-lg transition-all duration-300 relative ${isFocused ? 'ring-4 ring-offset-2 ring-indigo-500' : ''}`}
@@ -151,6 +159,18 @@ export const GoalColumn: React.FC<GoalColumnProps> = ({
                 {/* 3. Texture Overlay */}
                 <div className="absolute inset-0 opacity-10 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjZmZmIi8+CjxyZWN0IHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiMwMDAiLz4KPC9zdmc+')] mix-blend-overlay pointer-events-none"></div>
 
+                {/* 4. ENTROPY / DECAY VISUAL (Rust Overlay) */}
+                {isDecaying && (
+                    <div 
+                        className="absolute inset-0 pointer-events-none transition-opacity duration-1000"
+                        style={{ 
+                            opacity: (entropyLevel - 100) / 100, // Scales with how far over threshold
+                            backgroundImage: 'url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIj48ZmlsdGVyIGlkPSJnoiPjxmZVR1cmJ1bGVuY2UgYmFzZUZyZXF1ZW5jeT0iMC41IiAvPjwvZmlsdGVyPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbHRlcj0idXJsKCNnKSIgb3BhY2l0eT0iMC41Ii8+PC9zdmc+")',
+                            filter: 'sepia(1) hue-rotate(-50deg) saturate(3)' 
+                        }}
+                    />
+                )}
+
                 <div className="relative z-10">
                     <div className="flex justify-between items-start mb-2">
                         <h3 className="font-bold text-lg leading-tight truncate pr-2 drop-shadow-sm">{goal.title}</h3>
@@ -181,10 +201,16 @@ export const GoalColumn: React.FC<GoalColumnProps> = ({
                         </div>
                     </div>
                     
-                    {/* K-Mode: Removed Progress Bar. Facts only. */}
-                    <div className="flex justify-between text-xs opacity-90 font-mono drop-shadow-sm mt-1">
-                        <span>Context</span>
-                        <span>{tasks.length} Tasks</span>
+                    {/* ENTROPY METER instead of Progress */}
+                    <div className="flex justify-between text-xs opacity-90 font-mono drop-shadow-sm mt-1 items-center">
+                        <span>{tasks.length} Items</span>
+                        {activeTaskCount > 0 ? (
+                            <span className={`font-bold ${isDecaying ? 'text-red-200 animate-pulse' : ''}`}>
+                                {isDecaying ? '⚠ HIGH ENTROPY' : 'Stable'}
+                            </span>
+                        ) : (
+                            <span className="opacity-70">Empty</span>
+                        )}
                     </div>
                 </div>
             </div>
