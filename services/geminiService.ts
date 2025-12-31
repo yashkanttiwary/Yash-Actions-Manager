@@ -1,17 +1,10 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { Task, Subtask, Goal, TaskDiff } from '../types'; // Import TaskDiff from types
+import { Task, Subtask, Goal, TaskDiff } from '../types'; 
 import { getEnvVar } from '../utils/env';
+import { AI_MODELS } from '../constants'; // L-02
 
-// Re-export TaskDiff for consumers
 export type { TaskDiff };
-
-// --- CONFIGURATION ---
-
-export const AI_MODELS = {
-    GOOGLE: "gemini-2.0-flash-thinking-exp-01-21", // Best for complex logic/parsing
-    OPENAI: "gpt-4o-mini"
-};
 
 // --- HELPER FUNCTIONS ---
 
@@ -114,7 +107,6 @@ const manageResponseSchema = {
                     priority: { type: Type.STRING },
                     dueDate: { type: Type.STRING },
                     goalId: { type: Type.STRING },
-                    // We only include fields that might change
                 },
                 required: ['id']
             }
@@ -226,11 +218,6 @@ const callGoogleAI = async (apiKey: string, model: string, systemPrompt: string,
         systemInstruction: systemPrompt,
     };
     
-    // Feature gating for Thinking models
-    if (model.includes('thinking')) {
-         config.thinkingConfig = { thinkingBudget: 2048 }; 
-    }
-    
     if (isJsonMode) {
         config.responseMimeType = "application/json";
         if (schema) config.responseSchema = schema;
@@ -256,23 +243,21 @@ const executeAIRequest = async (userApiKey: string | undefined, type: 'manage' |
     try {
         if (type === 'manage') {
             const prompt = `Current Date: ${currentDate}\n\nUser Input: "${payload.command}"\n\nCurrent Tasks Context:\n${JSON.stringify(payload.currentTasks, null, 2)}`;
-            // Use gemini-2.0-flash-thinking-exp-01-21 for better reasoning on mixed chat/action tasks if available, otherwise gemini-3-flash-preview
-            // Using standard model for speed, but prompting for intelligence.
-            resultText = await callGoogleAI(apiKey, "gemini-3-flash-preview", MANAGE_SYSTEM_INSTRUCTION, prompt, manageResponseSchema, true);
+            resultText = await callGoogleAI(apiKey, AI_MODELS.SMART, MANAGE_SYSTEM_INSTRUCTION, prompt, manageResponseSchema, true);
         } else if (type === 'summary') {
             const prompt = `Here is the current list of tasks:\n${JSON.stringify(payload.currentTasks, null, 2)}`;
-            resultText = await callGoogleAI(apiKey, "gemini-3-flash-preview", SUMMARY_SYSTEM_INSTRUCTION, prompt);
+            resultText = await callGoogleAI(apiKey, AI_MODELS.FAST, SUMMARY_SYSTEM_INSTRUCTION, prompt);
         } else if (type === 'breakdown') {
             const prompt = `Task to break down: "${payload.taskTitle}"`;
-            resultText = await callGoogleAI(apiKey, "gemini-3-flash-preview", BREAKDOWN_SYSTEM_INSTRUCTION, prompt, subtaskSchema, true);
+            resultText = await callGoogleAI(apiKey, AI_MODELS.FAST, BREAKDOWN_SYSTEM_INSTRUCTION, prompt, subtaskSchema, true);
         } else if (type === 'parse') {
             const goalContext = payload.goals 
                 ? `\n\nAvailable Goals (Use these IDs):\n${JSON.stringify(payload.goals.map((g: Goal) => ({ id: g.id, title: g.title, description: g.description })), null, 2)}` 
                 : "";
             
             const prompt = `Current Date: ${currentDate}\n\nVoice Transcript: "${payload.transcript}"${goalContext}`;
-            // Use Thinking model for deep reconstruction of voice
-            resultText = await callGoogleAI(apiKey, AI_MODELS.GOOGLE, PARSE_TASK_INSTRUCTION, prompt, parsedTaskSchema, true);
+            // Use Smart model for deep reconstruction of voice
+            resultText = await callGoogleAI(apiKey, AI_MODELS.SMART, PARSE_TASK_INSTRUCTION, prompt, parsedTaskSchema, true);
         }
 
         return resultText ? resultText.trim() : "";
@@ -280,7 +265,7 @@ const executeAIRequest = async (userApiKey: string | undefined, type: 'manage' |
     } catch (error: any) {
         console.error("AI Service Error:", error);
         if (error.message && error.message.includes("404")) {
-             throw new Error("Model not found. Please check your API key.");
+             throw new Error("Model not found. Please check your API key or use a valid model.");
         }
         throw new Error(error.message || "Failed to communicate with AI.");
     }

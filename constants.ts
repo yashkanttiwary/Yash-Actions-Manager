@@ -3,6 +3,14 @@ import { Status, Priority } from './types';
 
 export const UNASSIGNED_GOAL_ID = 'unassigned';
 
+// L-02: Centralized AI Models
+export const AI_MODELS = {
+    // Best model for complex reasoning and JSON structure compliance
+    SMART: "gemini-2.0-flash", 
+    // Faster model for simple summaries
+    FAST: "gemini-2.0-flash", 
+};
+
 export const COLUMN_STATUSES: Status[] = [
     'To Do',
     'In Progress',

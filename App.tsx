@@ -12,8 +12,7 @@ import { CalendarView } from './components/CalendarView';
 import { TimelineGantt } from './components/TimelineGantt';
 import { GoalBoard } from './components/GoalBoard';
 import { FocusView } from './components/FocusView';
-import { generateTaskSummary, breakDownTask, parseTaskFromVoice, TaskDiff } from './services/geminiService';
-import { calculateTaskXP, checkLevelUp } from './services/gamificationService'; 
+import { breakDownTask, parseTaskFromVoice, TaskDiff } from './services/geminiService';
 import { initGoogleClient, signIn, signOut } from './services/googleAuthService';
 import { COLUMN_STATUSES, UNASSIGNED_GOAL_ID } from './constants';
 import { ShortcutsModal } from './components/ShortcutsModal';
@@ -23,23 +22,12 @@ import { checkCalendarConnection } from './services/googleCalendarService';
 import { resumeAudioContext } from './utils/audio';
 import { storage } from './utils/storage';
 import { useBackgroundAudio } from './hooks/useBackgroundAudio';
+import { useSettings } from './hooks/useSettings'; // H-01: New Hook
 import { setUserTimeOffset } from './services/timeService';
 import { ConfirmModal } from './components/ConfirmModal';
 import { getEnvVar } from './utils/env';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { StarField } from './components/StarField';
-
-// Helper to get cookie only for legacy migration
-const getCookie = (name: string) => {
-    try {
-        return document.cookie.split('; ').reduce((r, v) => {
-            const parts = v.split('=');
-            return parts[0].trim() === name ? decodeURIComponent(parts[1]) : r
-        }, '');
-    } catch (e) {
-        return '';
-    }
-}
 
 interface GoogleAuthState {
     gapiLoaded: boolean;
@@ -84,27 +72,8 @@ const App: React.FC = () => {
 
     const isSpaceModeActive = useMemo(() => theme === 'space', [theme]);
 
-    const [settings, setSettings] = useState<Settings>({
-        dailyBudget: 16,
-        timezone: 'Asia/Kolkata',
-        userTimeOffset: 0,
-        pomodoroFocus: 25,
-        pomodoroShortBreak: 5,
-        pomodoroLongBreak: 15,
-        showPomodoroTimer: false,
-        googleSheetId: '',
-        googleAppsScriptUrl: '',
-        googleCalendarId: 'primary',
-        geminiApiKey: '', 
-        audio: {
-            enabled: true,
-            mode: 'brown_noise',
-            volume: 0.1,
-            loopMode: 'all',
-            playlist: []
-        }
-    });
-    const [settingsLoaded, setSettingsLoaded] = useState(false);
+    // H-01 & H-02: Replaced local useState with robust useSettings hook
+    const { settings, updateSettings, loaded: settingsLoaded } = useSettings();
 
     const isSheetConfigured = useMemo(() => {
         return !!(settings.googleSheetId || settings.googleAppsScriptUrl);
@@ -129,7 +98,7 @@ const App: React.FC = () => {
         updateGoal, 
         deleteGoal, 
         toggleTaskPin,
-        reorderPinnedTasks, // Use new function
+        reorderPinnedTasks, 
         getTasksByStatus,
         updateColumnLayout,
         resetColumnLayouts,
@@ -212,6 +181,9 @@ const App: React.FC = () => {
     }, [notification]);
 
     useEffect(() => {
+        // H-01: Delay init until settings loaded
+        if (!settingsLoaded) return; 
+
         const initialize = async () => {
             try {
                 const { gapiLoaded, gisLoaded, disabled } = await initGoogleClient(settings.googleApiKey, settings.googleClientId);
@@ -241,7 +213,7 @@ const App: React.FC = () => {
             }
         };
         setTimeout(initialize, 500); 
-    }, [settings.googleApiKey, settings.googleClientId, settings.googleAppsScriptUrl]);
+    }, [settings.googleApiKey, settings.googleClientId, settings.googleAppsScriptUrl, settingsLoaded]);
 
     useEffect(() => {
         const loadPersistedData = async () => {
@@ -276,33 +248,10 @@ const App: React.FC = () => {
                 const savedFocusMode = await storage.get('focusMode');
                 if (savedFocusMode) setFocusMode(savedFocusMode as any);
 
-                const savedSettings = await storage.get('taskMasterSettings_v2'); 
-                // Migration: Check cookie one last time
-                const cookieUrl = getCookie('tm_script_url');
-
-                if (savedSettings) {
-                     const parsedSettings = JSON.parse(savedSettings);
-                     const mergedAudio = { ...settings.audio, ...(parsedSettings.audio || {}) };
-                     
-                     setSettings(prev => ({
-                         ...prev, 
-                         ...parsedSettings,
-                         audio: mergedAudio,
-                         googleAppsScriptUrl: parsedSettings.googleAppsScriptUrl || cookieUrl || prev.googleAppsScriptUrl,
-                         timezone: parsedSettings.timezone || 'Asia/Kolkata',
-                         userTimeOffset: parsedSettings.userTimeOffset || 0
-                     }));
-                     
-                     setUserTimeOffset(parsedSettings.userTimeOffset || 0);
-
-                } else if (cookieUrl) {
-                    setSettings(prev => ({ ...prev, googleAppsScriptUrl: cookieUrl }));
-                }
+                // H-01: Removed settings loading logic here as it's now in the hook
             
             } catch (e) {
                 console.error("Error loading persisted data", e);
-            } finally {
-                setSettingsLoaded(true);
             }
         };
         loadPersistedData();
@@ -319,7 +268,7 @@ const App: React.FC = () => {
         storage.set('theme', theme);
     }, [theme]);
 
-    // Persist UI State (View Mode, Today View, Focus Filter)
+    // Persist UI State
     useEffect(() => {
         if (!settingsLoaded) return;
         
@@ -349,18 +298,11 @@ const App: React.FC = () => {
     }, [focusedGoalId, settingsLoaded]);
 
     useEffect(() => {
+        // H-01: Update time offset when settings change
         if (settingsLoaded) {
-            const saveSettings = async () => {
-                try {
-                    await storage.set('taskMasterSettings_v2', JSON.stringify(settings));
-                    setUserTimeOffset(settings.userTimeOffset);
-                } catch (e) {
-                    console.error("Failed to save settings", e);
-                }
-            };
-            saveSettings();
+            setUserTimeOffset(settings.userTimeOffset);
         }
-    }, [settings, settingsLoaded]);
+    }, [settings.userTimeOffset, settingsLoaded]);
 
     const shouldSync = settingsLoaded && !isLoading;
     const { status: syncStatus, errorMsg: syncError, syncMethod, manualPull, manualPush } = useGoogleSheetSync(
@@ -372,7 +314,7 @@ const App: React.FC = () => {
         gamification,
         settings,
         setGamification,
-        setSettings,
+        (s) => updateSettings(s), // H-01: Use hook's updater
         goals 
     );
 
@@ -863,6 +805,9 @@ const App: React.FC = () => {
         setContextMenu(null);
     };
 
+    const activeFocusGoalId = focusedGoalId || null;
+    const headerHeight = (isMenuLocked || isMenuHovered) ? '200px' : '50px';
+
     return (
         <div className={`bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-white h-screen flex flex-col overflow-hidden font-sans ${isSpaceModeActive ? 'bg-transparent' : 'bg-dots'} transition-colors duration-300 relative`}>
             {isSpaceModeActive && <StarField />}
@@ -878,7 +823,7 @@ const App: React.FC = () => {
                 onResetLayout={resetColumnLayouts}
                 gamification={gamification}
                 settings={settings}
-                onUpdateSettings={(newSettings) => setSettings(prev => ({...prev, ...newSettings}))}
+                onUpdateSettings={updateSettings} // H-01: Pass hook updater
                 currentViewMode={viewMode}
                 onViewModeChange={setViewMode}
                 googleAuthState={googleAuth}
@@ -912,10 +857,21 @@ const App: React.FC = () => {
                 onExitFocus={() => setFocusedGoalId(null)}
             />
 
+            {/* M-02: Audio Suspension Warning Overlay */}
+            {audioControls.isSuspended && (
+                <div 
+                    className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[60] bg-indigo-600 text-white px-4 py-2 rounded-full shadow-lg cursor-pointer animate-bounce flex items-center gap-2"
+                    onClick={() => resumeAudioContext()}
+                >
+                    <i className="fas fa-volume-mute"></i>
+                    <span className="text-sm font-bold">Tap to Unmute Audio</span>
+                </div>
+            )}
+
             <main 
                 className="flex-1 overflow-auto pl-2 sm:pl-6 pr-2 pb-2 relative flex flex-col scroll-smooth transition-all duration-700 z-10"
                 style={{ 
-                    paddingTop: (isMenuLocked || isMenuHovered) ? '280px' : (activeFocusGoal ? '6rem' : '5rem')
+                    paddingTop: headerHeight
                 }}
             >
                 {notification && (
@@ -1028,6 +984,7 @@ const App: React.FC = () => {
                                         activeTaskTimer={activeTaskTimer}
                                         onToggleTimer={handleToggleTimer}
                                         onReorderTasks={reorderPinnedTasks}
+                                        headerHeight={headerHeight}
                                     />
                                 )}
                             </>
@@ -1068,7 +1025,7 @@ const App: React.FC = () => {
                     onApplyChanges={handleApplyAIChanges}
                     tasks={tasks}
                     apiKey={hasApiKey ? (settings.geminiApiKey || getEnvVar('VITE_GEMINI_API_KEY')) : undefined}
-                    onSaveApiKey={(key) => setSettings(prev => ({ ...prev, geminiApiKey: key }))}
+                    onSaveApiKey={(key) => updateSettings({ geminiApiKey: key })} // H-01: Use hook
                 />
             )}
             {showShortcutsModal && (
@@ -1077,7 +1034,7 @@ const App: React.FC = () => {
             {showIntegrationsModal && (
                 <IntegrationsModal
                     settings={settings}
-                    onUpdateSettings={(newSettings) => setSettings(prev => ({...prev, ...newSettings}))}
+                    onUpdateSettings={updateSettings} // H-01: Use hook
                     onClose={() => setShowIntegrationsModal(false)}
                     googleAuthState={googleAuth}
                     onGoogleSignIn={handleGoogleSignIn}

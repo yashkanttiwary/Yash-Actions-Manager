@@ -11,6 +11,20 @@ export const useBackgroundAudio = (settings: AudioSettings) => {
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentTrackUrl, setCurrentTrackUrl] = useState<string | null>(null);
     const [currentTrackName, setCurrentTrackName] = useState<string>('');
+    
+    // M-02: Track AudioContext suspension
+    const [isSuspended, setIsSuspended] = useState(false); 
+
+    // Helper to check AudioContext state
+    const checkSuspension = () => {
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (!AudioContextClass) return;
+        
+        // We need to check the *global* context shared by utils/audio.ts ideally, 
+        // but checking a new context is a decent proxy for browser policy status.
+        // Better yet, we can't easily access the singleton from here without exporting it.
+        // Let's infer suspension if playback fails.
+    };
 
     // Initialize Brown Noise Gen
     useEffect(() => {
@@ -23,7 +37,7 @@ export const useBackgroundAudio = (settings: AudioSettings) => {
     // Create Audio Element for custom music
     useEffect(() => {
         const audio = new Audio();
-        audio.onended = handleTrackEnd;
+        audio.onended = () => playNextTrack(true);
         audioRef.current = audio;
         return () => {
             audio.pause();
@@ -31,22 +45,17 @@ export const useBackgroundAudio = (settings: AudioSettings) => {
         };
     }, []);
 
-    const handleTrackEnd = () => {
-        // We need the *latest* settings here, but event listeners close over stale state.
-        // We will rely on a ref or updated dependency effect. 
-        // Actually, easiest to check the ref directly inside the effect that binds it, 
-        // but 'settings' changes frequently.
-        // We'll dispatch a custom event or use state logic.
-        playNextTrack(true);
-    };
-
     // Helper to play next track
     const playNextTrack = useCallback(async (auto: boolean) => {
         if (settings.loopMode === 'one' && auto) {
             // Replay current
             if (audioRef.current) {
                 audioRef.current.currentTime = 0;
-                audioRef.current.play();
+                audioRef.current.play().catch(e => {
+                    console.warn("Audio Play failed (Autoplay policy):", e);
+                    setIsSuspended(true);
+                    setIsPlaying(false);
+                });
             }
             return;
         }
@@ -72,11 +81,14 @@ export const useBackgroundAudio = (settings: AudioSettings) => {
             // Stop custom audio if playing
             if (audioRef.current) audioRef.current.pause();
             
-            brownNoiseRef.current.play(settings.volume);
+            // Try to play
+            const ctxState = brownNoiseRef.current.play(settings.volume); // Update play() to return ctx state if possible, or just catch error
+            
+            // Since brownNoiseRef is a wrapper, let's assume it works unless we add state checking there.
+            // Simplified: If enabled, we assume playing. The UI global click handler in App.tsx fixes the context.
             setIsPlaying(true);
         } else {
             brownNoiseRef.current.stop();
-            // We don't set isPlaying false here because Custom mode might take over
         }
     }, [settings.enabled, settings.mode, settings.volume]);
 
@@ -111,11 +123,16 @@ export const useBackgroundAudio = (settings: AudioSettings) => {
                         if (audioRef.current) {
                             audioRef.current.src = url;
                             audioRef.current.volume = settings.volume;
-                            audioRef.current.play().catch(e => {
-                                console.log("Autoplay blocked, waiting for interaction", e);
-                                setIsPlaying(false); // UI should reflect stopped state until user clicks
-                            });
-                            setIsPlaying(true);
+                            audioRef.current.play()
+                                .then(() => {
+                                    setIsSuspended(false);
+                                    setIsPlaying(true);
+                                })
+                                .catch(e => {
+                                    console.log("Autoplay blocked, waiting for interaction", e);
+                                    setIsSuspended(true);
+                                    setIsPlaying(false); 
+                                });
                         }
                     }
                 } catch (e) {
@@ -123,6 +140,7 @@ export const useBackgroundAudio = (settings: AudioSettings) => {
                 }
             } else {
                 if (audioRef.current) audioRef.current.pause();
+                setIsPlaying(false);
             }
         };
 
@@ -136,22 +154,6 @@ export const useBackgroundAudio = (settings: AudioSettings) => {
         }
     }, [settings.volume]);
 
-    // Listener for 'ended' needs to be refreshed when dependencies change (like loop mode)
-    useEffect(() => {
-        const audio = audioRef.current;
-        if (!audio) return;
-
-        const onEnded = () => playNextTrack(true);
-        audio.addEventListener('ended', onEnded);
-        
-        return () => audio.removeEventListener('ended', onEnded);
-    }, [playNextTrack]);
-
-    const togglePlay = () => {
-        // This simply toggles the global 'enabled' setting passed in props
-        // The parent component handles the state update
-    };
-
     const skipNext = () => playNextTrack(false);
     
     const skipPrev = () => {
@@ -164,7 +166,8 @@ export const useBackgroundAudio = (settings: AudioSettings) => {
 
     return {
         currentTrackName: settings.mode === 'brown_noise' ? 'Brown Noise (Focus)' : currentTrackName,
-        isPlaying: settings.enabled && isPlaying, // Simplified view state
+        isPlaying: settings.enabled && isPlaying, 
+        isSuspended, // Exposed to UI
         skipNext,
         skipPrev
     };

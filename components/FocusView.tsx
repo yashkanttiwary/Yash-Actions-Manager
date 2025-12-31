@@ -1,7 +1,9 @@
+
 import React, { useMemo, useState, useEffect } from 'react';
 import { Task, Goal, Status, Priority } from '../types';
 import { FocusTaskCard } from './FocusTaskCard';
 import { storage } from '../utils/storage';
+import { PRIORITY_LABELS, PRIORITY_COLORS } from '../constants';
 
 interface FocusViewProps {
     tasks: Task[];
@@ -16,6 +18,7 @@ interface FocusViewProps {
     activeTaskTimer: {taskId: string, startTime: number} | null;
     onToggleTimer: (taskId: string) => void;
     onReorderTasks: (activeId: string, overId: string) => void;
+    headerHeight: string; // Dynamic header height
 }
 
 // Helper to determine priority weight for sorting (fallback)
@@ -31,7 +34,7 @@ const getPriorityWeight = (p: Priority): number => {
 
 export const FocusView: React.FC<FocusViewProps> = ({
     tasks, goals, onEditTask, onUpdateTask, onTogglePin, onSubtaskToggle, onDeleteTask, isSpaceMode,
-    activeTaskTimer, onToggleTimer, onReorderTasks
+    activeTaskTimer, onToggleTimer, onReorderTasks, headerHeight
 }) => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [dragOverFocus, setDragOverFocus] = useState(false);
@@ -257,7 +260,7 @@ export const FocusView: React.FC<FocusViewProps> = ({
 
             {/* SIDEBAR: BACKLOG */}
             <div 
-                className={`fixed right-0 top-0 bottom-0 pt-16 z-20 w-80 shadow-2xl transition-transform duration-300 transform border-l
+                className={`fixed right-0 top-0 bottom-0 z-20 w-80 shadow-2xl transition-all duration-700 ease-in-out transform border-l
                     ${isSpaceMode 
                         ? 'bg-slate-900/95 border-slate-800' 
                         : 'bg-white/95 dark:bg-gray-900/95 border-gray-200 dark:border-gray-700 backdrop-blur-md'
@@ -265,6 +268,7 @@ export const FocusView: React.FC<FocusViewProps> = ({
                     ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}
                     ${dragOverSidebar ? 'ring-2 ring-red-500 ring-inset bg-red-50/10' : ''}
                 `}
+                style={{ paddingTop: headerHeight }} // Dynamic Padding
                 onDragOver={(e) => {
                     e.preventDefault();
                     setDragOverSidebar(true);
@@ -301,31 +305,34 @@ export const FocusView: React.FC<FocusViewProps> = ({
                     </h3>
                     
                     <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-1">
-                        {backlogTasks.map(task => (
-                            <div
-                                key={task.id}
-                                draggable
-                                onDragStart={(e) => handleDragStart(e, task.id, 'sidebar')}
-                                className={`p-3 rounded-lg border text-sm cursor-grab active:cursor-grabbing transition-all hover:translate-x-1
-                                    ${isSpaceMode 
-                                        ? 'bg-white/5 border-white/10 hover:bg-white/10 text-slate-300' 
-                                        : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:bg-white dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200'
-                                    }
-                                `}
-                            >
-                                <div className="flex items-center justify-between mb-1">
-                                    <span className="font-semibold truncate flex-1">{task.title}</span>
-                                    {/* K-Mode: Simple Priority Display */}
-                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${task.priority === 'Critical' ? 'bg-red-100 text-red-600' : 'bg-gray-200 text-gray-600'}`}>
-                                        {task.priority}
-                                    </span>
+                        {backlogTasks.map(task => {
+                            const priorityColors = PRIORITY_COLORS[task.priority];
+                            return (
+                                <div
+                                    key={task.id}
+                                    draggable
+                                    onDragStart={(e) => handleDragStart(e, task.id, 'sidebar')}
+                                    className={`p-3 rounded-lg border text-sm cursor-grab active:cursor-grabbing transition-all hover:translate-x-1
+                                        ${isSpaceMode 
+                                            ? 'bg-white/5 border-white/10 hover:bg-white/10 text-slate-300' 
+                                            : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:bg-white dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200'
+                                        }
+                                    `}
+                                >
+                                    <div className="flex items-center justify-between mb-1">
+                                        <span className="font-semibold truncate flex-1">{task.title}</span>
+                                        {/* K-Mode: Correct Priority Display using Labels and Colors */}
+                                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${priorityColors.bg} ${priorityColors.text}`}>
+                                            {PRIORITY_LABELS[task.priority]}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-xs opacity-60">
+                                        <span><i className="far fa-calendar"></i> {new Date(task.dueDate).toLocaleDateString(undefined, {month: 'numeric', day: 'numeric'})}</span>
+                                        {task.timeEstimate && <span>• {task.timeEstimate}h</span>}
+                                    </div>
                                 </div>
-                                <div className="flex items-center gap-2 text-xs opacity-60">
-                                    <span><i className="far fa-calendar"></i> {new Date(task.dueDate).toLocaleDateString(undefined, {month: 'numeric', day: 'numeric'})}</span>
-                                    {task.timeEstimate && <span>• {task.timeEstimate}h</span>}
-                                </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                         {backlogTasks.length === 0 && (
                             <div className="text-center p-8 opacity-50 text-sm">
                                 No available tasks. <br/> Add some on the board!

@@ -273,7 +273,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                              <div 
                                 className="flex-shrink-0 w-2.5 h-2.5 rounded-full" 
                                 style={{ backgroundColor: assignedGoal.color }}
-                                title={`Goal: ${assignedGoal.title}`}
+                                title={`Context: ${assignedGoal.title}`}
                              ></div>
                          )}
 
@@ -356,7 +356,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                             <span 
                                 className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white whitespace-nowrap shadow-sm truncate max-w-[80px]"
                                 style={{ backgroundColor: assignedGoal.color }}
-                                title={`Goal: ${assignedGoal.title}`}
+                                title={`Context: ${assignedGoal.title}`}
                             >
                                 {assignedGoal.title}
                             </span>

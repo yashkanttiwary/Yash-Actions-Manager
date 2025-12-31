@@ -66,9 +66,9 @@ export const TopFocusSection: React.FC<TopFocusSectionProps> = ({ tasks, onUnpin
                     <i className="fas fa-thumbtack transform rotate-45"></i>
                 </div>
                 <div>
-                    <h3 className="text-sm font-bold uppercase tracking-wider">Top 5 Focus</h3>
+                    <h3 className="text-sm font-bold uppercase tracking-wider">Current Focus</h3>
                     <p className={`text-[10px] ${isSpaceMode ? 'text-slate-400' : 'text-gray-500 dark:text-gray-400'}`}>
-                        {pinnedTasks.length}/5 Pinned
+                        {pinnedTasks.length} Pinned
                     </p>
                 </div>
             </div>
@@ -80,7 +80,7 @@ export const TopFocusSection: React.FC<TopFocusSectionProps> = ({ tasks, onUnpin
                             <span className="text-indigo-500 font-bold animate-pulse">Drop to Pin Task!</span>
                         ) : (
                             <>
-                                <span>Pin up to 5 tasks to focus today</span>
+                                <span>Pin tasks to focus today</span>
                                 <span className="text-xs opacity-70">(Drag tasks here)</span>
                             </>
                         )}

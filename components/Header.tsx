@@ -265,7 +265,7 @@ export const Header: React.FC<HeaderProps> = ({
                         </div>
                     </div>
 
-                    {/* Focus Pill */}
+                    {/* Focus Context Pill */}
                     <div className="relative flex items-center gap-2 ml-2 pl-4 border-l border-gray-300 dark:border-gray-700 h-8 animate-fadeIn" ref={focusDropdownRef}>
                         <button
                             onClick={() => setIsFocusMenuOpen(!isFocusMenuOpen)}
@@ -287,7 +287,7 @@ export const Header: React.FC<HeaderProps> = ({
                                 className={`text-xs font-bold truncate max-w-[120px] hidden sm:block ${isSpaceVisualsActive ? 'text-white' : ''}`}
                                 style={{ color: pillTextColor }}
                             >
-                                {activeFocusGoal ? activeFocusGoal.title : 'Focus Mode'}
+                                {activeFocusGoal ? activeFocusGoal.title : 'Contexts'}
                             </span>
                             <i className={`fas fa-chevron-down text-[10px] ml-1 transition-transform duration-200 ${isFocusMenuOpen ? 'rotate-180' : ''} ${isSpaceVisualsActive ? 'text-white/70' : 'text-gray-500'}`} style={{ color: pillTextColor }}></i>
                         </button>
@@ -309,7 +309,8 @@ export const Header: React.FC<HeaderProps> = ({
                                     ? 'bg-black/80 border-white/20 text-white' 
                                     : 'bg-white/95 dark:bg-gray-900/95 border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100'
                             }`}>
-                                <div className={`p-2 text-[10px] font-bold uppercase tracking-widest opacity-60 border-b mb-1 ${isSpaceVisualsActive ? 'border-white/10' : 'border-gray-200 dark:border-gray-700'}`}>Switch Focus Goal</div>
+                                {/* K-Mode: Rename "Switch Focus Goal" -> "Switch Context" */}
+                                <div className={`p-2 text-[10px] font-bold uppercase tracking-widest opacity-60 border-b mb-1 ${isSpaceVisualsActive ? 'border-white/10' : 'border-gray-200 dark:border-gray-700'}`}>Switch Context</div>
                                 <div className="max-h-[300px] overflow-y-auto custom-scrollbar p-1 space-y-1">
                                     <button
                                         onClick={() => { onFocusGoal(UNASSIGNED_GOAL_ID); setIsFocusMenuOpen(false); }}
@@ -320,7 +321,7 @@ export const Header: React.FC<HeaderProps> = ({
                                         }`}
                                     >
                                         <div className="w-2 h-2 rounded-full bg-slate-500 shadow-sm"></div>
-                                        <span className="text-xs font-semibold truncate flex-1">Unassigned Tasks</span>
+                                        <span className="text-xs font-semibold truncate flex-1">Unassigned</span>
                                         {activeFocusGoal?.id === UNASSIGNED_GOAL_ID && <i className="fas fa-check text-xs opacity-80"></i>}
                                     </button>
 
@@ -401,7 +402,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
 
             {/* EXPANDED CONTENT (Hidden when collapsed) */}
-            <div className={`p-4 pb-16 transition-opacity duration-200 ${isMenuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+            <div className={`p-4 pb-14 transition-opacity duration-200 ${isMenuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
                 <div className="max-w-screen-2xl mx-auto flex flex-col gap-4">
                     
                     {/* Top Row: Title & Controls */}
@@ -409,7 +410,8 @@ export const Header: React.FC<HeaderProps> = ({
                         {activeFocusGoal ? (
                             <h1 className={`text-xl font-bold tracking-wider hidden sm:block flex items-center gap-2 ${isSpaceVisualsActive ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
                                 <i className="fas fa-crosshairs text-gray-500"></i>
-                                FOCUS: <span style={{ color: titleTextColor }}>{activeFocusGoal.title}</span>
+                                {/* K-Mode: Rename FOCUS to CONTEXT */}
+                                CONTEXT: <span style={{ color: titleTextColor }}>{activeFocusGoal.title}</span>
                                 <button 
                                     onClick={onExitFocus} 
                                     className="ml-3 text-xs bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded text-gray-600 dark:text-gray-300 hover:bg-red-100 hover:text-red-500 transition-colors"
@@ -429,7 +431,8 @@ export const Header: React.FC<HeaderProps> = ({
                                 <button onClick={() => onViewModeChange('focus')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 ${currentViewMode === 'focus' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>
                                     <i className="fas fa-bullseye text-[10px]"></i> Focus
                                 </button>
-                                <button onClick={() => onViewModeChange('goals')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${currentViewMode === 'goals' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>Goals</button>
+                                {/* K-Mode: Rename "Goals" to "Contexts" */}
+                                <button onClick={() => onViewModeChange('goals')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${currentViewMode === 'goals' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>Contexts</button>
                                 <button onClick={() => onViewModeChange('calendar')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${currentViewMode === 'calendar' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>Calendar</button>
                             </div>
 
