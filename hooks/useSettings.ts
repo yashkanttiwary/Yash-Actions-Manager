@@ -18,6 +18,7 @@ const DEFAULT_SETTINGS: Settings = {
     showPomodoroTimer: false,
     googleSheetId: '',
     googleAppsScriptUrl: '',
+    googleAppsScriptToken: '', // IMP-001
     googleCalendarId: 'primary',
     geminiApiKey: '', 
     googleApiKey: '',
@@ -61,6 +62,7 @@ export const useSettings = () => {
                     googleClientId: parsedSecure.googleClientId || parsedGeneral.googleClientId || '',
                     googleSheetId: parsedSecure.googleSheetId || parsedGeneral.googleSheetId || '',
                     googleAppsScriptUrl: parsedSecure.googleAppsScriptUrl || parsedGeneral.googleAppsScriptUrl || '',
+                    googleAppsScriptToken: parsedSecure.googleAppsScriptToken || parsedGeneral.googleAppsScriptToken || '',
                     
                     audio: { ...DEFAULT_SETTINGS.audio, ...(parsedGeneral.audio || {}) }
                 };
@@ -95,13 +97,13 @@ export const useSettings = () => {
                     // H-01: Split sensitive vs non-sensitive for storage
                     // Non-Sensitive
                     const { 
-                        geminiApiKey, googleApiKey, googleClientId, googleSheetId, googleAppsScriptUrl, 
+                        geminiApiKey, googleApiKey, googleClientId, googleSheetId, googleAppsScriptUrl, googleAppsScriptToken,
                         ...general 
                     } = currentSettings;
 
                     // Sensitive
                     const secure = { 
-                        geminiApiKey, googleApiKey, googleClientId, googleSheetId, googleAppsScriptUrl 
+                        geminiApiKey, googleApiKey, googleClientId, googleSheetId, googleAppsScriptUrl, googleAppsScriptToken
                     };
 
                     await storage.set(SETTINGS_KEY, JSON.stringify(general));

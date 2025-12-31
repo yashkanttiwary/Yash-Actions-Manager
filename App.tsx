@@ -689,39 +689,28 @@ const App: React.FC = () => {
     const handleSaveTask = async (taskToSave: Task) => {
         let savedTask = taskToSave;
         
+        // LOGIC-001: Resolve race condition by handling new tasks atomically if possible
         if (taskToSave.id.startsWith('new-')) {
             const { id, createdDate, lastModified, ...newTaskData } = taskToSave;
-            addTask(newTaskData as Omit<Task, 'id' | 'createdDate' | 'lastModified'>);
-            // addTask doesn't return the new ID immediately in this hook setup (limitation of useState), 
-            // so we might miss analyzing new tasks instantly unless we refactor useTaskManager.
-            // For now, we analyze the *content* and we can't update it immediately without ID.
-            // Workaround: We can't easily analyze new tasks instantly here. 
-            // Let's accept that analysis happens on Edit or subsequent updates for now, 
-            // OR we skip analysis for fresh tasks until they are edited to prevent complexity.
-            // WAIT! We can analyze it *before* adding, and inject the result into addTask!
-            
+            let finalTaskData = { ...newTaskData };
+
+            // LOGIC-001 FIX: Analyze BEFORE adding to state
             if (hasApiKey) {
                 try {
+                    // We await this for new tasks to ensure they enter the board "judged" by the Mirror
                     const analysis = await analyzeTaskPsychology(taskToSave, settings.geminiApiKey || getEnvVar('VITE_GEMINI_API_KEY'));
-                    if (analysis.isBecoming) {
-                        // Re-call addTask with analysis data? No, addTask is sync.
-                        // We need to modify the payload passed to addTask
-                        const analysisData = { isBecoming: analysis.isBecoming, becomingWarning: analysis.warning };
-                        // Remove the task we just added (which is hard because we don't have ID)
-                        // Actually, addTask queues a state update.
-                        // Better approach: We can't await inside handleSaveTask effectively for the state update.
-                        // Let's just fire-and-forget an update for the *next* render cycle if we could find the task.
-                        // Since we can't, let's just analyze *updated* tasks primarily.
-                    }
+                    finalTaskData = { ...finalTaskData, ...analysis };
                 } catch (e) { console.error(e); }
             }
+
+            addTask(finalTaskData as any);
         } else {
             // Updating existing task
             updateTask(savedTask);
             
-            // Trigger AI Analysis
+            // Trigger AI Analysis in background for edits
             if (hasApiKey) {
-                // Don't await this, let it run in background
+                // Don't await this, let it run in background to keep UI snappy for edits
                 analyzeTaskPsychology(savedTask, settings.geminiApiKey || getEnvVar('VITE_GEMINI_API_KEY'))
                     .then(analysis => {
                         if (analysis.isBecoming !== savedTask.isBecoming) {

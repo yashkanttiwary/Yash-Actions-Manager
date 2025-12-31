@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Settings, SettingsTab } from '../types';
 import { initGoogleClient } from '../services/googleAuthService';
@@ -34,7 +34,7 @@ type ConnectionStatus = 'idle' | 'testing' | 'success' | 'error';
 
 // --- Helper Components ---
 
-const CopyButton: React.FC<{ text: string; label?: string }> = ({ text, label }) => {
+const CopyButton: React.FC<{ text: string; label?: string; compact?: boolean }> = ({ text, label, compact }) => {
     const [copied, setCopied] = useState(false);
 
     const handleCopy = () => {
@@ -47,11 +47,11 @@ const CopyButton: React.FC<{ text: string; label?: string }> = ({ text, label })
         <button 
             type="button"
             onClick={handleCopy}
-            className="group flex items-center gap-2 px-3 py-1.5 text-xs font-semibold bg-gray-100 dark:bg-gray-800 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-gray-700 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg border border-gray-200 dark:border-gray-700 transition-all"
+            className={`group flex items-center gap-2 font-semibold bg-gray-100 dark:bg-gray-800 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-gray-700 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg border border-gray-200 dark:border-gray-700 transition-all ${compact ? 'p-1.5' : 'px-3 py-1.5 text-xs'}`}
             title="Copy to clipboard"
         >
             <i className={`fas ${copied ? 'fa-check text-green-500' : 'fa-copy'}`}></i>
-            {label && <span>{copied ? 'Copied!' : label}</span>}
+            {!compact && label && <span>{copied ? 'Copied!' : label}</span>}
         </button>
     );
 };
@@ -83,16 +83,49 @@ const Step: React.FC<{ num: number; title: string; children: React.ReactNode }> 
     </div>
 );
 
-const CodeBlock: React.FC<{ code: string }> = ({ code }) => (
-    <div className="relative group rounded-lg overflow-hidden border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 mt-2 w-full max-w-full">
-        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-            <CopyButton text={code} label="Copy Code" />
+// --- SIMPLE CODE VIEWER (Highlighter) ---
+// Highlights keywords to make code more readable
+const SimpleCodeViewer: React.FC<{ code: string }> = ({ code }) => {
+    
+    const highlightedCode = useMemo(() => {
+        // Simple regex-based tokenizer for JS
+        // Order matters: Comments and Strings first to avoid matching keywords inside them
+        const tokens = code.split(/(\/\/.*|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`[^`]*`|\b(?:function|var|const|let|if|else|return|try|catch|finally|true|false|null|undefined|for|while|switch|case|break|continue|new|this)\b|[{}()[\],.;])/g);
+        
+        return tokens.map((token, i) => {
+            if (!token) return null;
+            
+            let colorClass = "text-gray-300"; // Default
+            
+            if (token.startsWith('//') || token.startsWith('/*')) {
+                colorClass = "text-green-400 italic"; // Comments
+            } else if (token.startsWith('"') || token.startsWith("'") || token.startsWith('`')) {
+                colorClass = "text-yellow-300"; // Strings
+            } else if (/^(function|var|const|let|if|else|return|try|catch|finally|true|false|null|undefined|for|while|switch|case|break|continue|new|this)$/.test(token)) {
+                colorClass = "text-purple-400 font-bold"; // Keywords
+            } else if (/^[A-Z][a-zA-Z0-9_]*$/.test(token)) {
+                colorClass = "text-blue-300"; // Likely Class/Type
+            } else if (token === 'AUTH_TOKEN') {
+                colorClass = "text-red-400 font-bold"; // Highlight our token var
+            } else if (/[{}()[\]]/.test(token)) {
+                colorClass = "text-gray-500"; // Brackets
+            }
+
+            return <span key={i} className={colorClass}>{token}</span>;
+        });
+    }, [code]);
+
+    return (
+        <div className="relative group rounded-lg overflow-hidden border border-gray-700 bg-[#1e1e1e] mt-2 w-full max-w-full shadow-inner">
+            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                <CopyButton text={code} label="Copy Code" />
+            </div>
+            <pre className="p-4 text-xs font-mono overflow-x-auto whitespace-pre-wrap break-words leading-relaxed">
+                {highlightedCode}
+            </pre>
         </div>
-        <pre className="p-4 text-xs font-mono text-gray-700 dark:text-gray-300 overflow-x-auto whitespace-pre-wrap break-words">
-            {code}
-        </pre>
-    </div>
-);
+    );
+};
 
 // --- NEW: Info Tooltip Component (Portal Version) ---
 const ModeComparisonTooltip: React.FC = () => {
@@ -236,40 +269,54 @@ const ModeComparisonTooltip: React.FC = () => {
 // --- Content Constants ---
 
 const APPS_SCRIPT_CODE = `
-// 🚀 TASK MANAGER DATABASE SCRIPT (ULTIMATE EDITION v9 - GOAL NAMES)
+// 🚀 TASK MANAGER DATABASE SCRIPT (SECURE EDITION v10)
+
+// --- CONFIGURATION ---
+// IMPORTANT: Replace this with the token generated in the App settings.
+const AUTH_TOKEN = "PASTE_YOUR_TOKEN_HERE"; 
+// ---------------------
+
 function doGet(e) { return handleRequest(e); }
 function doPost(e) { return handleRequest(e); }
 
 function handleRequest(e) {
-  var lock = LockService.getScriptLock();
-  lock.tryLock(10000); 
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return jsonResponse({status: 'error', message: 'Busy'});
+  
   try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var params = e.parameter || {};
-    var postData = e.postData ? JSON.parse(e.postData.contents) : {};
-    var action = params.action || postData.action || 'sync_down';
+    // 1. SECURITY CHECK
+    const params = e.parameter || {};
+    const postData = e.postData ? JSON.parse(e.postData.contents) : {};
+    const reqToken = params.token || postData.token;
+
+    if (AUTH_TOKEN !== "PASTE_YOUR_TOKEN_HERE" && reqToken !== AUTH_TOKEN) {
+       return jsonResponse({status: 'error', message: 'Unauthorized: Invalid Token'});
+    }
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const action = params.action || postData.action || 'sync_down';
 
     if (action === 'check') { return jsonResponse({status: 'ok'}); }
 
     if (action === 'sync_up') {
-      // 1. SYNC TASKS
-      var taskSheet = getOrCreateSheet(ss, 'Sheet1');
+      // 2. SYNC TASKS
+      const taskSheet = getOrCreateSheet(ss, 'Sheet1');
       taskSheet.clear();
-      // UPDATED HEADERS: Added 'Goal Title' at col 16 (index 15)
-      var taskHeaders = ['ID', 'Title', 'Status', 'Priority', 'Due Date', 'Time Est (h)', 'Actual Time (s)', 'Tags', 'Scheduled Start', 'Blockers', 'Dependencies', 'Subtasks', 'Description', 'Last Modified', 'Goal ID', 'Goal Title', 'JSON_DATA'];
+      // UPDATED HEADERS
+      const taskHeaders = ['ID', 'Title', 'Status', 'Priority', 'Due Date', 'Time Est (h)', 'Actual Time (s)', 'Tags', 'Scheduled Start', 'Blockers', 'Dependencies', 'Subtasks', 'Description', 'Last Modified', 'Goal ID', 'Goal Title', 'JSON_DATA'];
       taskSheet.appendRow(taskHeaders);
-      var taskRows = postData.rows;
+      const taskRows = postData.rows;
       if (taskRows && taskRows.length > 0) { 
         taskSheet.getRange(2, 1, taskRows.length, taskRows[0].length).setValues(taskRows); 
       }
       formatTaskSheet(taskSheet);
 
-      // 2. SYNC GOALS
-      var goalSheet = getOrCreateSheet(ss, 'Goals');
+      // 3. SYNC GOALS
+      const goalSheet = getOrCreateSheet(ss, 'Goals');
       goalSheet.clear();
-      var goalHeaders = ['ID', 'Title', 'Color', 'Description', 'Created Date'];
+      const goalHeaders = ['ID', 'Title', 'Color', 'Description', 'Created Date'];
       goalSheet.appendRow(goalHeaders);
-      var goalRows = postData.goals;
+      const goalRows = postData.goals;
       if (goalRows && goalRows.length > 0) {
         goalSheet.getRange(2, 1, goalRows.length, goalRows[0].length).setValues(goalRows);
       }
@@ -278,13 +325,13 @@ function handleRequest(e) {
       return jsonResponse({status: 'success', tasksWritten: taskRows ? taskRows.length : 0, goalsWritten: goalRows ? goalRows.length : 0});
     }
 
-    // SYNC DOWN
-    var taskSheet = getOrCreateSheet(ss, 'Sheet1');
-    var taskData = taskSheet.getDataRange().getValues();
+    // 4. SYNC DOWN
+    const taskSheet = getOrCreateSheet(ss, 'Sheet1');
+    const taskData = taskSheet.getDataRange().getValues();
     if (taskData.length > 0 && taskData[0][0] === 'ID') { taskData.shift(); }
 
-    var goalSheet = getOrCreateSheet(ss, 'Goals');
-    var goalData = goalSheet.getDataRange().getValues();
+    const goalSheet = getOrCreateSheet(ss, 'Goals');
+    const goalData = goalSheet.getDataRange().getValues();
     if (goalData.length > 0 && goalData[0][0] === 'ID') { goalData.shift(); }
 
     return jsonResponse({
@@ -296,7 +343,7 @@ function handleRequest(e) {
 }
 
 function getOrCreateSheet(ss, name) {
-  var sheet = ss.getSheetByName(name);
+  let sheet = ss.getSheetByName(name);
   if (!sheet) { sheet = ss.insertSheet(name); }
   return sheet;
 }
@@ -305,12 +352,12 @@ function jsonResponse(data) { return ContentService.createTextOutput(JSON.string
 
 function formatTaskSheet(sheet) {
   try {
-    var lastRow = sheet.getLastRow();
-    var headerRange = sheet.getRange(1, 1, 1, 17); // Updated range for new column
+    const lastRow = sheet.getLastRow();
+    const headerRange = sheet.getRange(1, 1, 1, 17); 
     headerRange.setBackground("#1e293b").setFontColor("#f8fafc").setFontWeight("bold").setHorizontalAlignment("center").setVerticalAlignment("middle").setWrap(true);
     sheet.setFrozenRows(1);
     if (lastRow > 1) {
-       var range = sheet.getRange(2, 1, lastRow - 1, 17);
+       const range = sheet.getRange(2, 1, lastRow - 1, 17);
        range.applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY);
     }
   } catch(e) {}
@@ -318,8 +365,8 @@ function formatTaskSheet(sheet) {
 
 function formatGoalSheet(sheet) {
   try {
-    var lastRow = sheet.getLastRow();
-    var headerRange = sheet.getRange(1, 1, 1, 5);
+    const lastRow = sheet.getLastRow();
+    const headerRange = sheet.getRange(1, 1, 1, 5);
     headerRange.setBackground("#4f46e5").setFontColor("#ffffff").setFontWeight("bold");
     sheet.setFrozenRows(1);
     sheet.setColumnWidth(1, 150); sheet.setColumnWidth(2, 200); sheet.setColumnWidth(4, 300);
@@ -355,6 +402,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
     // Sheet ID Local State
     const [sheetIdInput, setSheetIdInput] = useState(settings.googleSheetId || '');
     const [scriptUrlInput, setScriptUrlInput] = useState(settings.googleAppsScriptUrl || '');
+    const [scriptTokenInput, setScriptTokenInput] = useState(settings.googleAppsScriptToken || ''); // IMP-001
     const [sheetStatus, setSheetStatus] = useState<ConnectionStatus>('idle');
     const [sheetErrorDetail, setSheetErrorDetail] = useState('');
 
@@ -399,9 +447,10 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
         }
         if (settings.googleAppsScriptUrl) {
             setScriptUrlInput(settings.googleAppsScriptUrl);
+            setScriptTokenInput(settings.googleAppsScriptToken || '');
             if (sheetMethod === 'script') setSheetStatus('success');
         }
-    }, [settings.googleSheetId, settings.googleAppsScriptUrl]);
+    }, [settings.googleSheetId, settings.googleAppsScriptUrl, settings.googleAppsScriptToken]);
 
     // Ensure sheetStatus is updated when switching methods if a connection exists
     useEffect(() => {
@@ -442,8 +491,9 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
             // Do NOT manually set sheetStatus to 'idle' here to avoid race conditions with effects
             
             if (sheetMethod === 'script') {
-                 onUpdateSettings({ googleAppsScriptUrl: '' });
+                 onUpdateSettings({ googleAppsScriptUrl: '', googleAppsScriptToken: '' });
                  setScriptUrlInput('');
+                 setScriptTokenInput('');
             } else {
                  onUpdateSettings({ googleSheetId: '' });
                  setSheetIdInput('');
@@ -451,6 +501,11 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
         }
     };
     
+    const generateToken = () => {
+        const randomToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+        setScriptTokenInput(randomToken);
+    };
+
     const handleConnectSheet = async () => {
         setSheetStatus('testing');
         setSheetErrorDetail('');
@@ -484,14 +539,19 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                 setSheetErrorDetail('Please enter the Web App URL.');
                 return;
             }
+            // Token is optional but highly recommended. We check logic handles empty string.
             try {
-                const isValid = await testAppsScriptConnection(scriptUrlInput.trim());
+                const isValid = await testAppsScriptConnection(scriptUrlInput.trim(), scriptTokenInput.trim());
                 if (isValid) {
-                    onUpdateSettings({ googleAppsScriptUrl: scriptUrlInput.trim(), googleSheetId: '' }); // Clear other method
+                    onUpdateSettings({ 
+                        googleAppsScriptUrl: scriptUrlInput.trim(), 
+                        googleAppsScriptToken: scriptTokenInput.trim(),
+                        googleSheetId: '' 
+                    }); // Clear other method
                     // Status will update via effect when props change
                 } else {
                     setSheetStatus('error');
-                    setSheetErrorDetail("Script test failed. Ensure 'Who has access' is 'Anyone'.");
+                    setSheetErrorDetail("Connection test failed. Check URL and ensure your Token matches.");
                 }
             } catch (error) {
                 setSheetStatus('error');
@@ -795,9 +855,9 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                         <i className="fas fa-exclamation-triangle text-amber-500 text-xl animate-pulse"></i>
                                     </div>
                                     <div>
-                                        <h4 className="font-bold text-gray-900 dark:text-white">Action Required: Update Script! (v9 - Goal Names)</h4>
+                                        <h4 className="font-bold text-gray-900 dark:text-white">Action Required: Update Script! (v10 - Security Token)</h4>
                                         <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
-                                            The data structure has changed to include Goal Titles in the sheet. You MUST update your Google Apps Script code.
+                                            The script now supports a secure token to prevent unauthorized access. Please update your deployment code.
                                         </p>
                                     </div>
                                 </div>
@@ -806,67 +866,97 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                     <h3 className="text-lg font-bold flex items-center gap-2 text-gray-900 dark:text-white mb-4">
                                         <i className="fas fa-link text-green-500"></i> No Client ID Required
                                     </h3>
-                                    <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                                         This method uses a small script inside your Google Sheet to create a secure link. 
                                         You do <strong>not</strong> need to set up Google Cloud Console or Client IDs.
                                     </p>
                                     
-                                    <div>
-                                        <label className={labelClass}>Web App URL</label>
-                                        
-                                        {/* CONDITIONAL RENDER: Show Connected State or Input Field */}
-                                        {sheetStatus === 'success' ? (
-                                            <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl flex items-center justify-between animate-fadeIn">
-                                                <div className="flex items-center gap-3">
-                                                     <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-800 flex items-center justify-center text-green-600 dark:text-green-300">
-                                                        <i className="fas fa-link"></i>
-                                                     </div>
-                                                     <div>
-                                                         <h4 className="font-bold text-gray-900 dark:text-white">Connected via Script</h4>
-                                                         <p className="text-xs text-gray-500 dark:text-gray-400 font-mono truncate max-w-[200px] md:max-w-[300px]">
-                                                            {settings.googleAppsScriptUrl ? settings.googleAppsScriptUrl.substring(0, 40) + '...' : 'URL Saved'}
-                                                         </p>
-                                                     </div>
-                                                </div>
+                                    <div className="space-y-4">
+                                        {/* Token Input */}
+                                        <div>
+                                            <label className={labelClass}>Security Token (IMP-001)</label>
+                                            <div className="flex gap-2">
+                                                <input 
+                                                    type="text" 
+                                                    value={scriptTokenInput} 
+                                                    onChange={(e) => setScriptTokenInput(e.target.value)} 
+                                                    placeholder="Generate or paste a secret token..." 
+                                                    className={inputClass}
+                                                    disabled={sheetStatus === 'testing' || sheetStatus === 'success'}
+                                                />
                                                 <button 
                                                     type="button"
-                                                    onClick={handleDisconnect}
-                                                    className="px-4 py-2 bg-white dark:bg-gray-800 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-sm font-bold rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors shadow-sm"
+                                                    onClick={generateToken}
+                                                    disabled={sheetStatus === 'testing' || sheetStatus === 'success'}
+                                                    className="px-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg transition-colors"
+                                                    title="Generate Random Token"
                                                 >
-                                                    Disconnect
+                                                    <i className="fas fa-random"></i>
                                                 </button>
+                                                <CopyButton text={scriptTokenInput} compact />
                                             </div>
-                                        ) : (
-                                            <>
-                                                <div className="flex flex-col sm:flex-row gap-3">
-                                                    <div className="flex-grow w-full">
-                                                        <input
-                                                            type="text"
-                                                            value={scriptUrlInput}
-                                                            onChange={(e) => setScriptUrlInput(e.target.value)}
-                                                            placeholder="https://script.google.com/macros/s/..."
-                                                            className={inputClass}
-                                                            disabled={sheetStatus === 'testing'}
-                                                        />
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                You MUST paste this token into the <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">AUTH_TOKEN</code> variable in the Apps Script code below.
+                                            </p>
+                                        </div>
+
+                                        <div>
+                                            <label className={labelClass}>Web App URL</label>
+                                            
+                                            {/* CONDITIONAL RENDER: Show Connected State or Input Field */}
+                                            {sheetStatus === 'success' ? (
+                                                <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl flex items-center justify-between animate-fadeIn">
+                                                    <div className="flex items-center gap-3">
+                                                         <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-800 flex items-center justify-center text-green-600 dark:text-green-300">
+                                                            <i className="fas fa-link"></i>
+                                                         </div>
+                                                         <div>
+                                                             <h4 className="font-bold text-gray-900 dark:text-white">Connected via Script</h4>
+                                                             <p className="text-xs text-gray-500 dark:text-gray-400 font-mono truncate max-w-[200px] md:max-w-[300px]">
+                                                                {settings.googleAppsScriptUrl ? settings.googleAppsScriptUrl.substring(0, 40) + '...' : 'URL Saved'}
+                                                             </p>
+                                                         </div>
                                                     </div>
                                                     <button 
                                                         type="button"
-                                                        onClick={handleConnectSheet}
-                                                        disabled={sheetStatus === 'testing' || !scriptUrlInput.trim()}
-                                                        className={`w-full sm:w-auto px-6 py-2.5 rounded-lg font-medium transition-colors whitespace-nowrap text-white shadow-md flex items-center justify-center gap-2 ${
-                                                            sheetStatus === 'testing' ? 'bg-indigo-400 cursor-wait' : 'bg-indigo-600 hover:bg-indigo-700'
-                                                        }`}
+                                                        onClick={handleDisconnect}
+                                                        className="px-4 py-2 bg-white dark:bg-gray-800 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-sm font-bold rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors shadow-sm"
                                                     >
-                                                        {sheetStatus === 'testing' ? 'Verifying...' : 'Connect'}
+                                                        Disconnect
                                                     </button>
                                                 </div>
-                                                {sheetStatus === 'error' && (
-                                                    <div className="mt-2 text-sm text-red-500 font-bold animate-fadeIn">
-                                                        <i className="fas fa-exclamation-circle mr-1"></i> {sheetErrorDetail}
+                                            ) : (
+                                                <>
+                                                    <div className="flex flex-col sm:flex-row gap-3">
+                                                        <div className="flex-grow w-full">
+                                                            <input
+                                                                type="text"
+                                                                value={scriptUrlInput}
+                                                                onChange={(e) => setScriptUrlInput(e.target.value)}
+                                                                placeholder="https://script.google.com/macros/s/..."
+                                                                className={inputClass}
+                                                                disabled={sheetStatus === 'testing'}
+                                                            />
+                                                        </div>
+                                                        <button 
+                                                            type="button"
+                                                            onClick={handleConnectSheet}
+                                                            disabled={sheetStatus === 'testing' || !scriptUrlInput.trim() || !scriptTokenInput.trim()}
+                                                            className={`w-full sm:w-auto px-6 py-2.5 rounded-lg font-medium transition-colors whitespace-nowrap text-white shadow-md flex items-center justify-center gap-2 ${
+                                                                sheetStatus === 'testing' ? 'bg-indigo-400 cursor-wait' : 'bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400'
+                                                            }`}
+                                                        >
+                                                            {sheetStatus === 'testing' ? 'Verifying...' : 'Connect'}
+                                                        </button>
                                                     </div>
-                                                )}
-                                            </>
-                                        )}
+                                                    {sheetStatus === 'error' && (
+                                                        <div className="mt-2 text-sm text-red-500 font-bold animate-fadeIn">
+                                                            <i className="fas fa-exclamation-circle mr-1"></i> {sheetErrorDetail}
+                                                        </div>
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
 
@@ -877,8 +967,8 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                         <p>Create a new Google Sheet. Go to <strong>Extensions &gt; Apps Script</strong>.</p>
                                     </Step>
                                     <Step num={2} title="Paste the Magic Code">
-                                        <p>Delete any code there and paste this exactly:</p>
-                                        <CodeBlock code={APPS_SCRIPT_CODE} />
+                                        <p>Delete any code there and paste this exactly. <strong>Don't forget to replace the Token!</strong></p>
+                                        <SimpleCodeViewer code={APPS_SCRIPT_CODE} />
                                     </Step>
                                     <Step num={3} title="Deploy as Web App (Crucial Step!)">
                                         <div className="space-y-3">
