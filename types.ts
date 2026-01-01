@@ -67,6 +67,9 @@ export interface Task {
   // THE MIRROR: Psychological Analysis
   isBecoming?: boolean; // True if task is about "becoming" (future self) vs "doing" (action)
   becomingWarning?: string; // The AI's explanation of the trap
+  
+  // DATA SAFETY: Soft Delete
+  isDeleted?: boolean;
 }
 
 // Added TaskDiff here to be shared

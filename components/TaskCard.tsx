@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useLayoutEffect, useCallback } from 'react';
 import { Task, Status, Goal } from '../types';
 import { PRIORITY_COLORS, TAG_COLORS, STATUS_STYLES, PRIORITY_LABELS } from '../constants';
@@ -5,7 +6,7 @@ import { getContrastColor } from '../utils/colorUtils';
 
 interface TaskCardProps {
     task: Task;
-    allTasks: Task[]; // All tasks needed for dependency tooltips
+    allTasks: Task[]; // All tasks needed for dependency selection
     goals?: Goal[]; // New Prop: Pass all goals to find color/title
     onEditTask: (task: Task) => void;
     onUpdateTask: (task: Task) => void; // Added for Dismiss Action
@@ -151,6 +152,12 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
         e.stopPropagation();
         onOpenContextMenu(e, task);
     };
+
+    const handleMenuButtonClick = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onOpenContextMenu(e, task);
+    }
 
     const handleDeleteClick = (e: React.MouseEvent) => {
         // Stop everything to prevent parent handlers (drag/edit)
@@ -390,12 +397,23 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                             </span>
                         )}
                         
+                        {/* MOBILE: Context Menu Trigger Button */}
+                        <button
+                            type="button"
+                            onClick={handleMenuButtonClick}
+                            onMouseDown={handleButtonMouseDown} 
+                            className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ml-1 focus:outline-none"
+                            title="Actions"
+                        >
+                            <i className="fas fa-ellipsis-v text-xs"></i>
+                        </button>
+
                         {isCompactMode && isExpanded && (
                             <button
                                 type="button"
                                 onClick={(e) => handleExpandToggle(e, false)}
                                 onMouseDown={handleButtonMouseDown} 
-                                className="w-10 h-10 md:w-8 md:h-8 flex items-center justify-center bg-gray-100 dark:bg-gray-700 rounded-full text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 shadow-sm transition-all hover:bg-gray-200 dark:hover:bg-gray-600 ml-1 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 relative z-30 pointer-events-auto"
+                                className="w-8 h-8 flex items-center justify-center bg-gray-100 dark:bg-gray-700 rounded-full text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 shadow-sm transition-all hover:bg-gray-200 dark:hover:bg-gray-600 ml-1 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 relative z-30 pointer-events-auto"
                                 title="Collapse to compact view"
                                 aria-label="Collapse to compact view"
                             >

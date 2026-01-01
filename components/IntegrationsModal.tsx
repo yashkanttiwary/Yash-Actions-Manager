@@ -2,10 +2,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Settings, SettingsTab } from '../types';
-import { initGoogleClient } from '../services/googleAuthService';
+import { initGoogleClient, resetGoogleClient } from '../services/googleAuthService';
 import { initializeSheetHeaders, testAppsScriptConnection } from '../services/googleSheetService';
 import { saveAudioTrack, getAllAudioTracks, deleteAudioTrack, AudioTrack } from '../utils/indexedDB';
 import { getAccurateCurrentDate } from '../services/timeService';
+import { validateGeminiKey } from '../services/geminiService';
 
 const timezones = [
     'UTC', 'GMT',
@@ -352,6 +353,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
     
     // Gemini API Key State
     const [geminiKeyInput, setGeminiKeyInput] = useState(settings.geminiApiKey || '');
+    const [isVerifyingKey, setIsVerifyingKey] = useState(false); // New state for validation
 
     // Sheet ID Local State
     const [sheetIdInput, setSheetIdInput] = useState(settings.googleSheetId || '');
@@ -424,17 +426,34 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
         });
         if (apiKeys.apiKey && apiKeys.clientId) {
             try {
-                await initGoogleClient(apiKeys.apiKey, apiKeys.clientId);
+                // FORCE RESET: This allows re-initialization with new keys
+                await initGoogleClient(apiKeys.apiKey, apiKeys.clientId, true);
                 alert("✅ API Configuration updated successfully. Please click 'Connect Google' to finish.");
             } catch (e) {
+                console.error(e);
                 alert("⚠️ Saved, but failed to initialize. Please check if the keys are correct.");
             }
         }
     };
     
-    const handleSaveGeminiKey = () => {
-        onUpdateSettings({ geminiApiKey: geminiKeyInput });
-        alert("✅ Gemini API Key saved. AI features are ready!");
+    const handleSaveGeminiKey = async () => {
+        const trimmedKey = geminiKeyInput.trim();
+        if (!trimmedKey) {
+            onUpdateSettings({ geminiApiKey: '' });
+            alert("API Key cleared.");
+            return;
+        }
+
+        setIsVerifyingKey(true);
+        const isValid = await validateGeminiKey(trimmedKey);
+        setIsVerifyingKey(false);
+
+        if (isValid) {
+            onUpdateSettings({ geminiApiKey: trimmedKey });
+            alert("✅ Gemini API Key verified and saved! AI features are ready.");
+        } else {
+            alert("❌ Invalid API Key. Please check the key and try again. It should look like 'AIzaSy...'");
+        }
     };
 
     const handleDisconnect = () => {
@@ -641,8 +660,19 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                         Don't have one? <ExternalLink href="https://aistudio.google.com/app/apikey">Get a free key here</ExternalLink>.
                                     </p>
                                 </div>
-                                <button type="button" onClick={handleSaveGeminiKey} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold w-full sm:w-auto">
-                                    Save AI Key
+                                <button 
+                                    type="button" 
+                                    onClick={handleSaveGeminiKey} 
+                                    disabled={isVerifyingKey || !geminiKeyInput.trim()}
+                                    className={`px-4 py-2 rounded-lg font-bold w-full sm:w-auto transition-all ${isVerifyingKey ? 'bg-indigo-400 cursor-wait' : 'bg-indigo-600 hover:bg-indigo-700'} text-white shadow-md`}
+                                >
+                                    {isVerifyingKey ? (
+                                        <>
+                                            <i className="fas fa-spinner fa-spin mr-2"></i> Verifying...
+                                        </>
+                                    ) : (
+                                        "Save AI Key"
+                                    )}
                                 </button>
                             </div>
                         </div>
@@ -1021,7 +1051,17 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                     <input type="text" value={apiKeys.clientId} onChange={(e) => setApiKeys({ ...apiKeys, clientId: e.target.value })} className={inputClass} />
                                     <p className="text-xs text-gray-500 mt-1">Required for Calendar Sync.</p>
                                 </div>
-                                <button type="button" onClick={handleSaveApiKeys} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold w-full sm:w-auto">Save Sync Keys</button>
+                                <div className="flex flex-col sm:flex-row gap-3 mt-2">
+                                    <button type="button" onClick={handleSaveApiKeys} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold w-full sm:w-auto hover:bg-indigo-700 transition-colors shadow-md">
+                                        Save Sync Keys
+                                    </button>
+                                    {googleAuthState.error && (
+                                        <div className="text-red-500 text-sm font-bold flex items-center">
+                                            <i className="fas fa-exclamation-triangle mr-2"></i> 
+                                            Init Failed. Please re-enter keys.
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>

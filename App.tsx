@@ -28,6 +28,7 @@ import { ConfirmModal } from './components/ConfirmModal';
 import { getEnvVar } from './utils/env';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { StarField } from './components/StarField';
+import { TrashModal } from './components/TrashModal'; // New Component
 
 interface GoogleAuthState {
     gapiLoaded: boolean;
@@ -35,6 +36,15 @@ interface GoogleAuthState {
     isSignedIn: boolean;
     error?: Error;
     disabled?: boolean;
+}
+
+interface NotificationState {
+    message: string;
+    type: 'success' | 'error';
+    action?: {
+        label: string;
+        onClick: () => void;
+    }
 }
 
 const ConnectSheetPlaceholder: React.FC<{ onConnect: () => void }> = ({ onConnect }) => (
@@ -85,12 +95,16 @@ const App: React.FC = () => {
 
     const {
         tasks,
+        deletedTasks, // New: Get deleted tasks
         goals, 
         columns,
         columnLayouts,
         addTask,
         updateTask,
-        deleteTask,
+        deleteTask, // Soft delete
+        restoreTask, // New
+        permanentlyDeleteTask, // New
+        emptyTrash, // New
         moveTask,
         setAllTasks,
         setAllData, 
@@ -113,8 +127,9 @@ const App: React.FC = () => {
     const [resolvingBlockerTask, setResolvingBlockerTask] = useState<{ task: Task; newStatus: Status; newIndex: number } | null>(null);
     const [isTodayView, setIsTodayView] = useState<boolean>(false);
     const [showAIModal, setShowAIModal] = useState(false);
+    const [showTrashModal, setShowTrashModal] = useState(false); // New State
     
-    const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+    const [notification, setNotification] = useState<NotificationState | null>(null);
 
     const [showIntegrationsModal, setShowIntegrationsModal] = useState(false);
     const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>('general');
@@ -175,7 +190,7 @@ const App: React.FC = () => {
 
     useEffect(() => {
         if (notification) {
-            const timer = setTimeout(() => setNotification(null), 3000);
+            const timer = setTimeout(() => setNotification(null), 5000); // 5 seconds for toast
             return () => clearTimeout(timer);
         }
     }, [notification]);
@@ -186,6 +201,7 @@ const App: React.FC = () => {
 
         const initialize = async () => {
             try {
+                // Ensure we pass keys if they exist
                 const { gapiLoaded, gisLoaded, disabled } = await initGoogleClient(settings.googleApiKey, settings.googleClientId);
                 
                 if (disabled) {
@@ -422,8 +438,6 @@ const App: React.FC = () => {
             // Run silent background check
             const analysis = await analyzeTaskPsychology(task, apiKey);
             
-            // Only update if it changes the state (prevents loops, though useTaskManager handles object identity)
-            // Or simply if 'isBecoming' is true, update the task to reflect that.
             if (analysis.isBecoming) {
                 updateTask({
                     ...task,
@@ -437,7 +451,6 @@ const App: React.FC = () => {
     }, [settings.geminiApiKey, updateTask]);
 
     const handleQuickAddTask = useCallback((title: string, status: Status) => {
-        // 1. Create the task explicitly (Optimistic UI)
         const newTaskData = {
             title,
             status,
@@ -447,10 +460,7 @@ const App: React.FC = () => {
             goalId: focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined, 
         };
         
-        // 2. Add to board instantly
         const newTask = addTask(newTaskData);
-        
-        // 3. Trigger Background Analysis
         runPsychologyCheck(newTask);
 
     }, [addTask, focusedGoalId, runPsychologyCheck]);
@@ -459,7 +469,6 @@ const App: React.FC = () => {
         const effectiveKey = settings.geminiApiKey || getEnvVar('VITE_GEMINI_API_KEY');
         
         if (!effectiveKey) {
-             // Fallback: Add basic task
              const basicTask = addTask({
                 title: transcript,
                 status: defaultStatus,
@@ -468,15 +477,12 @@ const App: React.FC = () => {
                 description: '', 
                 goalId: focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined
              });
-             // Even basic fallback should try analysis if key becomes available or just skip
              return;
         }
 
         try {
             const parsedData = await parseTaskFromVoice(transcript, effectiveKey, goals);
             
-            // Note: Voice parser returns a structure, we need to finalize it for the modal or add it directly
-            // Current flow opens the modal for "Draft" review
             const draftTask: Task = {
                 id: `new-${Date.now()}`,
                 title: parsedData.title || transcript, 
@@ -503,14 +509,14 @@ const App: React.FC = () => {
                 lastModified: new Date().toISOString(),
                 statusChangeDate: new Date().toISOString(),
                 actualTimeSpent: 0,
-                isPinned: false
+                isPinned: false,
+                isDeleted: false
             };
 
             setEditingTask(draftTask);
 
         } catch (error) {
             console.error("Voice parse failed:", error);
-            // Fallback add
             const fallbackTask = addTask({
                 title: transcript.length > 60 ? `${transcript.substring(0, 57)}...` : transcript,
                 description: `> 🎙️ **Voice Note**\n> "${transcript}"`,
@@ -519,7 +525,6 @@ const App: React.FC = () => {
                 dueDate: new Date().toISOString().split('T')[0],
                 goalId: focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined
             });
-            // Try check on fallback too
             runPsychologyCheck(fallbackTask);
         }
     }, [addTask, settings.geminiApiKey, focusedGoalId, goals, runPsychologyCheck]);
@@ -574,8 +579,6 @@ const App: React.FC = () => {
         setShowAIModal,
         setIsTodayView,
         setViewMode: (newMode) => {
-            // Need a safer cast/check here since Keyboard shortcuts hook expects 2 values but we have 4
-            // For now, toggle between kanban and calendar for shortcut 'V'
             if (typeof newMode === 'function') {
                 setViewMode(prev => (prev === 'kanban' ? 'calendar' : 'kanban'));
             } else {
@@ -590,11 +593,12 @@ const App: React.FC = () => {
             else if (blockingTask) setBlockingTask(null);
             else if (resolvingBlockerTask) setResolvingBlockerTask(null);
             else if (showAIModal) setShowAIModal(false);
+            else if (showTrashModal) setShowTrashModal(false);
             else if (showShortcutsModal) setShowShortcutsModal(false);
             else if (showIntegrationsModal) setShowIntegrationsModal(false);
             else if (confirmModalState.isOpen) setConfirmModalState(prev => ({...prev, isOpen: false}));
         },
-        isAnyModalOpen: !!(contextMenu || editingTask || blockingTask || resolvingBlockerTask || showAIModal || showShortcutsModal || showIntegrationsModal || confirmModalState.isOpen)
+        isAnyModalOpen: !!(contextMenu || editingTask || blockingTask || resolvingBlockerTask || showAIModal || showTrashModal || showShortcutsModal || showIntegrationsModal || confirmModalState.isOpen)
     });
 
     const toggleTheme = () => {
@@ -656,7 +660,6 @@ const App: React.FC = () => {
 
         if (task.isBlockedByDependencies && newStatus === 'In Progress') {
             const blockerTasks = task.dependencies?.map(depId => tasks.find(t => t.id === depId)?.title).filter(Boolean).join(', ');
-            // FIX ISS-002: Use Notification instead of alert
             setNotification({ message: `Blocked by: ${blockerTasks}`, type: 'error' });
             return;
         }
@@ -716,24 +719,14 @@ const App: React.FC = () => {
         setEditingTask(task);
     };
 
-    // TRIGGERS AI PSYCHOLOGY ANALYSIS ON SAVE
     const handleSaveTask = async (taskToSave: Task) => {
-        let savedTask = taskToSave;
-        
         if (taskToSave.id.startsWith('new-')) {
             const { id, createdDate, lastModified, ...newTaskData } = taskToSave;
-            
-            // 1. Save immediately (Optimistic)
             const newTask = addTask(newTaskData as any);
-            
-            // 2. Trigger Background Check
             runPsychologyCheck(newTask);
         } else {
-            // Updating existing task
-            updateTask(savedTask);
-            
-            // Trigger AI Analysis in background for edits
-            runPsychologyCheck(savedTask);
+            updateTask(taskToSave);
+            runPsychologyCheck(taskToSave);
         }
         setEditingTask(null);
     };
@@ -742,8 +735,6 @@ const App: React.FC = () => {
         if (changes.added && changes.added.length > 0) {
             changes.added.forEach(t => {
                 addTask(t as any);
-                // We could run check here too, but AI usually generates 'safe' tasks or we trust it for now.
-                // Or we can invoke runPsychologyCheck on the new tasks if we want to be strict.
             });
         }
         if (changes.updated && changes.updated.length > 0) {
@@ -758,12 +749,24 @@ const App: React.FC = () => {
             changes.deletedIds.forEach(id => {
                 deleteTask(id);
             });
+            // Show Undo Notification
+            setNotification({ 
+                message: `${changes.deletedIds.length} tasks moved to Trash.`, 
+                type: 'success',
+                action: {
+                    label: "Undo",
+                    onClick: () => changes.deletedIds.forEach(id => restoreTask(id))
+                }
+            });
+        } else {
+            setNotification({ message: "Changes applied.", type: 'success' });
         }
-        setNotification({ message: "Changes applied.", type: 'success' });
     };
 
     const filteredTasks = useMemo(() => {
         return tasks.filter(task => {
+            if (task.isDeleted) return false; // Hide deleted
+
             if (focusedGoalId) {
                 if (focusedGoalId === UNASSIGNED_GOAL_ID) {
                     if (task.goalId && goals.some(g => g.id === task.goalId)) return false; 
@@ -836,33 +839,32 @@ const App: React.FC = () => {
         setContextMenu(null);
     };
 
+    // Soft Delete Request
     const requestDeleteTask = useCallback((taskId: string) => {
         const task = tasks.find(t => t.id === taskId);
         if (!task) return;
         
-        setConfirmModalState({
-            isOpen: true,
-            title: "Delete Task?",
-            message: `Are you sure you want to permanently delete "${task.title}"?`,
-            isDestructive: true,
-            onConfirm: () => {
-                deleteTask(taskId);
-                setConfirmModalState(prev => ({...prev, isOpen: false}));
-                setEditingTask(null); 
+        // No confirmation needed for Soft Delete, just move to trash
+        deleteTask(taskId);
+        setEditingTask(null);
+        setNotification({
+            message: "Task moved to Trash",
+            type: 'success',
+            action: {
+                label: "Undo",
+                onClick: () => restoreTask(taskId)
             }
         });
-    }, [tasks, deleteTask]);
+    }, [tasks, deleteTask, restoreTask]);
 
     const handleDeleteFromContextMenu = (task: Task) => {
         requestDeleteTask(task.id);
         setContextMenu(null);
     };
 
-    const activeFocusGoalId = focusedGoalId || null;
+    // Hard Delete from Edit Modal (if user really wants)
+    // Actually Edit Modal now just calls onDelete, which soft deletes
     
-    // Dynamic Header height for mobile/desktop
-    // Desktop: Uses headerHeight
-    // Mobile: TopBar is 16 (64px). Bottom is 16 (64px).
     const headerHeightDesktop = (isMenuLocked || isMenuHovered) ? '200px' : '50px';
 
     return (
@@ -870,7 +872,7 @@ const App: React.FC = () => {
             {isSpaceModeActive && <StarField />}
             
             <Header
-                tasks={tasks}
+                tasks={filteredTasks} // Use filtered tasks to calculate capacity
                 goals={goals} 
                 isTodayView={isTodayView}
                 setIsTodayView={setIsTodayView}
@@ -880,7 +882,7 @@ const App: React.FC = () => {
                 onResetLayout={resetColumnLayouts}
                 gamification={gamification}
                 settings={settings}
-                onUpdateSettings={updateSettings} // H-01: Pass hook updater
+                onUpdateSettings={updateSettings} 
                 currentViewMode={viewMode}
                 onViewModeChange={setViewMode}
                 googleAuthState={googleAuth}
@@ -889,7 +891,7 @@ const App: React.FC = () => {
                 onOpenShortcutsModal={() => setShowShortcutsModal(true)}
                 focusMode={focusMode}
                 setFocusMode={setFocusMode}
-                onOpenSettings={handleOpenSettings}
+                onOpenSettings={(tab) => handleOpenSettings(tab)}
                 connectionHealth={connectionHealth}
                 syncStatus={syncStatus} 
                 onManualPull={manualPull}
@@ -914,6 +916,17 @@ const App: React.FC = () => {
                 onExitFocus={() => setFocusedGoalId(null)}
             />
 
+            {/* Trash Button - Floating or Header? Adding floating for now if trash has items */}
+            {deletedTasks.length > 0 && (
+                <button
+                    onClick={() => setShowTrashModal(true)}
+                    className="fixed bottom-20 right-6 z-50 bg-gray-800 text-white dark:bg-gray-700 w-12 h-12 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform md:bottom-6 md:right-auto md:left-6"
+                    title="Trash / Undo"
+                >
+                    <i className="fas fa-trash-alt"></i>
+                </button>
+            )}
+
             {/* M-02: Audio Suspension Warning Overlay */}
             {audioControls.isSuspended && (
                 <div 
@@ -934,9 +947,17 @@ const App: React.FC = () => {
             >
                 {notification && (
                     <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top-2 fade-in duration-300">
-                        <div className={`px-4 py-2 rounded-lg shadow-xl text-sm font-bold flex items-center gap-2 ${notification.type === 'error' ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}`}>
+                        <div className={`px-4 py-2 rounded-lg shadow-xl text-sm font-bold flex items-center gap-2 ${notification.type === 'error' ? 'bg-red-500 text-white' : 'bg-indigo-600 text-white'}`}>
                             <i className={`fas ${notification.type === 'error' ? 'fa-exclamation-circle' : 'fa-check-circle'}`}></i>
                             {notification.message}
+                            {notification.action && (
+                                <button 
+                                    onClick={notification.action.onClick}
+                                    className="ml-2 bg-white text-indigo-600 px-2 py-0.5 rounded text-xs font-extrabold uppercase hover:bg-gray-100 transition-colors"
+                                >
+                                    {notification.action.label}
+                                </button>
+                            )}
                         </div>
                     </div>
                 )}
@@ -1018,7 +1039,7 @@ const App: React.FC = () => {
                                             onDeleteTask={requestDeleteTask}
                                             onAddGoal={addGoal}
                                             onEditGoal={updateGoal}
-                                            onUpdateTask={updateTask} // Pass the task updater
+                                            onUpdateTask={updateTask} 
                                             onDeleteGoal={handleGoalDelete} 
                                             activeTaskTimer={activeTaskTimer}
                                             onToggleTimer={handleToggleTimer}
@@ -1033,7 +1054,7 @@ const App: React.FC = () => {
                                 )}
                                 {viewMode === 'focus' && (
                                     <FocusView
-                                        tasks={tasks}
+                                        tasks={filteredTasks}
                                         goals={goals}
                                         onEditTask={handleEditTask}
                                         onUpdateTask={updateTask}
@@ -1056,7 +1077,7 @@ const App: React.FC = () => {
             {editingTask && (
                 <EditTaskModal
                     task={editingTask}
-                    allTasks={tasks} 
+                    allTasks={tasks} // Pass all including deleted/hidden for internal logic if needed, but safer to pass filtered
                     onSave={handleSaveTask}
                     onDelete={requestDeleteTask}
                     onClose={() => setEditingTask(null)}
@@ -1083,9 +1104,26 @@ const App: React.FC = () => {
                         setShowAIModal(false);
                     }}
                     onApplyChanges={handleApplyAIChanges}
-                    tasks={tasks}
+                    tasks={filteredTasks} // Only AI on non-deleted
                     apiKey={hasApiKey ? (settings.geminiApiKey || getEnvVar('VITE_GEMINI_API_KEY')) : undefined}
                     onSaveApiKey={(key) => updateSettings({ geminiApiKey: key })} // H-01: Use hook
+                />
+            )}
+            {showTrashModal && (
+                <TrashModal
+                    deletedTasks={deletedTasks}
+                    onRestore={(id) => {
+                        restoreTask(id);
+                        setNotification({ message: "Task restored.", type: 'success' });
+                    }}
+                    onDeleteForever={(id) => {
+                        permanentlyDeleteTask(id);
+                    }}
+                    onEmptyTrash={() => {
+                        emptyTrash();
+                        setShowTrashModal(false);
+                    }}
+                    onClose={() => setShowTrashModal(false)}
                 />
             )}
             {showShortcutsModal && (
@@ -1144,7 +1182,7 @@ const App: React.FC = () => {
                         onClick={() => handleDeleteFromContextMenu(contextMenu.task)}
                         className="w-full text-left px-3 py-1.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center gap-2 mb-1"
                     >
-                        <i className="fas fa-trash-alt w-4"></i> Delete
+                        <i className="fas fa-trash-alt w-4"></i> Trash
                     </button>
 
                     <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
