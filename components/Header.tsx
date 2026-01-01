@@ -577,7 +577,10 @@ export const Header: React.FC<HeaderProps> = ({
                         className={`w-10 h-10 rounded-full flex items-center justify-center shadow-sm ${isSpaceVisualsActive ? 'bg-indigo-500/20 text-indigo-300' : 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-400'}`}
                         aria-label="Open AI Assistant"
                     >
-                        <i className="fas fa-sparkles"></i>
+                        <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 2.5C12 2.5 13.5 8.5 19 12C13.5 15.5 12 21.5 12 21.5C12 21.5 10.5 15.5 5 12C10.5 8.5 12 2.5 12 2.5Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            <path d="M19 2C19 2 19.75 5.25 22.5 7C19.75 8.75 19 12 19 12C19 12 18.25 8.75 15.5 7C18.25 5.25 19 2 19 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.6"/>
+                        </svg>
                     </button>
                     <button
                         onClick={() => setIsMobileMenuOpen(true)}
