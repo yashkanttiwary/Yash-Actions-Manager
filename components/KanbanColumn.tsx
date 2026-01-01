@@ -280,7 +280,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
     return (
         <div 
             ref={colRef}
-            className={`flex-shrink-0 rounded-xl flex flex-col ${containerClasses} ${isResizing ? 'transition-none select-none' : 'transition-all duration-300 ease-in-out'} relative`}
+            className={`flex-shrink-0 rounded-xl flex flex-col ${containerClasses} ${isResizing ? 'transition-none select-none' : 'transition-all duration-300 ease-in-out'} relative h-full`}
             style={{ 
                 width: currentWidth, 
                 height: typeof currentHeight === 'number' ? `${currentHeight}px` : undefined,
@@ -326,7 +326,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                                         type="text" 
                                         value={quickAddTitle}
                                         onChange={handleInputChange}
-                                        placeholder={isProcessing ? "AI Thinking..." : isListening ? "Listening... (Click Stop to Process)" : "Add quick task..."}
+                                        placeholder={isProcessing ? "Thinking..." : isListening ? "Listening..." : "Add task..."}
                                         className={`w-full px-3 py-1.5 pr-8 text-sm rounded-md border transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500
                                             ${isListening 
                                                 ? 'border-red-500 bg-red-50 dark:bg-red-900/30 text-red-900 dark:text-red-200 ring-2 ring-red-500/50' 

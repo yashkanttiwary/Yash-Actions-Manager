@@ -154,18 +154,18 @@ export const FocusView: React.FC<FocusViewProps> = ({
             >
                 
                 {/* Header */}
-                <div className="w-full max-w-3xl mb-6 md:mb-8 text-center mt-2 md:mt-0">
-                    <h1 className={`text-3xl md:text-5xl font-black mb-2 md:mb-3 tracking-tight ${isSpaceMode ? 'text-white drop-shadow-md' : 'text-gray-900 dark:text-white'}`}>
+                <div className="w-full max-w-3xl mb-4 md:mb-8 text-center mt-2 md:mt-0">
+                    <h1 className={`text-2xl md:text-5xl font-black mb-1 md:mb-3 tracking-tight ${isSpaceMode ? 'text-white drop-shadow-md' : 'text-gray-900 dark:text-white'}`}>
                         Action in the Now
                     </h1>
-                    <p className={`text-lg md:text-xl font-light tracking-wide ${isSpaceMode ? 'text-indigo-200' : 'text-indigo-600 dark:text-indigo-400'}`}>
+                    <p className={`text-base md:text-xl font-light tracking-wide ${isSpaceMode ? 'text-indigo-200' : 'text-indigo-600 dark:text-indigo-400'}`}>
                         Do the necessary
                     </p>
                 </div>
 
                 {/* ZONE A: CORE 3 */}
-                <div className="w-full max-w-3xl space-y-4 md:space-y-6 mb-8 md:mb-12">
-                    <div className="flex items-center gap-4 md:gap-6 mb-4 md:mb-6">
+                <div className="w-full max-w-3xl space-y-3 md:space-y-6 mb-6 md:mb-12">
+                    <div className="flex items-center gap-4 md:gap-6 mb-2 md:mb-6">
                         <div className={`h-px flex-1 ${isSpaceMode ? 'bg-indigo-500/30' : 'bg-indigo-200 dark:bg-indigo-900'}`}></div>
                         <h2 className={`text-xs md:text-sm font-bold uppercase tracking-[0.2em] ${isSpaceMode ? 'text-indigo-300' : 'text-indigo-600 dark:text-indigo-400'}`}>
                             Necessary Action
@@ -205,8 +205,8 @@ export const FocusView: React.FC<FocusViewProps> = ({
 
                 {/* ZONE B: BONUS 2 */}
                 {bonusTasks.length > 0 && (
-                    <div className="w-full max-w-3xl space-y-4 md:space-y-6 mb-8 md:mb-12">
-                        <div className="flex items-center gap-4 md:gap-6 mb-4 md:mb-6">
+                    <div className="w-full max-w-3xl space-y-3 md:space-y-6 mb-6 md:mb-12">
+                        <div className="flex items-center gap-4 md:gap-6 mb-2 md:mb-6">
                             <div className={`h-px flex-1 ${isSpaceMode ? 'bg-gray-700' : 'bg-gray-300'}`}></div>
                             <h2 className={`text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] ${isSpaceMode ? 'text-gray-400' : 'text-gray-500'}`}>
                                 Subsidiary Facts
@@ -237,8 +237,8 @@ export const FocusView: React.FC<FocusViewProps> = ({
 
                 {/* ZONE C: ADDITIONAL (UNLIMITED) */}
                 {additionalTasks.length > 0 && (
-                    <div className="w-full max-w-3xl space-y-4 md:space-y-6 mb-16">
-                        <div className="flex items-center gap-4 md:gap-6 mb-4 md:mb-6">
+                    <div className="w-full max-w-3xl space-y-3 md:space-y-6 mb-16">
+                        <div className="flex items-center gap-4 md:gap-6 mb-2 md:mb-6">
                             <div className={`h-px flex-1 ${isSpaceMode ? 'bg-gray-800' : 'bg-gray-200'}`}></div>
                             <h2 className={`text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] ${isSpaceMode ? 'text-gray-500' : 'text-gray-400'}`}>
                                 Further Action

@@ -358,9 +358,9 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
     }
 
     return (
-        <div className="fixed inset-0 bg-white/30 dark:bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 md:p-6" onClick={onClose}>
+        <div className="fixed inset-0 bg-white/30 dark:bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 sm:p-4" onClick={onClose}>
             <div 
-                className="bg-white dark:bg-gray-900 w-full max-w-[500px] h-[650px] max-h-[85vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-white/20 dark:border-gray-700 animate-in zoom-in-95 duration-200 relative" 
+                className="bg-white dark:bg-gray-900 w-full sm:max-w-[500px] h-full sm:h-[650px] sm:max-h-[85vh] sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-white/20 dark:border-gray-700 animate-in zoom-in-95 duration-200 relative" 
                 onClick={e => e.stopPropagation()}
             >
                 {/* Background Decor */}

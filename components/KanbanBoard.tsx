@@ -360,13 +360,23 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
         // MOBILE VIEW (Snap Scrolling) - New Render Path for screens < 768px
         // Renders columns in a horizontal scroll container instead of absolute positioning
         const mobileView = (
-            <div className="md:hidden w-full h-full overflow-x-auto overflow-y-hidden snap-x snap-mandatory flex gap-4 px-6 pb-4 items-start pt-2 no-scrollbar">
+            <div 
+                className="md:hidden w-full h-full overflow-x-auto overflow-y-hidden snap-x snap-mandatory flex items-start no-scrollbar pb-2"
+                style={{
+                    scrollPaddingLeft: '1rem', // Center alignment aid
+                    paddingRight: '20vw' // Allow last item to be centered
+                }}
+            >
                 {columns.map(status => {
                     const tasksForColumn = getTasksByStatus(status);
                     const sortedTasks = sortTasks(tasksForColumn, sortOptions[status] || 'Default');
                     
                     return (
-                        <div key={status} className="snap-center flex-shrink-0 w-[85vw] max-w-[340px] h-full overflow-hidden flex flex-col rounded-xl">
+                        <div 
+                            key={status} 
+                            className="snap-center flex-shrink-0 h-full flex flex-col rounded-xl px-2"
+                            style={{ width: '85vw' }} // Consistent Mobile Card Width
+                        >
                             <KanbanColumn
                                 status={status}
                                 tasks={sortedTasks}
@@ -400,8 +410,6 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
                         </div>
                     );
                 })}
-                {/* Spacer to allow last item to snap center easily if needed */}
-                <div className="w-1 flex-shrink-0 snap-center"></div>
             </div>
         );
 

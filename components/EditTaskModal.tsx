@@ -260,13 +260,18 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
 
 
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4" onClick={onClose}>
-            <div className="bg-white dark:bg-gray-800/80 border border-gray-300 dark:border-gray-600 rounded-2xl shadow-2xl w-full max-w-2xl p-6 sm:p-8" onClick={e => e.stopPropagation()}>
-                <div className="flex justify-between items-center mb-6">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 sm:p-4" onClick={onClose}>
+            <div 
+                className="bg-white dark:bg-gray-800/80 border border-gray-300 dark:border-gray-600 sm:rounded-2xl shadow-2xl w-full max-w-2xl h-full sm:h-auto sm:max-h-[90vh] flex flex-col" 
+                onClick={e => e.stopPropagation()}
+            >
+                {/* Header */}
+                <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
                     <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{isNewTask ? 'New Entry' : 'Edit Entry'}</h2>
+                    <button onClick={onClose} className="sm:hidden p-2 text-gray-500"><i className="fas fa-times text-xl"></i></button>
                 </div>
 
-                <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-4 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
                     <div>
                         <label htmlFor="task-title" className={labelClasses}>{isObservation ? 'Observation' : 'Task Title'} <span className="text-red-500">*</span></label>
                         <input 
@@ -585,7 +590,7 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
                 </div>
 
 
-                <div className="mt-8 flex justify-between items-center flex-shrink-0">
+                <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center flex-shrink-0 bg-white dark:bg-gray-800">
                     <div>
                         {!isNewTask && (
                             <button 

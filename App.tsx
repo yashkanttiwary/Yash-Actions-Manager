@@ -860,7 +860,9 @@ const App: React.FC = () => {
     const activeFocusGoalId = focusedGoalId || null;
     
     // Dynamic Header height for mobile/desktop
-    const headerHeight = (isMenuLocked || isMenuHovered) ? '200px' : '50px';
+    // Desktop: Uses headerHeight
+    // Mobile: TopBar is 16 (64px). Bottom is 16 (64px).
+    const headerHeightDesktop = (isMenuLocked || isMenuHovered) ? '200px' : '50px';
 
     return (
         <div className={`bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-white h-screen flex flex-col overflow-hidden font-sans ${isSpaceModeActive ? 'bg-transparent' : 'bg-dots'} transition-colors duration-300 relative`}>
@@ -923,9 +925,10 @@ const App: React.FC = () => {
             )}
 
             <main 
-                className="flex-1 overflow-auto pl-2 sm:pl-6 pr-2 pb-2 relative flex flex-col scroll-smooth transition-all duration-700 z-10"
+                className="flex-1 overflow-auto pl-2 sm:pl-6 pr-2 pb-2 relative flex flex-col scroll-smooth transition-all duration-700 z-10 
+                           md:pt-[50px] pt-16 pb-20 md:pb-2" // Mobile vs Desktop Padding
                 style={{ 
-                    paddingTop: headerHeight
+                    paddingTop: window.innerWidth >= 768 ? headerHeightDesktop : undefined
                 }}
             >
                 {notification && (
@@ -1040,7 +1043,7 @@ const App: React.FC = () => {
                                         activeTaskTimer={activeTaskTimer}
                                         onToggleTimer={handleToggleTimer}
                                         onReorderTasks={reorderPinnedTasks}
-                                        headerHeight={headerHeight}
+                                        headerHeight={headerHeightDesktop}
                                     />
                                 )}
                             </>
