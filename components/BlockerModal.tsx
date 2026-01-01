@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect } from 'react';
 import { Task } from '../types';
 
@@ -29,7 +30,7 @@ export const BlockerModal: React.FC<BlockerModalProps> = ({ task, onSetBlocker, 
 
 
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4" onClick={onClose}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[100] p-4" onClick={onClose}>
             <div className="bg-white dark:bg-gray-800/80 border border-red-400 dark:border-red-500/50 rounded-2xl shadow-2xl w-full max-w-lg p-8" onClick={e => e.stopPropagation()}>
                 <h2 className="text-2xl font-bold mb-4 text-red-600 dark:text-red-400 flex items-center">
                     <i className="fas fa-exclamation-triangle mr-3"></i> Add New Blocker

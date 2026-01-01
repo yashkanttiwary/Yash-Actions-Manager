@@ -1,3 +1,4 @@
+
 import React, { useCallback, useEffect } from 'react';
 import { Task } from '../types';
 
@@ -33,7 +34,7 @@ export const ResolveBlockerModal: React.FC<ResolveBlockerModalProps> = ({ task, 
     }
 
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4" onClick={onClose}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[100] p-4" onClick={onClose}>
             <div className="bg-white dark:bg-gray-800/80 border border-green-400 dark:border-green-500/50 rounded-2xl shadow-2xl w-full max-w-lg p-8" onClick={e => e.stopPropagation()}>
                 <h2 className="text-2xl font-bold mb-4 text-green-600 dark:text-green-400 flex items-center">
                     <i className="fas fa-check-circle mr-3"></i> Resolve Blocker

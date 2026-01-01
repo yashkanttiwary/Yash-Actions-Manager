@@ -3,7 +3,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { Task, Goal, Status, Priority } from '../types';
 import { FocusTaskCard } from './FocusTaskCard';
 import { storage } from '../utils/storage';
-import { PRIORITY_LABELS, PRIORITY_COLORS } from '../constants';
+import { PRIORITY_LABELS, PRIORITY_COLORS, PRIORITY_ORDER } from '../constants';
 
 interface FocusViewProps {
     tasks: Task[];
@@ -20,17 +20,6 @@ interface FocusViewProps {
     onReorderTasks: (activeId: string, overId: string) => void;
     headerHeight: string; // Dynamic header height
 }
-
-// Helper to determine priority weight for sorting (fallback)
-const getPriorityWeight = (p: Priority): number => {
-    switch (p) {
-        case 'Critical': return 4;
-        case 'High': return 3;
-        case 'Medium': return 2;
-        case 'Low': return 1;
-        default: return 0;
-    }
-};
 
 export const FocusView: React.FC<FocusViewProps> = ({
     tasks, goals, onEditTask, onUpdateTask, onTogglePin, onSubtaskToggle, onDeleteTask, isSpaceMode,
@@ -77,8 +66,9 @@ export const FocusView: React.FC<FocusViewProps> = ({
                     return a.focusOrder - b.focusOrder;
                 }
                 // Fallback Sort: Priority then Due Date
-                const pA = getPriorityWeight(a.priority);
-                const pB = getPriorityWeight(b.priority);
+                // Use Centralized PRIORITY_ORDER
+                const pA = PRIORITY_ORDER[a.priority] || 0;
+                const pB = PRIORITY_ORDER[b.priority] || 0;
                 if (pA !== pB) return pB - pA;
                 return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
             });
@@ -93,7 +83,7 @@ export const FocusView: React.FC<FocusViewProps> = ({
     const backlogTasks = useMemo(() => {
         return tasks
             .filter(t => !t.isPinned && t.status !== 'Done' && t.status !== "Won't Complete")
-            .sort((a, b) => getPriorityWeight(b.priority) - getPriorityWeight(a.priority));
+            .sort((a, b) => (PRIORITY_ORDER[b.priority] || 0) - (PRIORITY_ORDER[a.priority] || 0));
     }, [tasks]);
 
     // Drag Handlers

@@ -39,3 +39,19 @@ export const getLegibleTextColor = (hex: string, isDarkBackground: boolean): str
         return hex;
     }
 };
+
+// New Utility: Calculates strictly Black or White based on background luminance
+export const getContrastColor = (hex: string): string => {
+    if (!hex || !hex.startsWith('#')) return '#000000';
+    
+    const r = parseInt(hex.substring(1, 3), 16);
+    const g = parseInt(hex.substring(3, 5), 16);
+    const b = parseInt(hex.substring(5, 7), 16);
+    
+    const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+    
+    // Threshold of 128 is standard. 
+    // >= 128 means background is light -> return black text
+    // < 128 means background is dark -> return white text
+    return (yiq >= 128) ? '#1f2937' : '#ffffff'; // Using gray-800 for black to reduce harshness
+};

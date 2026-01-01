@@ -1,6 +1,8 @@
+
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Task, Goal, Status } from '../types';
 import { TaskCard } from './TaskCard';
+import { getContrastColor } from '../utils/colorUtils';
 
 interface GoalColumnProps {
     goal: Goal;
@@ -20,21 +22,6 @@ interface GoalColumnProps {
     onFocusGoal?: (goalId: string) => void;
     isFocused?: boolean;
 }
-
-// Helper to determine text color (black/white) based on background brightness
-const getContrastColor = (hex: string) => {
-    if (!hex || !hex.startsWith('#')) return 'white'; // default to white if invalid
-    
-    // Parse hex
-    const r = parseInt(hex.substring(1, 3), 16);
-    const g = parseInt(hex.substring(3, 5), 16);
-    const b = parseInt(hex.substring(5, 7), 16);
-    
-    // YIQ formula
-    const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
-    
-    return yiq >= 128 ? 'black' : 'white'; // Returning exact color names/hex
-};
 
 const getStatusColor = (status: Status): string => {
     switch (status) {
@@ -110,10 +97,11 @@ export const GoalColumn: React.FC<GoalColumnProps> = ({
     // Helper to ensure hex has 6 digits for alpha appending if needed (basic check)
     const safeColor = goal.color.startsWith('#') ? goal.color : '#6366f1'; 
     
-    // Determine effective text color
+    // Use getContrastColor for non-space mode to ensure legibility against the solid header background.
+    // In space mode, the background is semi-transparent dark, so white text is generally best.
     const effectiveTextColor = goal.textColor 
         ? goal.textColor 
-        : (isSpaceMode ? 'white' : getContrastColor(safeColor));
+        : (isSpaceMode ? '#ffffff' : getContrastColor(safeColor));
 
     // ENTROPY CALCULATION (Idea #4)
     // Measures pile-up of active tasks.
@@ -125,7 +113,7 @@ export const GoalColumn: React.FC<GoalColumnProps> = ({
 
     return (
         <div 
-            className={`flex-shrink-0 w-80 rounded-xl flex flex-col ${containerClasses} shadow-lg transition-all duration-300 relative ${isFocused ? 'ring-4 ring-offset-2 ring-indigo-500' : ''}`}
+            className={`flex-shrink-0 w-full rounded-xl flex flex-col ${containerClasses} shadow-lg transition-all duration-300 relative ${isFocused ? 'ring-4 ring-offset-2 ring-indigo-500' : ''} h-auto md:h-full`}
             style={{ 
                 // Enhance border visibility in space mode using the goal color (translucent)
                 borderColor: isDraggingOver 

@@ -1,7 +1,7 @@
-
 import React, { useState, useEffect, useLayoutEffect, useCallback } from 'react';
 import { Task, Status, Goal } from '../types';
 import { PRIORITY_COLORS, TAG_COLORS, STATUS_STYLES, PRIORITY_LABELS } from '../constants';
+import { getContrastColor } from '../utils/colorUtils';
 
 interface TaskCardProps {
     task: Task;
@@ -139,6 +139,13 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
         onEditTask(task);
     };
 
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onEditTask(task);
+        }
+    };
+
     const handleContextMenu = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
@@ -211,7 +218,9 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
                 data-task-id={task.id}
-                className={`group task-card relative bg-white/50 dark:bg-gray-800/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700 shadow-sm ${cardCursorClass} hover:shadow-md border-l-4 border-l-purple-400`}
+                tabIndex={0}
+                onKeyDown={handleKeyDown}
+                className={`group task-card relative bg-white/50 dark:bg-gray-800/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700 shadow-sm ${cardCursorClass} hover:shadow-md border-l-4 border-l-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900`}
                 onClick={handleCardClick}
                 onContextMenu={handleContextMenu}
             >
@@ -225,7 +234,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                 
                 <div className="mt-3 flex justify-between items-center text-xs text-gray-400">
                     <span>Observation</span>
-                    <button onClick={handleDeleteClick} className="p-2 hover:text-red-500 transition-colors"><i className="fas fa-times"></i></button>
+                    <button onClick={handleDeleteClick} className="p-2 hover:text-red-500 transition-colors min-w-[32px] min-h-[32px] flex items-center justify-center" aria-label="Delete observation"><i className="fas fa-times"></i></button>
                 </div>
             </div>
         );
@@ -239,7 +248,9 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
                 data-task-id={task.id}
-                className={`group task-card relative bg-white dark:bg-gray-800 rounded-lg md:rounded-md p-3 md:p-2 border border-gray-200 dark:border-gray-700 shadow-sm ${cardCursorClass} hover:shadow-md ${statusStyle.cardBorder} ${isBlockedByDep ? 'opacity-60 saturate-50' : ''} ${becomingClasses}`}
+                tabIndex={0}
+                onKeyDown={handleKeyDown}
+                className={`group task-card relative bg-white dark:bg-gray-800 rounded-lg md:rounded-md p-3 md:p-2 border border-gray-200 dark:border-gray-700 shadow-sm ${cardCursorClass} hover:shadow-md ${statusStyle.cardBorder} ${isBlockedByDep ? 'opacity-60 saturate-50' : ''} ${becomingClasses} focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900`}
                 onClick={handleCardClick}
                 onContextMenu={handleContextMenu}
                 title={`${task.title} (Priority: ${task.priority}) ${isBecoming ? '- Becoming Trap Detected' : ''}`}
@@ -330,7 +341,9 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
             data-task-id={task.id}
-            className={`group task-card task-card-tilt relative bg-white dark:bg-gray-800 rounded-lg p-4 md:p-3 border border-gray-200 dark:border-gray-700 shadow-md ${cardCursorClass} ${priorityClasses.glow} hover:shadow-2xl ${statusStyle.cardBorder} ${isBlockedByDep ? 'opacity-60 saturate-50' : ''} ${becomingClasses}`}
+            tabIndex={0}
+            onKeyDown={handleKeyDown}
+            className={`group task-card task-card-tilt relative bg-white dark:bg-gray-800 rounded-lg p-4 md:p-3 border border-gray-200 dark:border-gray-700 shadow-md ${cardCursorClass} ${priorityClasses.glow} hover:shadow-2xl ${statusStyle.cardBorder} ${isBlockedByDep ? 'opacity-60 saturate-50' : ''} ${becomingClasses} focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900`}
             onClick={handleCardClick}
             onContextMenu={handleContextMenu}
             title={`Priority: ${task.priority}`}
@@ -366,8 +379,11 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                         {/* Goal Second */}
                         {assignedGoal && (
                             <span 
-                                className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white whitespace-nowrap shadow-sm truncate max-w-[80px]"
-                                style={{ backgroundColor: assignedGoal.color }}
+                                className="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap shadow-sm truncate max-w-[80px]"
+                                style={{ 
+                                    backgroundColor: assignedGoal.color,
+                                    color: getContrastColor(assignedGoal.color) // Accessibility Fix: Dynamic Text Color
+                                }}
                                 title={`Context: ${assignedGoal.title}`}
                             >
                                 {assignedGoal.title}
@@ -379,7 +395,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                                 type="button"
                                 onClick={(e) => handleExpandToggle(e, false)}
                                 onMouseDown={handleButtonMouseDown} 
-                                className="w-8 h-8 flex items-center justify-center bg-gray-100 dark:bg-gray-700 rounded-full text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 shadow-sm transition-all hover:bg-gray-200 dark:hover:bg-gray-600 ml-1 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 relative z-30 pointer-events-auto"
+                                className="w-10 h-10 md:w-8 md:h-8 flex items-center justify-center bg-gray-100 dark:bg-gray-700 rounded-full text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 shadow-sm transition-all hover:bg-gray-200 dark:hover:bg-gray-600 ml-1 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 relative z-30 pointer-events-auto"
                                 title="Collapse to compact view"
                                 aria-label="Collapse to compact view"
                             >
@@ -400,8 +416,9 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                                 e.stopPropagation();
                                 onUpdateTask({ ...task, isBecoming: false, becomingWarning: undefined });
                             }}
-                            className="text-red-600 hover:text-red-800 dark:text-red-300 dark:hover:text-white transition-colors whitespace-nowrap font-bold px-1 rounded hover:bg-red-200 dark:hover:bg-red-800 p-2"
+                            className="text-red-600 hover:text-red-800 dark:text-red-300 dark:hover:text-white transition-colors whitespace-nowrap font-bold px-1 rounded hover:bg-red-200 dark:hover:bg-red-800 p-2 min-w-[32px] min-h-[32px] flex items-center justify-center"
                             title="Dismiss Warning (Mark as Valid Action)"
+                            aria-label="Dismiss warning"
                         >
                             <i className="fas fa-times"></i>
                         </button>
@@ -440,8 +457,9 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                                 <button
                                     onClick={handleStuckClick}
                                     disabled={isBreakingDown}
-                                    className={`w-7 h-7 md:w-5 md:h-5 flex items-center justify-center rounded-full transition-all border ${isBreakingDown ? 'border-transparent' : 'border-neutral-200 dark:border-neutral-800 hover:border-neutral-400 bg-white dark:bg-gray-800 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 text-neutral-500'}`}
+                                    className={`w-9 h-9 md:w-5 md:h-5 flex items-center justify-center rounded-full transition-all border ${isBreakingDown ? 'border-transparent' : 'border-neutral-200 dark:border-neutral-800 hover:border-neutral-400 bg-white dark:bg-gray-800 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 text-neutral-500'}`}
                                     title="I'm Stuck (Break down task)"
+                                    aria-label="Generate subtasks with AI"
                                 >
                                     {isBreakingDown ? (
                                         <i className="fas fa-spinner fa-spin text-xs"></i>
@@ -466,7 +484,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                                     className="flex items-center gap-2 text-xs hover:bg-gray-200 dark:hover:bg-gray-700/50 p-2 md:p-1 rounded cursor-pointer transition-colors group/subtask"
                                     onClick={(e) => handleSubtaskClick(e, st.id)}
                                 >
-                                    <div className={`w-4 h-4 md:w-3.5 md:h-3.5 rounded-sm border flex items-center justify-center transition-colors ${st.isCompleted ? 'bg-emerald-500 border-emerald-600' : 'bg-white dark:bg-gray-800 border-gray-400 group-hover/subtask:border-indigo-400'}`}>
+                                    <div className={`w-5 h-5 md:w-3.5 md:h-3.5 flex-shrink-0 rounded-sm border flex items-center justify-center transition-colors ${st.isCompleted ? 'bg-emerald-500 border-emerald-600' : 'bg-white dark:bg-gray-800 border-gray-400 group-hover/subtask:border-indigo-400'}`}>
                                         {st.isCompleted && <i className="fas fa-check text-white text-[8px]"></i>}
                                     </div>
                                     <span className={`truncate ${st.isCompleted ? 'line-through text-gray-400' : 'text-gray-600 dark:text-gray-300'}`}>{st.title}</span>
@@ -501,7 +519,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                             onClick={handleDeleteClick}
                             onMouseDown={handleButtonMouseDown} 
                             onTouchStart={handleButtonMouseDown}
-                            className="w-8 h-8 md:w-7 md:h-7 flex items-center justify-center rounded-md text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                            className="w-10 h-10 md:w-7 md:h-7 flex items-center justify-center rounded-md text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
                             title="Delete Task"
                             aria-label="Delete Task"
                         >

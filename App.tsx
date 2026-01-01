@@ -656,7 +656,8 @@ const App: React.FC = () => {
 
         if (task.isBlockedByDependencies && newStatus === 'In Progress') {
             const blockerTasks = task.dependencies?.map(depId => tasks.find(t => t.id === depId)?.title).filter(Boolean).join(', ');
-            alert(`This task is blocked by dependencies: ${blockerTasks}`);
+            // FIX ISS-002: Use Notification instead of alert
+            setNotification({ message: `Blocked by: ${blockerTasks}`, type: 'error' });
             return;
         }
 

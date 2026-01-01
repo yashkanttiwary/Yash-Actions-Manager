@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Task, Priority, Status, Subtask, Blocker, Goal, TaskType } from '../types';
 import { COLUMN_STATUSES, PRIORITY_LABELS } from '../constants';
@@ -260,7 +259,7 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, allTasks, on
 
 
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 sm:p-4" onClick={onClose}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[100] sm:p-4" onClick={onClose}>
             <div 
                 className="bg-white dark:bg-gray-800/80 border border-gray-300 dark:border-gray-600 sm:rounded-2xl shadow-2xl w-full max-w-2xl h-full sm:h-auto sm:max-h-[90vh] flex flex-col" 
                 onClick={e => e.stopPropagation()}

@@ -30,6 +30,14 @@ export const PRIORITY_COLORS: { [key in Priority]: { bg: string; text: string; g
     'Low': { bg: 'bg-transparent', text: 'text-neutral-400 dark:text-neutral-500', glow: '' }
 };
 
+// Centralized Priority Weights for sorting
+export const PRIORITY_ORDER: Record<Priority, number> = {
+    'Critical': 4,
+    'High': 3,
+    'Medium': 2,
+    'Low': 1
+};
+
 // K-Mode: Shift from emotional pressure to chronological fact.
 export const PRIORITY_LABELS: Record<Priority, string> = {
     'Critical': 'Immediate',

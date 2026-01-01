@@ -17,10 +17,16 @@ export const useSpeechRecognition = (props?: UseSpeechRecognitionProps) => {
     const [isListening, setIsListening] = useState(false);
     const [transcript, setTranscript] = useState('');
     const [error, setError] = useState<string | null>(null);
+    const [isSupported, setIsSupported] = useState(false);
     const recognitionRef = useRef<any>(null);
     
     // Store accumulated final results here to prevent loss during pauses
     const finalTranscriptBuffer = useRef('');
+
+    useEffect(() => {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        setIsSupported(!!SpeechRecognition);
+    }, []);
 
     // Re-initialize when continuous prop changes
     useEffect(() => {
@@ -125,6 +131,7 @@ export const useSpeechRecognition = (props?: UseSpeechRecognitionProps) => {
         error, 
         startListening, 
         stopListening, 
-        resetTranscript 
+        resetTranscript,
+        isSupported
     };
 };

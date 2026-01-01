@@ -267,6 +267,7 @@ export const Header: React.FC<HeaderProps> = ({
                                 backgroundColor: isSpaceVisualsActive ? 'rgba(255,255,255,0.1)' : activeFocusGoal.color + '25', 
                                 borderColor: activeFocusGoal.color + '40'
                             } : {}}
+                            aria-label="Filter tasks by context"
                         >
                             <i 
                                 className={`fas fa-layer-group text-xs ${activeFocusGoal ? '' : 'text-gray-400 dark:text-gray-500'}`} 
@@ -285,7 +286,8 @@ export const Header: React.FC<HeaderProps> = ({
                             <button
                                 onClick={(e) => { e.stopPropagation(); onExitFocus?.(); }}
                                 className={`w-5 h-5 flex items-center justify-center rounded-full hover:bg-black/10 dark:hover:bg-white/20 transition-colors ml-1 ${isSpaceVisualsActive ? 'text-white/70 hover:text-white' : 'text-gray-400 hover:text-red-500'}`}
-                                title="Show All"
+                                title="Clear context filter"
+                                aria-label="Clear context filter"
                             >
                                 <i className="fas fa-times text-xs"></i>
                             </button>
@@ -353,6 +355,7 @@ export const Header: React.FC<HeaderProps> = ({
                                         : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
                             }`}
                             title="Show tasks due today only"
+                            aria-label={isTodayView ? "Show all tasks" : "Show today's tasks"}
                         >
                             <i className="far fa-calendar-check"></i>
                             <span className="hidden lg:inline">Today</span>
@@ -363,6 +366,7 @@ export const Header: React.FC<HeaderProps> = ({
                         onClick={(e) => { e.stopPropagation(); onOpenAIAssistant(); }}
                         className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 group ${isSpaceVisualsActive ? 'bg-white/20 text-white hover:bg-white/40' : 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-800 hover:shadow-md'}`}
                         title="AI Assistant"
+                        aria-label="Open AI Assistant"
                     >
                         <i className="fas fa-brain text-sm transition-transform duration-300 group-hover:scale-110"></i>
                     </button>
@@ -373,6 +377,7 @@ export const Header: React.FC<HeaderProps> = ({
                             disabled={syncStatus === 'syncing'}
                             className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all border shadow-sm ${syncProps.classes}`}
                             title={syncProps.text}
+                            aria-label={syncProps.text}
                         >
                             <i className={`fas ${syncProps.icon}`}></i>
                             <span className="hidden lg:inline">{syncProps.text}</span>
@@ -401,6 +406,7 @@ export const Header: React.FC<HeaderProps> = ({
                                 <button 
                                     onClick={onExitFocus} 
                                     className="ml-3 text-xs bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded text-gray-600 dark:text-gray-300 hover:bg-red-100 hover:text-red-500 transition-colors"
+                                    aria-label="Exit context focus"
                                 >
                                     EXIT
                                 </button>
@@ -429,17 +435,17 @@ export const Header: React.FC<HeaderProps> = ({
 
                             {/* Zoom */}
                             <div className={`${isSpaceVisualsActive ? 'bg-white/10 text-white' : 'bg-gray-200 dark:bg-gray-700'} p-0.5 rounded-lg flex items-center gap-0.5`}>
-                                <button onClick={handleZoomOut} className={`w-6 h-6 flex items-center justify-center rounded-md text-xs ${isSpaceVisualsActive ? 'hover:bg-white/20' : 'hover:bg-gray-300 dark:hover:bg-gray-600'}`}><i className="fas fa-minus"></i></button>
+                                <button onClick={handleZoomOut} className={`w-6 h-6 flex items-center justify-center rounded-md text-xs ${isSpaceVisualsActive ? 'hover:bg-white/20' : 'hover:bg-gray-300 dark:hover:bg-gray-600'}`} aria-label="Zoom out"><i className="fas fa-minus"></i></button>
                                 <span className="text-[10px] font-bold px-1 min-w-[30px] text-center">{Math.round(zoomLevel * 100)}%</span>
-                                <button onClick={handleZoomIn} className={`w-6 h-6 flex items-center justify-center rounded-md text-xs ${isSpaceVisualsActive ? 'hover:bg-white/20' : 'hover:bg-gray-300 dark:hover:bg-gray-600'}`}><i className="fas fa-plus"></i></button>
+                                <button onClick={handleZoomIn} className={`w-6 h-6 flex items-center justify-center rounded-md text-xs ${isSpaceVisualsActive ? 'hover:bg-white/20' : 'hover:bg-gray-300 dark:hover:bg-gray-600'}`} aria-label="Zoom in"><i className="fas fa-plus"></i></button>
                             </div>
 
                             {/* Compact/Fit */}
                             <div className={`${isSpaceVisualsActive ? 'bg-white/10' : 'bg-gray-200 dark:bg-gray-700'} p-0.5 rounded-lg items-center gap-1 flex`}>
-                                <button onClick={onToggleCompactMode} className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${isCompactMode ? (isSpaceVisualsActive ? 'bg-white/30 text-white' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'hover:bg-gray-300')}`}>
+                                <button onClick={onToggleCompactMode} className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${isCompactMode ? (isSpaceVisualsActive ? 'bg-white/30 text-white' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'hover:bg-gray-300')}`} aria-label="Toggle compact mode">
                                     <i className={`fas ${isCompactMode ? 'fa-expand' : 'fa-compress'}`}></i>
                                 </button>
-                                <button onClick={onToggleFitToScreen} className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${isFitToScreen ? (isSpaceVisualsActive ? 'bg-white/30 text-white' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'hover:bg-gray-300')}`}>
+                                <button onClick={onToggleFitToScreen} className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${isFitToScreen ? (isSpaceVisualsActive ? 'bg-white/30 text-white' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'hover:bg-gray-300')}`} aria-label="Toggle fit to screen">
                                     <i className={`fas ${isFitToScreen ? 'fa-expand-arrows-alt' : 'fa-compress-arrows-alt'}`}></i>
                                 </button>
                             </div>
@@ -451,23 +457,23 @@ export const Header: React.FC<HeaderProps> = ({
 
                             {/* Utility Buttons */}
                             <div className="flex items-center gap-1 ml-0">
-                                <button onClick={onToggleTheme} className={`w-8 h-8 rounded-lg flex items-center justify-center ${isSpaceVisualsActive ? 'bg-white/10 hover:bg-white/20' : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300'} transition-colors`}>
+                                <button onClick={onToggleTheme} className={`w-8 h-8 rounded-lg flex items-center justify-center ${isSpaceVisualsActive ? 'bg-white/10 hover:bg-white/20' : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300'} transition-colors`} aria-label="Toggle Theme">
                                     <i className={`fas ${getThemeIcon()}`}></i>
                                 </button>
                                 
-                                <button onClick={togglePomodoro} className={`w-8 h-8 rounded-lg flex items-center justify-center ${settings.showPomodoroTimer ? 'bg-indigo-600 text-white' : (isSpaceVisualsActive ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300')} transition-colors`}>
+                                <button onClick={togglePomodoro} className={`w-8 h-8 rounded-lg flex items-center justify-center ${settings.showPomodoroTimer ? 'bg-indigo-600 text-white' : (isSpaceVisualsActive ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300')} transition-colors`} aria-label="Toggle Timer">
                                     <i className="fas fa-stopwatch"></i>
                                 </button>
 
-                                <button onClick={onResetLayout} className={`w-8 h-8 rounded-lg flex items-center justify-center ${isSpaceVisualsActive ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300'} transition-colors`}>
+                                <button onClick={onResetLayout} className={`w-8 h-8 rounded-lg flex items-center justify-center ${isSpaceVisualsActive ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300'} transition-colors`} aria-label="Reset Layout">
                                     <i className="fas fa-undo"></i>
                                 </button>
 
-                                <button onClick={() => exportTasksToCSV(tasks)} className={`w-8 h-8 rounded-lg flex items-center justify-center ${isSpaceVisualsActive ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300'} transition-colors`}>
+                                <button onClick={() => exportTasksToCSV(tasks)} className={`w-8 h-8 rounded-lg flex items-center justify-center ${isSpaceVisualsActive ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300'} transition-colors`} aria-label="Export Data">
                                     <i className="fas fa-file-export"></i>
                                 </button>
 
-                                <button onClick={() => onOpenSettings('general')} className={`w-8 h-8 rounded-lg flex items-center justify-center ${isSpaceVisualsActive ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300'} transition-colors`}>
+                                <button onClick={() => onOpenSettings('general')} className={`w-8 h-8 rounded-lg flex items-center justify-center ${isSpaceVisualsActive ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300'} transition-colors`} aria-label="Open Settings">
                                     <i className="fas fa-cog"></i>
                                 </button>
                             </div>
@@ -526,6 +532,7 @@ export const Header: React.FC<HeaderProps> = ({
                             backgroundColor: activeFocusGoal.color + '25', 
                             borderColor: activeFocusGoal.color + '40'
                         } : {}}
+                        aria-label="Filter context"
                     >
                         <span className="text-xs font-bold truncate">
                             {activeFocusGoal ? activeFocusGoal.title : 'All Contexts'}
@@ -563,17 +570,19 @@ export const Header: React.FC<HeaderProps> = ({
                     )}
                 </div>
 
-                {/* Right: AI & Menu */}
-                <div className="flex items-center gap-3">
+                {/* Right: AI & Menu - Enhanced Touch Targets */}
+                <div className="flex items-center gap-2">
                     <button
                         onClick={onOpenAIAssistant}
-                        className={`w-9 h-9 rounded-full flex items-center justify-center shadow-sm ${isSpaceVisualsActive ? 'bg-indigo-500/20 text-indigo-300' : 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-400'}`}
+                        className={`w-10 h-10 rounded-full flex items-center justify-center shadow-sm ${isSpaceVisualsActive ? 'bg-indigo-500/20 text-indigo-300' : 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-400'}`}
+                        aria-label="Open AI Assistant"
                     >
                         <i className="fas fa-sparkles"></i>
                     </button>
                     <button
                         onClick={() => setIsMobileMenuOpen(true)}
-                        className={`w-9 h-9 rounded-full flex items-center justify-center ${isSpaceVisualsActive ? 'hover:bg-white/10' : 'hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+                        className={`w-10 h-10 rounded-full flex items-center justify-center ${isSpaceVisualsActive ? 'hover:bg-white/10' : 'hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+                        aria-label="Open Menu"
                     >
                         <i className="fas fa-bars text-lg"></i>
                     </button>
@@ -600,6 +609,7 @@ export const Header: React.FC<HeaderProps> = ({
                                 ? (isSpaceVisualsActive ? 'text-cyan-400' : 'text-indigo-600 dark:text-indigo-400') 
                                 : 'opacity-60 hover:opacity-100'
                         }`}
+                        aria-label={`Switch to ${item.label} view`}
                     >
                         <i className={`fas ${item.icon} text-lg mb-0.5`}></i>
                         <span className="text-[10px] font-bold uppercase tracking-wide">{item.label}</span>
@@ -616,7 +626,7 @@ export const Header: React.FC<HeaderProps> = ({
                     }`}>
                         <div className="flex items-center justify-between mb-2">
                             <h2 className="text-xl font-bold">Menu</h2>
-                            <button onClick={() => setIsMobileMenuOpen(false)} className="w-8 h-8 rounded-full flex items-center justify-center bg-gray-100 dark:bg-gray-800">
+                            <button onClick={() => setIsMobileMenuOpen(false)} className="w-10 h-10 rounded-full flex items-center justify-center bg-gray-100 dark:bg-gray-800" aria-label="Close menu">
                                 <i className="fas fa-times"></i>
                             </button>
                         </div>

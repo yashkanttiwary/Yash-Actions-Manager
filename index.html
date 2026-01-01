@@ -50,13 +50,51 @@
         overflow-x: hidden;
         transition: background-color 0.3s ease;
       }
+      
+      /* --- SCROLLBAR POLISH (V-01) --- */
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: rgba(156, 163, 175, 0.5); /* gray-400 equivalent with opacity */
+        border-radius: 999px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: rgba(107, 114, 128, 0.8); /* gray-500 equivalent */
+      }
+      
+      .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: rgba(75, 85, 99, 0.5); /* gray-600 */
+      }
+      .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: rgba(156, 163, 175, 0.8); /* gray-400 */
+      }
+
+      /* Scrollbar Hide Utility (V-03) */
+      .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+      }
+      .scrollbar-hide {
+          -ms-overflow-style: none;  /* IE and Edge */
+          scrollbar-width: none;  /* Firefox */
+      }
+
       .task-card-tilt {
         transition: transform 0.2s, box-shadow 0.2s;
         transform-style: preserve-3d;
       }
-      .task-card-tilt:hover {
-        transform: perspective(1000px) rotateX(5deg) rotateY(-5deg) scale(1.05);
+      
+      /* Only apply hover tilt on devices that support hover */
+      @media (hover: hover) {
+        .task-card-tilt:hover {
+            transform: perspective(1000px) rotateX(5deg) rotateY(-5deg) scale(1.05);
+        }
       }
+
       .ghost-card {
         transform: rotate(5deg);
         opacity: 0.5;
