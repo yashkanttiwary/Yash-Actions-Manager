@@ -47,8 +47,8 @@ export const useSettings = () => {
                 const saved = await storage.get(SETTINGS_KEY);
                 const parsedGeneral = saved ? JSON.parse(saved) : {};
 
-                // 2. Load Secure Keys (Isolated)
-                const savedSecure = await storage.get(SECURE_KEY);
+                // 2. Load Secure Keys (Isolated & Secured)
+                const savedSecure = await storage.getSecure(SECURE_KEY);
                 const parsedSecure = savedSecure ? JSON.parse(savedSecure) : {};
 
                 // 3. Merge (Secure keys override general if present to fix migration)
@@ -105,7 +105,7 @@ export const useSettings = () => {
                     };
 
                     await storage.set(SETTINGS_KEY, JSON.stringify(general));
-                    await storage.set(SECURE_KEY, JSON.stringify(secure));
+                    await storage.setSecure(SECURE_KEY, JSON.stringify(secure));
                 } catch (e) {
                     console.error("Failed to save settings", e);
                 }

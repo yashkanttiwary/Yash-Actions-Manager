@@ -5,32 +5,40 @@ import { DependencyLines } from './DependencyLines';
 import { Task, Status, SortOption, Priority, ColumnLayout, Goal } from '../types';
 import { COLUMN_STATUSES, PRIORITY_ORDER } from '../constants';
 import { TopFocusSection } from './TopFocusSection';
+import { useTaskContext } from '../contexts';
 
+// Simplified props since Data comes from Context
 interface KanbanBoardProps {
     tasks: Task[];
     columns: Status[];
     columnLayouts: ColumnLayout[];
     getTasksByStatus: (status: Status) => Task[];
     onTaskMove: (taskId: string, newStatus: Status, newIndex: number) => void;
+    
+    // UI Triggers still passed down
     onEditTask: (task: Task) => void;
     onAddTask: (status: Status) => void;
     onQuickAddTask: (title: string, status: Status) => void; 
     onSmartAddTask: (transcript: string, status: Status) => Promise<void>; 
-    onUpdateTask: (task: Task) => void; // New prop for card actions
+    onOpenContextMenu: (e: React.MouseEvent, task: Task) => void;
+    
+    // Data Actions (Optional override, but usually from context now)
+    onUpdateTask?: (task: Task) => void; 
     onUpdateColumnLayout: (id: Status, newLayout: Omit<ColumnLayout, 'id'>) => void;
+    onDeleteTask?: (taskId: string) => void;
+    onSubtaskToggle?: (taskId: string, subtaskId: string) => void; 
+    onBreakDownTask?: (taskId: string) => Promise<void>; 
+    onTogglePin?: (taskId: string) => void; 
+
+    // UI State
     activeTaskTimer: {taskId: string, startTime: number} | null;
     onToggleTimer: (taskId: string) => void;
-    onOpenContextMenu: (e: React.MouseEvent, task: Task) => void;
     focusMode: Status | 'None';
-    onDeleteTask: (taskId: string) => void;
-    onSubtaskToggle: (taskId: string, subtaskId: string) => void; 
-    onBreakDownTask?: (taskId: string) => Promise<void>; 
     isCompactMode: boolean;
     isFitToScreen: boolean; 
     zoomLevel: number; 
     isSpaceMode?: boolean; 
-    goals?: Goal[]; // New Prop
-    onTogglePin?: (taskId: string) => void; // New Pin Toggle
+    goals?: Goal[]; 
 }
 
 interface LineCoordinate {
@@ -48,13 +56,11 @@ const sortTasks = (tasks: Task[], option: SortOption): Task[] => {
     const tasksToSort = [...tasks];
     switch (option) {
         case 'Priority':
-            // Use Centralized PRIORITY_ORDER
             return tasksToSort.sort((a, b) => (PRIORITY_ORDER[b.priority] || 0) - (PRIORITY_ORDER[a.priority] || 0));
         case 'Due Date':
             return tasksToSort.sort((a, b) => {
                 const dateA = getValidDate(a.dueDate);
                 const dateB = getValidDate(b.dueDate);
-                // Zero dates (invalid) go to bottom
                 if (dateA === 0) return 1;
                 if (dateB === 0) return -1;
                 return dateA - dateB;
@@ -67,7 +73,22 @@ const sortTasks = (tasks: Task[], option: SortOption): Task[] => {
     }
 };
 
-export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, columnLayouts, getTasksByStatus, onTaskMove, onEditTask, onAddTask, onQuickAddTask, onSmartAddTask, onUpdateTask, onUpdateColumnLayout, activeTaskTimer, onToggleTimer, onOpenContextMenu, focusMode, onDeleteTask, onSubtaskToggle, onBreakDownTask, isCompactMode, isFitToScreen, zoomLevel, isSpaceMode = false, goals, onTogglePin }) => {
+export const KanbanBoard: React.FC<KanbanBoardProps> = ({ 
+    tasks, columns, columnLayouts, getTasksByStatus, onTaskMove, 
+    onEditTask, onAddTask, onQuickAddTask, onSmartAddTask, onOpenContextMenu,
+    onUpdateTask, onUpdateColumnLayout, onDeleteTask, onSubtaskToggle, onBreakDownTask, onTogglePin,
+    activeTaskTimer, onToggleTimer, focusMode, isCompactMode, isFitToScreen, zoomLevel, isSpaceMode = false, goals
+}) => {
+    // Context hooks for default actions if not provided
+    const context = useTaskContext();
+    const safeUpdateTask = onUpdateTask || context.updateTask;
+    const safeDeleteTask = onDeleteTask || context.deleteTask;
+    const safeTogglePin = onTogglePin || context.toggleTaskPin;
+    const safeSubtaskToggle = onSubtaskToggle || ((tid, sid) => {
+        const t = tasks.find(x => x.id === tid);
+        if(t) safeUpdateTask({...t, subtasks: t.subtasks?.map(s => s.id === sid ? {...s, isCompleted: !s.isCompleted} : s)});
+    });
+
     const [collapsedColumns, setCollapsedColumns] = useState<Set<Status>>(new Set());
     const [sortOptions, setSortOptions] = useState<Record<Status, SortOption>>(
         columns.reduce((acc, status) => ({...acc, [status]: 'Default'}), {}) as Record<Status, SortOption>
@@ -75,20 +96,15 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
 
     const [draggedColumn, setDraggedColumn] = useState<{id: Status, offset: {x: number, y: number}} | null>(null);
     const [lineCoordinates, setLineCoordinates] = useState<LineCoordinate[]>([]);
-    const [boardHeight, setBoardHeight] = useState(1000); // Dynamic board height state
-    
+    const [boardHeight, setBoardHeight] = useState(1000); 
     const [layoutTick, setLayoutTick] = useState(0); 
-    
     const triggerLayoutUpdate = useCallback(() => setLayoutTick(t => t + 1), []);
-    
     const boardRef = useRef<HTMLDivElement>(null);
     const mainContainerRef = useRef<HTMLElement | null>(null);
 
-    // Optimized Dependency Line Calculation (Batch Read -> Batch Write)
+    // Optimized Dependency Line Calculation
     useLayoutEffect(() => {
-        // Skip calculation on mobile as lines aren't shown
         if (window.innerWidth < 768) return;
-
         if (!boardRef.current) return;
         mainContainerRef.current = document.querySelector('main');
         let animationFrameId: number;
@@ -103,27 +119,19 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
             }
             lastCalcTime = now;
 
-            // --- 1. Calculate Board Height ---
             if (!isFitToScreen && focusMode === 'None' && boardRef.current) {
                 let maxBottom = 0;
-                // Iterate through direct children (columns) to find max bottom
                 const children = boardRef.current.children;
-                // Skip the first child if it's the SVG dependency lines container
                 for (let i = 0; i < children.length; i++) {
                     const child = children[i] as HTMLElement;
-                    // Ignore the dependency SVG layer which might be full height/width
                     if (child.tagName === 'svg') continue;
-                    
-                    // We use offsetTop + offsetHeight because they are absolutely positioned relative to boardRef
                     const bottom = child.offsetTop + child.offsetHeight;
                     if (bottom > maxBottom) maxBottom = bottom;
                 }
-                
                 const newHeight = Math.max(maxBottom + 200, mainContainerRef.current?.clientHeight || 800);
                 setBoardHeight(prev => Math.abs(prev - newHeight) > 50 ? newHeight : prev);
             }
 
-            // --- 2. Calculate Lines ---
             if (focusMode !== 'None' || isFitToScreen) {
                 setLineCoordinates([]);
                 return;
@@ -138,56 +146,40 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
             const boardRect = boardRef.current!.getBoundingClientRect();
             const newLines: LineCoordinate[] = [];
             const taskMap = new Map<string, Task>(tasks.map(t => [t.id, t]));
-
-            // Batch Read: Collect all necessary element IDs first
             const neededElementIds = new Set<string>();
             dependentTasks.forEach(t => {
                 neededElementIds.add(t.id);
                 t.dependencies!.forEach(depId => neededElementIds.add(depId));
             });
 
-            // Batch Read: Query all Rects in one go (reduce layout thrashing)
-            // We use a Map to store rects by TaskID
             const rectMap = new Map<string, DOMRect>();
             neededElementIds.forEach(id => {
                 const el = document.querySelector(`[data-task-id="${id}"]`);
                 if (el) rectMap.set(id, el.getBoundingClientRect());
             });
 
-            // Calculation Pass
             dependentTasks.forEach(task => {
                 const endRect = rectMap.get(task.id);
                 if (!endRect) return;
-
                 const end = {
                     x: (endRect.left - boardRect.left) / zoomLevel,
                     y: (endRect.top + endRect.height / 2 - boardRect.top) / zoomLevel
                 };
-
                 task.dependencies!.forEach(depId => {
                     const depTask = taskMap.get(depId);
                     const startRect = rectMap.get(depId);
                     if (!startRect || !depTask) return;
-
                     const start = {
                         x: (startRect.right - boardRect.left) / zoomLevel,
                         y: (startRect.top + startRect.height / 2 - boardRect.top) / zoomLevel
                     };
-                    
                     newLines.push({ start, end, isBlocked: depTask.status !== 'Done' });
                 });
             });
             
-            // Optimization: Deep compare
             setLineCoordinates(prevLines => {
                 if (prevLines.length !== newLines.length) return newLines;
-                const isSame = prevLines.every((l, i) => 
-                    l.start.x === newLines[i].start.x && 
-                    l.start.y === newLines[i].start.y &&
-                    l.end.x === newLines[i].end.x &&
-                    l.end.y === newLines[i].end.y &&
-                    l.isBlocked === newLines[i].isBlocked
-                );
+                const isSame = prevLines.every((l, i) => l.start.x === newLines[i].start.x && l.start.y === newLines[i].start.y && l.end.x === newLines[i].end.x && l.end.y === newLines[i].end.y && l.isBlocked === newLines[i].isBlocked);
                 return isSame ? prevLines : newLines;
             });
         };
@@ -198,11 +190,9 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
         };
 
         calculateLinesAndHeight();
-        
         const container = mainContainerRef.current;
         container?.addEventListener('scroll', onScrollOrResize, { passive: true });
         window.addEventListener('resize', onScrollOrResize, { passive: true });
-        
         const observer = new MutationObserver(onScrollOrResize);
         observer.observe(boardRef.current, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
 
@@ -212,88 +202,51 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
             observer.disconnect();
             if (animationFrameId) cancelAnimationFrame(animationFrameId);
         };
-
     }, [tasks, columnLayouts, collapsedColumns, focusMode, isCompactMode, layoutTick, zoomLevel, isFitToScreen]);
 
-
-    const handleSortChange = (status: Status, option: SortOption) => {
-        setSortOptions(prev => ({ ...prev, [status]: option }));
-    };
-    
+    const handleSortChange = (status: Status, option: SortOption) => setSortOptions(prev => ({ ...prev, [status]: option }));
     const handleTaskMoveWithSortReset = (taskId: string, newStatus: Status, newIndex: number) => {
         onTaskMove(taskId, newStatus, newIndex);
-        if (sortOptions[newStatus] !== 'Default') {
-            handleSortChange(newStatus, 'Default');
-        }
+        if (sortOptions[newStatus] !== 'Default') handleSortChange(newStatus, 'Default');
     };
-
     const toggleColumnCollapse = (status: Status) => {
         setCollapsedColumns(prev => {
             const newSet = new Set(prev);
-            if (newSet.has(status)) {
-                newSet.delete(status);
-            } else {
-                newSet.add(status);
-            }
+            if (newSet.has(status)) newSet.delete(status); else newSet.add(status);
             return newSet;
         });
     };
-
     const handleColumnMouseDown = (e: React.MouseEvent, columnId: Status) => {
         if (focusMode !== 'None' || isFitToScreen) return;
         if ((e.target as HTMLElement).closest('.resize-handle')) return;
-
         const layout = columnLayouts.find(c => c.id === columnId);
         if (!layout || !boardRef.current) return;
-        
         onUpdateColumnLayout(columnId, { ...layout, zIndex: 50 }); 
-
-        setDraggedColumn({
-            id: columnId,
-            offset: {
-                x: e.clientX - (layout.x * zoomLevel),
-                y: e.clientY - (layout.y * zoomLevel),
-            }
-        });
+        setDraggedColumn({ id: columnId, offset: { x: e.clientX - (layout.x * zoomLevel), y: e.clientY - (layout.y * zoomLevel) } });
     };
-
     const handleMouseMove = (e: React.MouseEvent) => {
         if (!draggedColumn || !boardRef.current) return;
         e.preventDefault();
-
         const layout = columnLayouts.find(c => c.id === draggedColumn.id);
         if (!layout) return;
-
         const newX = (e.clientX - draggedColumn.offset.x) / zoomLevel;
         const newY = (e.clientY - draggedColumn.offset.y) / zoomLevel;
-        
         onUpdateColumnLayout(draggedColumn.id, { ...layout, x: newX, y: newY });
     };
-
     const handleMouseUp = () => {
         if (draggedColumn) {
             const layout = columnLayouts.find(c => c.id === draggedColumn.id);
-            if(layout) {
-                onUpdateColumnLayout(draggedColumn.id, { ...layout, zIndex: 10 }); 
-            }
+            if(layout) onUpdateColumnLayout(draggedColumn.id, { ...layout, zIndex: 10 }); 
         }
         setDraggedColumn(null);
     };
-
     const handleColumnResize = (id: Status, newW: number, newH: number) => {
         const layout = columnLayouts.find(c => c.id === id);
-        if (layout) {
-            onUpdateColumnLayout(id, { ...layout, w: newW, h: newH });
-        }
+        if (layout) onUpdateColumnLayout(id, { ...layout, w: newW, h: newH });
     };
-    
-    // New Drop Handler for Focus Area
     const handleFocusDrop = (taskId: string) => {
         const task = tasks.find(t => t.id === taskId);
-        // Only pin if not already pinned
-        if (task && !task.isPinned && onTogglePin) {
-            onTogglePin(taskId);
-        }
+        if (task && !task.isPinned && safeTogglePin) safeTogglePin(taskId);
     };
     
     const boardContentWidth = useMemo(() => {
@@ -306,281 +259,101 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, columns, column
         return maxRight + 100;
     }, [columnLayouts, collapsedColumns]);
 
-    const renderBoardContent = () => {
-        // FOCUS MODE: Simple Centered Render
-        if (focusMode !== 'None') {
-            const tasksForColumn = getTasksByStatus(focusMode);
-            const sortedTasks = sortTasks(tasksForColumn, sortOptions[focusMode] || 'Default');
-
-            return (
-                <div 
-                    className="w-full h-full flex justify-center items-start pt-8"
-                    ref={boardRef}
-                    style={{ 
-                        transform: `scale(${zoomLevel})`, 
-                        transformOrigin: 'top center' 
-                    }}
-                >
-                     <div className="h-full w-full px-4 md:w-auto md:px-0">
-                        <KanbanColumn
-                            status={focusMode}
-                            tasks={sortedTasks}
-                            allTasks={tasks}
-                            goals={goals} // Pass goals
-                            onTaskMove={handleTaskMoveWithSortReset}
-                            onEditTask={onEditTask}
-                            onAddTask={onAddTask}
-                            onQuickAddTask={(title) => onQuickAddTask(title, focusMode)}
-                            onSmartAddTask={(transcript) => onSmartAddTask(transcript, focusMode)}
-                            onUpdateTask={onUpdateTask}
-                            isCollapsed={false}
-                            onToggleCollapse={() => {}}
-                            sortOption={sortOptions[focusMode] || 'Default'}
-                            onSortChange={handleSortChange}
-                            onMouseDown={(e) => {}}
-                            activeTaskTimer={activeTaskTimer}
-                            onToggleTimer={onToggleTimer}
-                            onOpenContextMenu={onOpenContextMenu}
-                            onDeleteTask={onDeleteTask}
-                            onSubtaskToggle={onSubtaskToggle}
-                            onBreakDownTask={onBreakDownTask}
-                            isCompactMode={isCompactMode}
-                            onTaskSizeChange={triggerLayoutUpdate}
-                            width={undefined} 
-                            height={undefined}
-                            onResize={() => {}}
-                            zoomLevel={zoomLevel}
-                            isSpaceMode={isSpaceMode}
-                        />
-                     </div>
-                </div>
-            );
-        }
+    const renderColumn = (status: Status, width?: number, height?: number) => {
+        const tasksForColumn = getTasksByStatus(status);
+        const sortedTasks = sortTasks(tasksForColumn, sortOptions[status] || 'Default');
+        const layout = columnLayouts.find(c => c.id === status);
         
-        // MOBILE VIEW (Snap Scrolling) - New Render Path for screens < 768px
-        // Renders columns in a horizontal scroll container instead of absolute positioning
-        const mobileView = (
-            <div 
-                className="md:hidden w-full h-full overflow-x-auto overflow-y-hidden snap-x snap-mandatory flex items-start no-scrollbar pb-2"
-                style={{
-                    scrollPaddingLeft: '1rem', // Center alignment aid
-                    paddingRight: '20vw' // Allow last item to be centered
-                }}
-            >
-                {columns.map(status => {
-                    const tasksForColumn = getTasksByStatus(status);
-                    const sortedTasks = sortTasks(tasksForColumn, sortOptions[status] || 'Default');
-                    
-                    return (
-                        <div 
-                            key={status} 
-                            className="snap-center flex-shrink-0 h-full flex flex-col rounded-xl px-2"
-                            style={{ width: '85vw' }} // Consistent Mobile Card Width
-                        >
-                            <KanbanColumn
-                                status={status}
-                                tasks={sortedTasks}
-                                allTasks={tasks}
-                                goals={goals}
-                                onTaskMove={handleTaskMoveWithSortReset}
-                                onEditTask={onEditTask}
-                                onAddTask={onAddTask}
-                                onQuickAddTask={(title) => onQuickAddTask(title, status)}
-                                onSmartAddTask={(transcript) => onSmartAddTask(transcript, status)}
-                                onUpdateTask={onUpdateTask}
-                                isCollapsed={false} // Never collapse on mobile snap view
-                                onToggleCollapse={() => {}}
-                                sortOption={sortOptions[status] || 'Default'}
-                                onSortChange={handleSortChange}
-                                onMouseDown={(e) => {}}
-                                activeTaskTimer={activeTaskTimer}
-                                onToggleTimer={onToggleTimer}
-                                onOpenContextMenu={onOpenContextMenu}
-                                onDeleteTask={onDeleteTask}
-                                onSubtaskToggle={onSubtaskToggle}
-                                onBreakDownTask={onBreakDownTask}
-                                isCompactMode={isCompactMode}
-                                onTaskSizeChange={triggerLayoutUpdate}
-                                width="100%" // Let flex/css control width
-                                height={undefined} // Let flex control height
-                                onResize={() => {}}
-                                zoomLevel={1}
-                                isSpaceMode={isSpaceMode}
-                            />
-                        </div>
-                    );
-                })}
-            </div>
+        return (
+            <KanbanColumn
+                status={status}
+                tasks={sortedTasks}
+                allTasks={tasks}
+                goals={goals}
+                onTaskMove={handleTaskMoveWithSortReset}
+                onEditTask={onEditTask}
+                onAddTask={onAddTask}
+                onQuickAddTask={(title) => onQuickAddTask(title, status)}
+                onSmartAddTask={(transcript) => onSmartAddTask(transcript, status)}
+                onUpdateTask={safeUpdateTask}
+                isCollapsed={collapsedColumns.has(status)}
+                onToggleCollapse={() => toggleColumnCollapse(status)}
+                sortOption={sortOptions[status] || 'Default'}
+                onSortChange={handleSortChange}
+                onMouseDown={(e) => handleColumnMouseDown(e, status)}
+                activeTaskTimer={activeTaskTimer}
+                onToggleTimer={onToggleTimer}
+                onOpenContextMenu={onOpenContextMenu}
+                onDeleteTask={safeDeleteTask}
+                onSubtaskToggle={safeSubtaskToggle}
+                onBreakDownTask={onBreakDownTask}
+                isCompactMode={isCompactMode}
+                onTaskSizeChange={triggerLayoutUpdate}
+                width={width || layout?.w}
+                height={height || layout?.h}
+                onResize={(w, h) => handleColumnResize(status, w, h)}
+                zoomLevel={zoomLevel}
+                isSpaceMode={isSpaceMode}
+            />
         );
-
-        // DESKTOP VIEW (Absolute Positioning) - Preserved exactly
-        if (!isFitToScreen) {
-            return (
-                <>
-                    {/* Mobile Only View */}
-                    {mobileView}
-
-                    {/* Desktop Only View */}
-                    <div 
-                        className="hidden md:block w-full h-full relative"
-                        onMouseMove={handleMouseMove}
-                        onMouseUp={handleMouseUp}
-                        onMouseLeave={handleMouseUp}
-                        style={{ 
-                            minWidth: '100%', 
-                            minHeight: '100%' 
-                        }}
-                    >
-                        <div
-                            ref={boardRef}
-                            className="relative"
-                            style={{
-                                transform: `scale(${zoomLevel})`,
-                                transformOrigin: '0 0',
-                                width: `${boardContentWidth}px`, 
-                                minWidth: zoomLevel < 1 ? `${100 / zoomLevel}%` : '100%',
-                                height: zoomLevel < 1 ? `${Math.max(boardHeight, window.innerHeight)}px` : `${boardHeight}px`,
-                            }}
-                        >
-                            <DependencyLines lines={lineCoordinates} />
-                            {columnLayouts.map(layout => {
-                                const status = layout.id;
-                                const tasksForColumn = getTasksByStatus(status);
-                                const sortedTasks = sortTasks(tasksForColumn, sortOptions[status] || 'Default');
-                                
-                                return (
-                                    <div
-                                        key={status}
-                                        className="absolute transition-transform duration-75 ease-linear"
-                                        style={{
-                                            transform: `translate(${layout.x}px, ${layout.y}px)`,
-                                            zIndex: layout.zIndex
-                                        }}
-                                    >
-                                        <KanbanColumn
-                                            status={status}
-                                            tasks={sortedTasks}
-                                            allTasks={tasks}
-                                            goals={goals} // Pass goals
-                                            onTaskMove={handleTaskMoveWithSortReset}
-                                            onEditTask={onEditTask}
-                                            onAddTask={onAddTask}
-                                            onQuickAddTask={(title) => onQuickAddTask(title, status)}
-                                            onSmartAddTask={(transcript) => onSmartAddTask(transcript, status)}
-                                            onUpdateTask={onUpdateTask}
-                                            isCollapsed={collapsedColumns.has(status)}
-                                            onToggleCollapse={() => toggleColumnCollapse(status)}
-                                            sortOption={sortOptions[status] || 'Default'}
-                                            onSortChange={handleSortChange}
-                                            onMouseDown={(e) => handleColumnMouseDown(e, status)}
-                                            activeTaskTimer={activeTaskTimer}
-                                            onToggleTimer={onToggleTimer}
-                                            onOpenContextMenu={onOpenContextMenu}
-                                            onDeleteTask={onDeleteTask}
-                                            onSubtaskToggle={onSubtaskToggle}
-                                            onBreakDownTask={onBreakDownTask}
-                                            isCompactMode={isCompactMode}
-                                            onTaskSizeChange={triggerLayoutUpdate}
-                                            width={layout.w}
-                                            height={layout.h}
-                                            onResize={(w, h) => handleColumnResize(status, w, h)}
-                                            zoomLevel={zoomLevel}
-                                            isSpaceMode={isSpaceMode}
-                                        />
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                </>
-            );
-        }
-        
-        // FIT TO SCREEN VIEW (Flex Grid)
-        if (isFitToScreen) {
-            const INVERSE_WIDTH = 100 / Math.max(0.1, zoomLevel);
-
-            return (
-                 <div 
-                    ref={boardRef}
-                    className={`w-full h-full overflow-y-auto overflow-x-hidden ${isSpaceMode ? 'bg-transparent' : 'bg-gray-50/50 dark:bg-black/10'}`}
-                >
-                     <div
-                        style={{
-                            transform: `scale(${zoomLevel})`,
-                            transformOrigin: 'top left',
-                            width: `${INVERSE_WIDTH}%`,
-                            minHeight: '100%' 
-                        }}
-                        className="flex flex-wrap justify-center items-start content-start p-4 md:p-8 gap-4 md:gap-8"
-                    >
-                     {columns.map(status => {
-                         const tasksForColumn = getTasksByStatus(status);
-                         const sortedTasks = sortTasks(tasksForColumn, sortOptions[status] || 'Default');
-                         
-                         const layout = columnLayouts.find(c => c.id === status);
-                         const width = layout?.w || 320;
-                         const height = layout?.h || 350;
-
-                         return (
-                             <div key={status} className="flex-shrink-0 mb-4 w-full md:w-auto">
-                                 <KanbanColumn
-                                    status={status}
-                                    tasks={sortedTasks}
-                                    allTasks={tasks}
-                                    goals={goals} // Pass goals
-                                    onTaskMove={handleTaskMoveWithSortReset}
-                                    onEditTask={onEditTask}
-                                    onAddTask={onAddTask}
-                                    onQuickAddTask={(title) => onQuickAddTask(title, status)}
-                                    onSmartAddTask={(transcript) => onSmartAddTask(transcript, status)}
-                                    onUpdateTask={onUpdateTask}
-                                    isCollapsed={collapsedColumns.has(status)}
-                                    onToggleCollapse={() => toggleColumnCollapse(status)}
-                                    sortOption={sortOptions[status] || 'Default'}
-                                    onSortChange={handleSortChange}
-                                    onMouseDown={(e) => e.preventDefault()}
-                                    activeTaskTimer={activeTaskTimer}
-                                    onToggleTimer={onToggleTimer}
-                                    onOpenContextMenu={onOpenContextMenu}
-                                    onDeleteTask={onDeleteTask}
-                                    onSubtaskToggle={onSubtaskToggle}
-                                    onBreakDownTask={onBreakDownTask}
-                                    isCompactMode={isCompactMode}
-                                    onTaskSizeChange={triggerLayoutUpdate}
-                                    width={width} 
-                                    height={height}
-                                    onResize={(w, h) => handleColumnResize(status, w, h)}
-                                    zoomLevel={zoomLevel}
-                                    isSpaceMode={isSpaceMode}
-                                />
-                             </div>
-                         )
-                     })}
-                    </div>
-                </div>
-            )
-        }
-        
-        return null;
     };
 
     return (
         <div className="flex flex-col h-full w-full">
-            {/* Top 5 Focus Section - Sticky/Fixed relative to Board flow */}
-            {onTogglePin && (
+            {safeTogglePin && (
                 <TopFocusSection 
                     tasks={tasks} 
-                    onUnpin={(id) => onTogglePin(id)} 
+                    onUnpin={(id) => safeTogglePin(id)} 
                     onEditTask={onEditTask}
                     isSpaceMode={isSpaceMode}
                     onFocusDrop={handleFocusDrop}
                 />
             )}
             
-            {/* Main Board Content */}
             <div className="flex-grow w-full relative overflow-auto">
-                {renderBoardContent()}
+                {focusMode !== 'None' ? (
+                    <div className="w-full h-full flex justify-center items-start pt-8" ref={boardRef} style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top center' }}>
+                         <div className="h-full w-full px-4 md:w-auto md:px-0">
+                            {renderColumn(focusMode, undefined, undefined)}
+                         </div>
+                    </div>
+                ) : (
+                    <>
+                        <div className="md:hidden w-full h-full overflow-x-auto overflow-y-hidden snap-x snap-mandatory flex items-start no-scrollbar pb-2" style={{ scrollPaddingLeft: '1rem', paddingRight: '20vw' }}>
+                            {columns.map(status => (
+                                <div key={status} className="snap-center flex-shrink-0 h-full flex flex-col rounded-xl px-2" style={{ width: '85vw' }}>
+                                    {renderColumn(status, undefined, undefined)}
+                                </div>
+                            ))}
+                        </div>
+
+                        {!isFitToScreen ? (
+                            <div className="hidden md:block w-full h-full relative" onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp} style={{ minWidth: '100%', minHeight: '100%' }}>
+                                <div ref={boardRef} className="relative" style={{ transform: `scale(${zoomLevel})`, transformOrigin: '0 0', width: `${boardContentWidth}px`, minWidth: zoomLevel < 1 ? `${100 / zoomLevel}%` : '100%', height: zoomLevel < 1 ? `${Math.max(boardHeight, window.innerHeight)}px` : `${boardHeight}px` }}>
+                                    <DependencyLines lines={lineCoordinates} />
+                                    {columnLayouts.map(layout => (
+                                        <div key={layout.id} className="absolute transition-transform duration-75 ease-linear" style={{ transform: `translate(${layout.x}px, ${layout.y}px)`, zIndex: layout.zIndex }}>
+                                            {renderColumn(layout.id, layout.w, layout.h)}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : (
+                             <div ref={boardRef} className={`w-full h-full overflow-y-auto overflow-x-hidden ${isSpaceMode ? 'bg-transparent' : 'bg-gray-50/50 dark:bg-black/10'}`}>
+                                 <div style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top left', width: `${100 / Math.max(0.1, zoomLevel)}%`, minHeight: '100%' }} className="flex flex-wrap justify-center items-start content-start p-4 md:p-8 gap-4 md:gap-8">
+                                 {columns.map(status => {
+                                     const layout = columnLayouts.find(c => c.id === status);
+                                     return (
+                                         <div key={status} className="flex-shrink-0 mb-4 w-full md:w-auto">
+                                             {renderColumn(status, layout?.w || 320, layout?.h || 350)}
+                                         </div>
+                                     )
+                                 })}
+                                </div>
+                            </div>
+                        )}
+                    </>
+                )}
             </div>
         </div>
     );

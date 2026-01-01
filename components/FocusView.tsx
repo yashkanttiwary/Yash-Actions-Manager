@@ -1,29 +1,29 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { Task, Goal, Status, Priority } from '../types';
+import { Task, Goal } from '../types';
 import { FocusTaskCard } from './FocusTaskCard';
 import { storage } from '../utils/storage';
-import { PRIORITY_LABELS, PRIORITY_COLORS, PRIORITY_ORDER } from '../constants';
+import { PRIORITY_ORDER, PRIORITY_COLORS } from '../constants';
 
 interface FocusViewProps {
     tasks: Task[];
     goals: Goal[];
     onEditTask: (task: Task) => void;
-    onUpdateTask: (task: Task) => void;
     onTogglePin: (taskId: string) => void;
-    onSubtaskToggle: (taskId: string, subtaskId: string) => void;
-    onDeleteTask: (taskId: string) => void;
-    isSpaceMode: boolean;
-    // New Props
-    activeTaskTimer: {taskId: string, startTime: number} | null;
-    onToggleTimer: (taskId: string) => void;
     onReorderTasks: (activeId: string, overId: string) => void;
-    headerHeight: string; // Dynamic header height
+    headerHeight: string;
+    isSpaceMode: boolean;
+    
+    // Legacy props (ignored)
+    onUpdateTask?: any;
+    onSubtaskToggle?: any;
+    onDeleteTask?: any;
+    activeTaskTimer?: any;
+    onToggleTimer?: any;
 }
 
 export const FocusView: React.FC<FocusViewProps> = ({
-    tasks, goals, onEditTask, onUpdateTask, onTogglePin, onSubtaskToggle, onDeleteTask, isSpaceMode,
-    activeTaskTimer, onToggleTimer, onReorderTasks, headerHeight
+    tasks, goals, onEditTask, onTogglePin, onReorderTasks, headerHeight, isSpaceMode
 }) => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [dragOverFocus, setDragOverFocus] = useState(false);
@@ -36,14 +36,12 @@ export const FocusView: React.FC<FocusViewProps> = ({
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    // Load sidebar state on mount (only for desktop default)
     useEffect(() => {
         const loadSidebarState = async () => {
             const savedState = await storage.get('focusSidebarOpen');
             if (savedState !== null && !isMobile) {
                 setIsSidebarOpen(savedState === 'true');
             } else if (isMobile) {
-                // Default closed on mobile
                 setIsSidebarOpen(false);
             }
         };
@@ -56,17 +54,13 @@ export const FocusView: React.FC<FocusViewProps> = ({
         storage.set('focusSidebarOpen', String(newState));
     };
 
-    // 1. Filter Pinned Tasks and Sort by focusOrder
     const pinnedTasks = useMemo(() => {
         return tasks
             .filter(t => t.isPinned)
             .sort((a, b) => {
-                // Primary Sort: Manual Focus Order
                 if (a.focusOrder !== undefined && b.focusOrder !== undefined) {
                     return a.focusOrder - b.focusOrder;
                 }
-                // Fallback Sort: Priority then Due Date
-                // Use Centralized PRIORITY_ORDER
                 const pA = PRIORITY_ORDER[a.priority] || 0;
                 const pB = PRIORITY_ORDER[b.priority] || 0;
                 if (pA !== pB) return pB - pA;
@@ -74,19 +68,16 @@ export const FocusView: React.FC<FocusViewProps> = ({
             });
     }, [tasks]);
 
-    // Split tasks into sections for display (but keep them unlimited)
     const coreTasks = pinnedTasks.slice(0, 3);
     const bonusTasks = pinnedTasks.slice(3, 5);
     const additionalTasks = pinnedTasks.slice(5);
 
-    // 2. Backlog Tasks (Unpinned, not Done)
     const backlogTasks = useMemo(() => {
         return tasks
             .filter(t => !t.isPinned && t.status !== 'Done' && t.status !== "Won't Complete")
             .sort((a, b) => (PRIORITY_ORDER[b.priority] || 0) - (PRIORITY_ORDER[a.priority] || 0));
     }, [tasks]);
 
-    // Drag Handlers
     const handleDragStart = (e: React.DragEvent, taskId: string, source: 'sidebar' | 'focus') => {
         e.dataTransfer.setData('taskId', taskId);
         e.dataTransfer.setData('source', source);
@@ -107,12 +98,10 @@ export const FocusView: React.FC<FocusViewProps> = ({
         const source = e.dataTransfer.getData('source');
         
         if (source === 'focus') {
-            // Reordering within Focus View
             if (targetId && sourceId !== targetId) {
                 onReorderTasks(sourceId, targetId);
             }
         } else if (source === 'sidebar') {
-            // Adding from Sidebar - Unlimited in K-Mode
             if (sourceId) {
                 onTogglePin(sourceId);
             }
@@ -125,7 +114,6 @@ export const FocusView: React.FC<FocusViewProps> = ({
         const taskId = e.dataTransfer.getData('taskId');
         const source = e.dataTransfer.getData('source');
 
-        // Only unpin if it came from the focus view
         if (source === 'focus' && taskId) {
             onTogglePin(taskId);
         }
@@ -133,17 +121,13 @@ export const FocusView: React.FC<FocusViewProps> = ({
 
     return (
         <div className="flex h-full w-full overflow-hidden relative flex-col md:flex-row">
-            
-            {/* MAIN FOCUS AREA */}
             <div 
                 className={`flex-1 overflow-y-auto custom-scrollbar p-4 md:p-12 flex flex-col items-center relative transition-all duration-300 ${dragOverFocus ? 'bg-indigo-50/50 dark:bg-indigo-900/20' : ''}`}
                 style={{ paddingRight: (isSidebarOpen && !isMobile) ? '340px' : (isMobile ? '16px' : '40px') }}
                 onDragOver={(e) => { e.preventDefault(); setDragOverFocus(true); }}
                 onDragLeave={() => setDragOverFocus(false)}
-                onDrop={(e) => handleDropOnList(e)} // Drop on background appends
+                onDrop={(e) => handleDropOnList(e)}
             >
-                
-                {/* Header */}
                 <div className="w-full max-w-3xl mb-4 md:mb-8 text-center mt-2 md:mt-0">
                     <h1 className={`text-2xl md:text-5xl font-black mb-1 md:mb-3 tracking-tight ${isSpaceMode ? 'text-white drop-shadow-md' : 'text-gray-900 dark:text-white'}`}>
                         Action in the Now
@@ -178,14 +162,9 @@ export const FocusView: React.FC<FocusViewProps> = ({
                                 task={task} 
                                 goals={goals}
                                 onEditTask={onEditTask} 
-                                onUpdateTask={onUpdateTask}
-                                onSubtaskToggle={onSubtaskToggle}
-                                onDeleteTask={onDeleteTask}
                                 onUnpin={onTogglePin}
                                 isCore={true} 
                                 isSpaceMode={isSpaceMode}
-                                activeTaskTimer={activeTaskTimer}
-                                onToggleTimer={onToggleTimer}
                                 onDragStart={(e) => handleDragStart(e, task.id, 'focus')}
                                 onDrop={handleDropOnList}
                             />
@@ -210,14 +189,9 @@ export const FocusView: React.FC<FocusViewProps> = ({
                                 task={task} 
                                 goals={goals}
                                 onEditTask={onEditTask} 
-                                onUpdateTask={onUpdateTask}
-                                onSubtaskToggle={onSubtaskToggle}
-                                onDeleteTask={onDeleteTask}
                                 onUnpin={onTogglePin}
                                 isCore={false}
                                 isSpaceMode={isSpaceMode}
-                                activeTaskTimer={activeTaskTimer}
-                                onToggleTimer={onToggleTimer}
                                 onDragStart={(e) => handleDragStart(e, task.id, 'focus')}
                                 onDrop={handleDropOnList}
                             />
@@ -225,7 +199,7 @@ export const FocusView: React.FC<FocusViewProps> = ({
                     </div>
                 )}
 
-                {/* ZONE C: ADDITIONAL (UNLIMITED) */}
+                {/* ZONE C: ADDITIONAL */}
                 {additionalTasks.length > 0 && (
                     <div className="w-full max-w-3xl space-y-3 md:space-y-6 mb-16">
                         <div className="flex items-center gap-4 md:gap-6 mb-2 md:mb-6">
@@ -242,14 +216,9 @@ export const FocusView: React.FC<FocusViewProps> = ({
                                 task={task} 
                                 goals={goals}
                                 onEditTask={onEditTask} 
-                                onUpdateTask={onUpdateTask}
-                                onSubtaskToggle={onSubtaskToggle}
-                                onDeleteTask={onDeleteTask}
                                 onUnpin={onTogglePin}
                                 isCore={false}
                                 isSpaceMode={isSpaceMode}
-                                activeTaskTimer={activeTaskTimer}
-                                onToggleTimer={onToggleTimer}
                                 onDragStart={(e) => handleDragStart(e, task.id, 'focus')}
                                 onDrop={handleDropOnList}
                             />
@@ -258,7 +227,7 @@ export const FocusView: React.FC<FocusViewProps> = ({
                 )}
             </div>
 
-            {/* SIDEBAR: BACKLOG (Mobile: Bottom Sheet / Desktop: Right Sidebar) */}
+            {/* SIDEBAR */}
             <div 
                 className={`fixed z-30 shadow-2xl transition-all duration-700 ease-in-out transform
                     ${isMobile 
@@ -283,7 +252,6 @@ export const FocusView: React.FC<FocusViewProps> = ({
                 onDragLeave={() => setDragOverSidebar(false)}
                 onDrop={handleDropOnSidebar}
             >
-                {/* PROMINENT TOGGLE TAB */}
                 <button 
                     onClick={toggleSidebar}
                     className={`absolute flex items-center justify-center shadow-lg border-y cursor-pointer transition-all duration-300 group
@@ -334,9 +302,8 @@ export const FocusView: React.FC<FocusViewProps> = ({
                                 >
                                     <div className="flex items-center justify-between mb-1">
                                         <span className="font-semibold truncate flex-1">{task.title}</span>
-                                        {/* K-Mode: Correct Priority Display using Labels and Colors */}
                                         <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${priorityColors.bg} ${priorityColors.text}`}>
-                                            {PRIORITY_LABELS[task.priority]}
+                                            {task.priority}
                                         </span>
                                     </div>
                                     <div className="flex items-center gap-2 text-xs opacity-60">

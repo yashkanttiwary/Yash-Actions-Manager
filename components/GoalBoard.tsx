@@ -9,31 +9,33 @@ interface GoalBoardProps {
     goals: Goal[];
     onTaskMove: (taskId: string, newGoalId: string) => void;
     onEditTask: (task: Task) => void;
-    onUpdateTask: (task: Task) => void; // Added prop
-    onDeleteTask: (taskId: string) => void;
     onAddGoal: (goal: Omit<Goal, 'id' | 'createdDate'>) => void;
     onEditGoal: (goal: Goal) => void;
     onDeleteGoal: (goalId: string) => void;
-    activeTaskTimer: {taskId: string, startTime: number} | null;
-    onToggleTimer: (taskId: string) => void;
-    onSubtaskToggle: (taskId: string, subtaskId: string) => void;
+    
+    // UI Props
     isCompactMode: boolean;
     isSpaceMode: boolean;
     zoomLevel: number;
-    // Focus Mode Props
     onFocusGoal?: (goalId: string) => void;
     currentFocusId?: string | null;
+    
+    // Legacy props (ignored but kept for interface compat)
+    onUpdateTask?: any;
+    onDeleteTask?: any;
+    activeTaskTimer?: any;
+    onToggleTimer?: any;
+    onSubtaskToggle?: any;
 }
 
 export const GoalBoard: React.FC<GoalBoardProps> = ({
-    tasks, goals, onTaskMove, onEditTask, onUpdateTask, onDeleteTask, onAddGoal, onEditGoal, onDeleteGoal,
-    activeTaskTimer, onToggleTimer, onSubtaskToggle, isCompactMode, isSpaceMode, zoomLevel,
-    onFocusGoal, currentFocusId
+    tasks, goals, onTaskMove, onEditTask, onAddGoal, onEditGoal, onDeleteGoal,
+    isCompactMode, isSpaceMode, zoomLevel, onFocusGoal, currentFocusId
 }) => {
     const [isCreating, setIsCreating] = useState(false);
     const [newGoalTitle, setNewGoalTitle] = useState('');
     const [newGoalColor, setNewGoalColor] = useState('#6366f1');
-    const [newGoalTextColor, setNewGoalTextColor] = useState<string | undefined>(undefined); // Undefined means auto-contrast
+    const [newGoalTextColor, setNewGoalTextColor] = useState<string | undefined>(undefined);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 
     const handleCreateSubmit = (e: React.FormEvent) => {
@@ -42,7 +44,7 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
             onAddGoal({
                 title: newGoalTitle.trim(),
                 color: newGoalColor,
-                textColor: newGoalTextColor, // Pass the custom text color
+                textColor: newGoalTextColor,
                 description: '',
             });
             setNewGoalTitle('');
@@ -52,21 +54,14 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
         }
     };
 
-    // Enhanced Auto-scroll logic
     const handleDragOver = (e: React.DragEvent) => {
         e.preventDefault(); 
-        
         const container = scrollContainerRef.current;
         if (!container) return;
-
         const { left, width } = container.getBoundingClientRect();
         const x = e.clientX;
-        
-        // Increased threshold and speed
         const threshold = 150; 
         const maxSpeed = 25; 
-
-        // Calculate speed based on proximity to edge
         if (x < left + threshold) {
             const intensity = 1 - ((x - left) / threshold);
             container.scrollLeft -= maxSpeed * intensity;
@@ -76,23 +71,19 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
         }
     };
 
-    // Virtual "Unassigned" Goal
     const unassignedGoal: Goal = {
         id: UNASSIGNED_GOAL_ID,
-        title: 'General', // K-Mode: General tasks instead of "Unassigned"
-        color: '#64748b', // Slate
+        title: 'General',
+        color: '#64748b',
         createdDate: new Date().toISOString(),
         progress: 0
     };
 
     const unassignedTasks = tasks.filter(t => !t.goalId || !goals.find(g => g.id === t.goalId));
-
     const PRESET_COLORS = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#6366f1', '#8b5cf6', '#ec4899'];
 
-    // Helper to calculate contrast for preview if undefined
     const getPreviewTextColor = (bg: string) => {
         if (newGoalTextColor) return newGoalTextColor;
-        // Simple auto-contrast logic
         const r = parseInt(bg.substring(1, 3), 16);
         const g = parseInt(bg.substring(3, 5), 16);
         const b = parseInt(bg.substring(5, 7), 16);
@@ -102,7 +93,6 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
 
     return (
         <>
-            {/* Status Legend - Fixed at Bottom Right - Hide on Mobile to save space */}
             <div className={`fixed bottom-6 right-6 z-40 transition-all duration-500 hidden md:block ${isSpaceMode ? 'text-white' : ''}`}>
                 <div className={`
                     p-4 rounded-xl shadow-xl backdrop-blur-md border animate-fadeIn
@@ -144,7 +134,6 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
                 className="w-full h-full overflow-x-auto overflow-y-hidden"
                 onDragOver={handleDragOver}
                 style={{ 
-                    // Apply zoom only on desktop. Mobile uses native scaling.
                     transform: window.innerWidth > 768 ? `scale(${zoomLevel})` : 'none', 
                     transformOrigin: 'top left',
                     width: window.innerWidth > 768 ? `${100 / zoomLevel}%` : '100%',
@@ -153,22 +142,16 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
             >
                 <div className={`flex h-full p-4 gap-4 md:gap-6 pb-20 md:pb-8 min-w-max md:min-w-0 ${window.innerWidth < 768 ? 'snap-x snap-mandatory px-[calc(50vw-42.5vw)]' : ''}`}>
                     
-                    {/* Unassigned Column - Always First */}
                     <div className="snap-center flex-shrink-0" style={{ width: window.innerWidth < 768 ? '85vw' : '20rem' }}>
                         <GoalColumn
                             key="unassigned"
                             goal={unassignedGoal}
                             tasks={unassignedTasks}
                             allTasks={tasks}
-                            onTaskMove={(tid) => onTaskMove(tid, undefined!)} // Sending undefined removes goalId
+                            onTaskMove={(tid) => onTaskMove(tid, undefined!)} 
                             onEditTask={onEditTask}
-                            onUpdateTask={onUpdateTask}
-                            onDeleteTask={onDeleteTask}
-                            onEditGoal={() => {}} // Can't edit unassigned
-                            onDeleteGoal={() => {}} // Can't delete unassigned
-                            activeTaskTimer={activeTaskTimer}
-                            onToggleTimer={onToggleTimer}
-                            onSubtaskToggle={onSubtaskToggle}
+                            onEditGoal={() => {}} 
+                            onDeleteGoal={() => {}} 
                             isCompactMode={isCompactMode}
                             isSpaceMode={isSpaceMode}
                             onFocusGoal={onFocusGoal}
@@ -176,7 +159,6 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
                         />
                     </div>
 
-                    {/* Actual Context Columns */}
                     {goals.map(goal => (
                         <div key={goal.id} className="snap-center flex-shrink-0" style={{ width: window.innerWidth < 768 ? '85vw' : '20rem' }}>
                             <GoalColumn
@@ -185,13 +167,8 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
                                 allTasks={tasks}
                                 onTaskMove={(tid) => onTaskMove(tid, goal.id)}
                                 onEditTask={onEditTask}
-                                onUpdateTask={onUpdateTask}
-                                onDeleteTask={onDeleteTask}
                                 onEditGoal={onEditGoal}
                                 onDeleteGoal={onDeleteGoal}
-                                activeTaskTimer={activeTaskTimer}
-                                onToggleTimer={onToggleTimer}
-                                onSubtaskToggle={onSubtaskToggle}
                                 isCompactMode={isCompactMode}
                                 isSpaceMode={isSpaceMode}
                                 onFocusGoal={onFocusGoal}
@@ -200,7 +177,6 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
                         </div>
                     ))}
 
-                    {/* Add Context Button / Form */}
                     <div className="snap-center flex-shrink-0" style={{ width: window.innerWidth < 768 ? '85vw' : '20rem' }}>
                         {isCreating ? (
                             <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-lg border border-indigo-200 dark:border-indigo-800 animate-fadeIn h-full flex flex-col justify-center">
@@ -212,12 +188,11 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
                                             type="text"
                                             value={newGoalTitle}
                                             onChange={e => setNewGoalTitle(e.target.value)}
-                                            placeholder="Context Title (e.g. Health, Work)"
+                                            placeholder="Context Title"
                                             className="w-full p-2 bg-gray-100 dark:bg-gray-700 rounded border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
                                         />
                                     </div>
                                     
-                                    {/* Preview Chip */}
                                     {newGoalTitle && (
                                         <div className="mb-3 p-2 rounded text-center text-sm font-bold shadow-sm transition-colors border border-black/10" style={{ backgroundColor: newGoalColor, color: getPreviewTextColor(newGoalColor) }}>
                                             {newGoalTitle}
@@ -238,8 +213,6 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
                                                         title={c}
                                                     />
                                                 ))}
-                                                
-                                                {/* Custom Background Picker */}
                                                 <div className="relative group ml-1">
                                                     <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center cursor-pointer transition-all ${!PRESET_COLORS.includes(newGoalColor) ? 'border-gray-600 dark:border-white ring-1 ring-gray-400 ring-offset-1 dark:ring-offset-gray-800' : 'border-gray-200 dark:border-gray-600 hover:border-gray-400'}`}>
                                                         <div 
@@ -295,7 +268,7 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
                                             type="submit" 
                                             className="flex-1 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 rounded text-sm font-bold text-white shadow-md transition-colors"
                                         >
-                                            Create Context
+                                            Create
                                         </button>
                                     </div>
                                 </form>
@@ -309,7 +282,6 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
                                     <i className="fas fa-plus text-2xl"></i>
                                 </div>
                                 <span className="font-bold text-lg">Add New Context</span>
-                                <span className="text-xs mt-1 opacity-70">Group tasks by context</span>
                             </button>
                         )}
                     </div>

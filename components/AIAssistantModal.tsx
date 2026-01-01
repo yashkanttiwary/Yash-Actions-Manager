@@ -216,7 +216,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
 
     const scrollRef = useRef<HTMLDivElement>(null);
 
-    const { isListening, transcript, startListening, stopListening, resetTranscript } = useSpeechRecognition({ continuous: true });
+    const { isListening, transcript, startListening, stopListening, resetTranscript, isSupported } = useSpeechRecognition({ continuous: true });
 
     // Auto-scroll to bottom only if we are in chat mode
     useEffect(() => {
@@ -642,14 +642,16 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                         />
                         
                         <div className="flex items-center gap-1 pr-1">
-                            <button
-                                type="button"
-                                onClick={isListening ? stopListening : startListening}
-                                className={`w-8 h-8 flex items-center justify-center rounded-full transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-600'}`}
-                                title="Voice Input"
-                            >
-                                <i className={`fas ${isListening ? 'fa-stop' : 'fa-microphone'}`}></i>
-                            </button>
+                            {isSupported && (
+                                <button
+                                    type="button"
+                                    onClick={isListening ? stopListening : startListening}
+                                    className={`w-8 h-8 flex items-center justify-center rounded-full transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-600'}`}
+                                    title="Voice Input"
+                                >
+                                    <i className={`fas ${isListening ? 'fa-stop' : 'fa-microphone'}`}></i>
+                                </button>
+                            )}
                             
                             <button 
                                 type="submit" 
