@@ -305,7 +305,7 @@ const App: React.FC = () => {
     }, [settings.userTimeOffset, settingsLoaded]);
 
     const shouldSync = settingsLoaded && !isLoading;
-    const { status: syncStatus, errorMsg: syncError, syncMethod, manualPull, manualPush } = useGoogleSheetSync(
+    const { status: syncStatus, errorMsg: syncError, syncMethod, manualPull, manualPush, forcePull } = useGoogleSheetSync(
         shouldSync ? settings.googleSheetId : undefined,
         tasks,
         setAllData, 
@@ -893,6 +893,7 @@ const App: React.FC = () => {
                 syncStatus={syncStatus} 
                 onManualPull={manualPull}
                 onManualPush={manualPush}
+                onForcePull={forcePull}
                 isCompactMode={isCompactMode}
                 onToggleCompactMode={() => setIsCompactMode(prev => !prev)}
                 isFitToScreen={isFitToScreen}

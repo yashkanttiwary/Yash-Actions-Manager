@@ -96,8 +96,8 @@ export const useGoogleSheetSync = (
     }, [syncMethod, sheetId, appsScriptUrl]);
 
     // --- MAIN PULL FUNCTION (SMART HYDRATION) ---
-    const executeStrictPull = useCallback(async (method: 'script' | 'api', idOrUrl: string) => {
-        console.log(`[Sync] Initializing via ${method}...`);
+    const executeStrictPull = useCallback(async (method: 'script' | 'api', idOrUrl: string, strategy: 'merge' | 'replace' = 'merge') => {
+        console.log(`[Sync] Initializing via ${method} (Strategy: ${strategy})...`);
         let remoteTasks: Task[] = [];
         let remoteGoals: Goal[] = [];
         let remoteMetadata: any = null;
@@ -120,17 +120,27 @@ export const useGoogleSheetSync = (
             const currentLocalTasks = localTasksRef.current;
             const currentLocalGoals = localGoalsRef.current;
 
-            // 1. Merge Tasks (Prefer Newest)
-            const { mergedTasks, hasLocalWins } = smartMergeTasks(currentLocalTasks, remoteTasks);
-            
-            // 2. Merge Goals (Simple ID check + Newest wins)
-            const mergedGoals = smartMergeGoals(currentLocalGoals, remoteGoals);
+            let finalTasks: Task[] = [];
+            let finalGoals: Goal[] = [];
+            let hasLocalWins = false;
 
-            console.log(`[Sync] Merge Result: ${mergedTasks.length} tasks (Local wins: ${hasLocalWins})`);
+            if (strategy === 'replace') {
+                // HARD RESET: Trust remote completely
+                finalTasks = remoteTasks;
+                finalGoals = remoteGoals;
+                console.log(`[Sync] Hard Reset. Overwriting local with ${remoteTasks.length} remote tasks.`);
+            } else {
+                // MERGE: Preserve local edits
+                const mergeResult = smartMergeTasks(currentLocalTasks, remoteTasks);
+                finalTasks = mergeResult.mergedTasks;
+                hasLocalWins = mergeResult.hasLocalWins;
+                finalGoals = smartMergeGoals(currentLocalGoals, remoteGoals);
+                console.log(`[Sync] Merge Result: ${finalTasks.length} tasks (Local wins: ${hasLocalWins})`);
+            }
             
             // Apply Update
             isRemoteUpdate.current = true;
-            setAllData(mergedTasks, mergedGoals);
+            setAllData(finalTasks, finalGoals);
             
             // Handle Metadata
             if (remoteMetadata) {
@@ -158,7 +168,7 @@ export const useGoogleSheetSync = (
 
             // CRITICAL FIX: If local data was newer (hasLocalWins), the sheet is now stale.
             // We must schedule a push to update the sheet with our preserved local edits.
-            if (hasLocalWins) {
+            if (hasLocalWins && strategy === 'merge') {
                 console.log("[Sync] Local data was newer. Scheduling repair push.");
                 isDirtyRef.current = true; // Trigger the debounce effect
             }
@@ -170,12 +180,20 @@ export const useGoogleSheetSync = (
         }
     }, [setAllData, setGamification, setSettings]);
 
-    // Manual Pull Wrapper
+    // Manual Pull Wrapper (Merge by default)
     const manualPull = useCallback(async () => {
         if (!syncMethod) return;
         setStatus('syncing');
         const target = syncMethod === 'api' ? sheetId! : appsScriptUrl!;
-        await executeStrictPull(syncMethod, target);
+        await executeStrictPull(syncMethod, target, 'merge');
+    }, [syncMethod, sheetId, appsScriptUrl, executeStrictPull]);
+
+    // Force Pull Wrapper (Replace Local)
+    const forcePull = useCallback(async () => {
+        if (!syncMethod) return;
+        setStatus('syncing');
+        const target = syncMethod === 'api' ? sheetId! : appsScriptUrl!;
+        await executeStrictPull(syncMethod, target, 'replace');
     }, [syncMethod, sheetId, appsScriptUrl, executeStrictPull]);
 
     // Initial Load Effect
@@ -188,9 +206,9 @@ export const useGoogleSheetSync = (
         // Short delay to ensure localStorage has fully loaded into state before we merge
         const timer = setTimeout(() => {
             if (syncMethod === 'api') {
-                sheetService.initializeSheetHeaders(target).then(() => executeStrictPull(syncMethod, target));
+                sheetService.initializeSheetHeaders(target).then(() => executeStrictPull(syncMethod, target, 'merge'));
             } else {
-                executeStrictPull(syncMethod, target);
+                executeStrictPull(syncMethod, target, 'merge');
             }
         }, 100);
 
@@ -267,7 +285,7 @@ export const useGoogleSheetSync = (
         return () => clearInterval(pollInterval);
     }, [syncMethod, sheetId, appsScriptUrl, lastSyncTime, status, setAllData]);
 
-    return { status, lastSyncTime, errorMsg, syncMethod, manualPull, manualPush };
+    return { status, lastSyncTime, errorMsg, syncMethod, manualPull, manualPush, forcePull };
 };
 
 // --- HELPER: Smart Merge ---

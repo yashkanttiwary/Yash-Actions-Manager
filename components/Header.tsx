@@ -50,6 +50,7 @@ interface HeaderProps {
     syncStatus: 'idle' | 'syncing' | 'error' | 'success'; 
     onManualPull: () => Promise<void>;
     onManualPush: () => Promise<void>;
+    onForcePull?: () => Promise<void>; // New Prop for Hard Reset
     isCompactMode: boolean;
     onToggleCompactMode: () => void;
     isFitToScreen: boolean; 
@@ -78,7 +79,7 @@ export const Header: React.FC<HeaderProps> = ({
     gamification, settings, onUpdateSettings, currentViewMode, onViewModeChange, 
     googleAuthState, onGoogleSignIn, onGoogleSignOut, onOpenShortcutsModal, 
     focusMode, setFocusMode, onOpenSettings, connectionHealth, syncStatus,
-    onManualPull, onManualPush, isCompactMode, onToggleCompactMode, isFitToScreen, onToggleFitToScreen,
+    onManualPull, onManualPush, onForcePull, isCompactMode, onToggleCompactMode, isFitToScreen, onToggleFitToScreen,
     zoomLevel, setZoomLevel, audioControls, isTimelineVisible, onToggleTimeline,
     isMenuLocked, setIsMenuLocked, isRocketFlying, onRocketLaunch,
     isMenuHovered, onMenuHoverChange, activeFocusGoal, onFocusGoal, onExitFocus
@@ -384,6 +385,7 @@ export const Header: React.FC<HeaderProps> = ({
                         onOpenSettings={onOpenSettings}
                         onManualPull={onManualPull}
                         onManualPush={onManualPush}
+                        onForcePull={onForcePull} // Pass down new handler
                     />
                 </div>
             </div>
@@ -688,7 +690,9 @@ export const Header: React.FC<HeaderProps> = ({
                                     <ConnectionHealthIndicator 
                                         health={connectionHealth} 
                                         onOpenSettings={onOpenSettings}
-                                        // Mobile doesn't support hover tooltips well, relies on click
+                                        onManualPull={onManualPull}
+                                        onManualPush={onManualPush}
+                                        onForcePull={onForcePull} // Pass down new handler
                                     />
                                 </div>
                                 {isSheetConnected && (
