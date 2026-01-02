@@ -42,7 +42,7 @@ const SPACE_TINTS: Record<Status, { body: string, header: string, border: string
     'Review': { body: 'bg-purple-900/60', header: 'bg-purple-800/80', border: 'border-purple-500/30' },
     'Blocker': { body: 'bg-red-900/60', header: 'bg-red-800/80', border: 'border-red-500/30' },
     'Hold': { body: 'bg-amber-900/60', header: 'bg-amber-800/80', border: 'border-amber-500/30' },
-    "Won't Complete": { body: 'bg-stone-900/60', header: 'bg-stone-800/80', border: 'border-stone-500/30' },
+    "Won't Do": { body: 'bg-stone-900/60', header: 'bg-stone-800/80', border: 'border-stone-500/30' },
     'Done': { body: 'bg-green-900/60', header: 'bg-green-800/80', border: 'border-green-500/30' },
 };
 
@@ -83,7 +83,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
             case 'Review': return "To observe without judgment is the highest form of intelligence.";
             case 'Blocker': return "Conflict arises when we resist 'what is'.";
             case 'Hold': return "Psychological time is the enemy of clarity.";
-            case "Won't Complete": return "Negation of the unessential is the beginning of wisdom.";
+            case "Won't Do": return "Negation of the unessential is the beginning of wisdom.";
             case 'Done': return "Die to the past every moment. Do not carry the burden of achievement.";
             default: return "Accumulation clouds perception.";
         }

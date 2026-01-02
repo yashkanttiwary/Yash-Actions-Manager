@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Task, GamificationData, Settings, Goal } from '../types';
 import * as sheetService from '../services/googleSheetService';
 
-const POLL_INTERVAL = 10000; // Relaxed poll interval to reduce quota usage
+const POLL_INTERVAL = 5000; // 5s poll
 const DEBOUNCE_DELAY = 500; // Faster debounce (0.5s) to capture edits quickly
 
 export const useGoogleSheetSync = (
@@ -120,7 +120,7 @@ export const useGoogleSheetSync = (
             const currentLocalTasks = localTasksRef.current;
             const currentLocalGoals = localGoalsRef.current;
 
-            // 1. Merge Tasks (Prefer Newest)
+            // 1. Merge Tasks (High Water Mark logic for deletions)
             const { mergedTasks, hasLocalWins } = smartMergeTasks(currentLocalTasks, remoteTasks);
             
             // 2. Merge Goals (Simple ID check + Newest wins)
@@ -267,51 +267,84 @@ export const useGoogleSheetSync = (
         return () => clearInterval(pollInterval);
     }, [syncMethod, sheetId, appsScriptUrl, lastSyncTime, status, setAllData]);
 
-    return { status, lastSyncTime, errorMsg, syncMethod, manualPull, manualPush };
+    // Use manualPull for forcePull as a simple alias since strict replacement is not implemented in this version of executeStrictPull
+    return { status, lastSyncTime, errorMsg, syncMethod, manualPull, manualPush, forcePull: manualPull };
 };
 
-// --- HELPER: Smart Merge ---
+// --- HELPER: Smart Merge with High Water Mark ---
 // Returns merged list AND boolean if local data "won" (implies sheet is stale)
 const smartMergeTasks = (local: Task[], remote: Task[], isPolling = false): { mergedTasks: Task[], hasLocalWins: boolean, hasRemoteChanges: boolean } => {
     const taskMap = new Map<string, Task>();
     let hasLocalWins = false;
     let hasRemoteChanges = false;
 
-    // 1. Start with all Local tasks (Source of Truth for unsynced edits)
-    local.forEach(t => taskMap.set(t.id, t));
+    // Calculate Remote High Water Mark (Timestamp of the latest activity on the server)
+    let remoteHighWaterMark = 0;
+    if (remote.length > 0) {
+        remoteHighWaterMark = Math.max(...remote.map(t => new Date(t.lastModified).getTime()));
+    }
 
-    // 2. Overlay Remote tasks conditionally
+    // 1. Process Remote Tasks First (Server Authority base)
     remote.forEach(r => {
-        const l = taskMap.get(r.id);
+        taskMap.set(r.id, r);
         
+        // Polling check: Is this remote task effectively new to us?
+        const l = local.find(t => t.id === r.id);
         if (!l) {
-            // Task exists in Remote but not Local.
-            // On Boot: Accept it (restore backup).
-            // On Poll: Only accept if it's new/recent? No, usually accept to sync devices.
-            taskMap.set(r.id, r);
             hasRemoteChanges = true;
         } else {
-            // Task exists in both. Compare Timestamps.
+            const remoteTime = new Date(r.lastModified).getTime();
+            const localTime = new Date(l.lastModified).getTime();
+            if (remoteTime > localTime + 1000) {
+                hasRemoteChanges = true;
+            }
+        }
+    });
+
+    // 2. Process Local Tasks (Merge or Discard Stale)
+    local.forEach(l => {
+        const r = taskMap.get(l.id);
+        
+        if (r) {
+            // Task exists in both: Conflict Resolution by Timestamp
             const localTime = new Date(l.lastModified).getTime();
             const remoteTime = new Date(r.lastModified).getTime();
 
             // Threshold to prevent jitter (1 second)
-            if (remoteTime > localTime + 1000) {
-                // Remote is significantly newer. Accept it.
-                taskMap.set(r.id, r);
-                hasRemoteChanges = true;
-            } else if (localTime > remoteTime + 1000) {
+            if (localTime > remoteTime + 1000) {
                 // Local is significantly newer. Keep Local.
-                // This means the sheet is stale and needs an update.
-                hasLocalWins = true;
+                taskMap.set(l.id, l);
+                hasLocalWins = true; 
             }
-            // If timestamps are close, prefer Local (UI stability)
+            // Else: Remote is newer or equal. Keep Remote (already in map).
+        } else {
+            // ORPHAN: Task is in Local but NOT in Remote.
+            // This is where "Ghost Task" logic applies.
+            
+            const localTime = new Date(l.lastModified).getTime();
+
+            // HEURISTIC:
+            // If polling (background), be conservative and keep everything to avoid deleting active work during race conditions.
+            // If NOT polling (Boot/Manual Pull), filter out "Stale" tasks.
+            
+            // "Stale" definition: If the local task is OLDER than the latest activity on the server, 
+            // it implies the server state has moved past this task (i.e., it was deleted).
+            // If the local task is NEWER than the server's latest activity, it's likely a new task created offline.
+            
+            if (isPolling || localTime >= remoteHighWaterMark) {
+                taskMap.set(l.id, l);
+                // If we are keeping a local orphan during manual pull, it's a "Win" that needs pushing.
+                if (!isPolling) hasLocalWins = true;
+            } else {
+                // DROP IT. It's an old task that doesn't exist on server. 
+                // This cleans up "Old deleted tasks" that persist in local storage.
+            }
         }
     });
 
     return { 
         mergedTasks: Array.from(taskMap.values()), 
-        hasLocalWins: !isPolling && hasLocalWins, // Only care about local wins during initial hydrate
+        hasLocalWins: !isPolling && hasLocalWins, // Only care about local wins during initial hydrate to trigger repair push
         hasRemoteChanges 
     };
 };

@@ -43,7 +43,7 @@ const getStatusColor = (status: Status): string => {
         case 'Review': return '#a855f7'; // Purple
         case 'Blocker': return '#ef4444'; // Red
         case 'Hold': return '#f59e0b'; // Amber
-        default: return '#94a3b8'; // Slate (To Do / Won't Complete)
+        default: return '#94a3b8'; // Slate (To Do / Won't Do)
     }
 };
 
@@ -117,7 +117,7 @@ export const GoalColumn: React.FC<GoalColumnProps> = ({
 
     // ENTROPY CALCULATION (Idea #4)
     // Measures pile-up of active tasks.
-    const activeTaskCount = tasks.filter(t => t.status !== 'Done' && t.status !== "Won't Complete").length;
+    const activeTaskCount = tasks.filter(t => t.status !== 'Done' && t.status !== "Won't Do").length;
     // Threshold for high entropy (decay)
     const ENTROPY_THRESHOLD = 5; 
     const entropyLevel = Math.min(100, (activeTaskCount / ENTROPY_THRESHOLD) * 100);

@@ -86,6 +86,11 @@ export const useTaskManager = (enableLoading: boolean = true) => {
                             }
                             delete task.blockerReason; // Remove old field
 
+                            // Migration: "Won't Complete" -> "Won't Do"
+                            if (task.status === "Won't Complete") {
+                                task.status = "Won't Do";
+                            }
+
                             return {
                                 ...task,
                                 dueDate: task.dueDate || new Date().toISOString().split('T')[0],
@@ -139,6 +144,12 @@ export const useTaskManager = (enableLoading: boolean = true) => {
                 // If layouts are missing or empty, use default
                 if (finalLayouts.length === 0) {
                     finalLayouts = getDefaultLayout();
+                } else {
+                    // Update any deprecated column names in layouts
+                    finalLayouts = finalLayouts.map(l => {
+                        if (l.id === ("Won't Complete" as any)) return { ...l, id: "Won't Do" };
+                        return l;
+                    });
                 }
                 
                 setColumnLayouts(finalLayouts);

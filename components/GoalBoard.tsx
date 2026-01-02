@@ -116,7 +116,7 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
                     <div className="space-y-2.5 min-w-[140px]">
                         <div className="flex items-center gap-2.5">
                             <div className="w-2.5 h-2.5 rounded-full shadow-sm" style={{ backgroundColor: '#94a3b8' }}></div>
-                            <span className="text-xs font-semibold opacity-90">To Do</span>
+                            <span className="text-xs font-semibold opacity-90">To Do / Won't Do</span>
                         </div>
                         <div className="flex items-center gap-2.5">
                             <div className="w-2.5 h-2.5 rounded-full shadow-sm" style={{ backgroundColor: '#3b82f6' }}></div>

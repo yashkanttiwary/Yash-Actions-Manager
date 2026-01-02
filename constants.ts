@@ -17,7 +17,7 @@ export const COLUMN_STATUSES: Status[] = [
     'Review',
     'Blocker',
     'Hold',
-    "Won't Complete",
+    "Won't Do",
     'Done'
 ];
 
@@ -64,7 +64,7 @@ export const STATUS_STYLES: { [key in Status]: { header: string; body: string; c
         body: 'bg-neutral-200/50 dark:bg-neutral-800/50',
         cardBorder: 'border-l-4 border-l-neutral-500'
     },
-    "Won't Complete": {
+    "Won't Do": {
         header: 'bg-gray-500',
         body: 'bg-gray-200/50 dark:bg-gray-800/50',
         cardBorder: 'border-l-4 border-l-gray-500'

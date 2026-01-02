@@ -1,5 +1,5 @@
 
-export type Status = 'To Do' | 'In Progress' | 'Review' | 'Blocker' | 'Hold' | "Won't Complete" | 'Done';
+export type Status = 'To Do' | 'In Progress' | 'Review' | 'Blocker' | 'Hold' | "Won't Do" | 'Done';
 export type Priority = 'Critical' | 'High' | 'Medium' | 'Low';
 export type SortOption = 'Default' | 'Priority' | 'Due Date' | 'Created Date';
 export type SettingsTab = 'general' | 'ai' | 'api' | 'sheets' | 'calendar' | 'sounds';

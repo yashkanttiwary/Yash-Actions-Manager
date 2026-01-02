@@ -82,7 +82,7 @@ export const FocusView: React.FC<FocusViewProps> = ({
     // 2. Backlog Tasks (Unpinned, not Done)
     const backlogTasks = useMemo(() => {
         return tasks
-            .filter(t => !t.isPinned && t.status !== 'Done' && t.status !== "Won't Complete")
+            .filter(t => !t.isPinned && t.status !== 'Done' && t.status !== "Won't Do")
             .sort((a, b) => getPriorityWeight(b.priority) - getPriorityWeight(a.priority));
     }, [tasks]);
 

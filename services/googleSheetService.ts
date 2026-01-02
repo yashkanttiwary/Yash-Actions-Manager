@@ -77,10 +77,10 @@ const rowToTask = (row: any[], headerMap?: Map<string, number>): Task | null => 
         try {
             const parsed = JSON.parse(row[jsonColIndex]);
             
-            // If we have a map, we can smartly override from columns if we wanted to support 2-way manual editing.
-            // For now, we trust the JSON blob as the source of truth for complex objects,
-            // but override basics if they differ in the sheet (optional feature).
-            // Simplification: Just return parsed JSON with defaults ensuring robustness.
+            // Migration: Check if status is "Won't Complete" and normalize to "Won't Do"
+            if (parsed.status === "Won't Complete") {
+                parsed.status = "Won't Do";
+            }
             
             return parsed;
         } catch (e) {
@@ -93,11 +93,16 @@ const rowToTask = (row: any[], headerMap?: Map<string, number>): Task | null => 
     // If the user moved columns AND corrupted JSON, this might fail, but that's an edge case.
     const rawBlocker = row[9];
     const isLikelyJson = typeof rawBlocker === 'string' && rawBlocker.trim().startsWith('{');
+    
+    let status = (row[2] as Status) || 'To Do';
+    if (status === "Won't Complete" as any) {
+        status = "Won't Do";
+    }
 
     return {
         id: row[0],
         title: row[1] || 'Untitled Task',
-        status: (row[2] as Status) || 'To Do',
+        status: status,
         priority: (row[3] as Priority) || 'Medium',
         dueDate: row[4] || new Date().toISOString().split('T')[0],
         timeEstimate: Number(row[5]) || 0,

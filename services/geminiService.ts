@@ -142,7 +142,7 @@ const parsedTaskSchema = {
     properties: {
         title: { type: Type.STRING, description: "Corrected and clear title." },
         description: { type: Type.STRING, description: "Rich description inferred from speech." },
-        status: { type: Type.STRING, enum: ["To Do", "In Progress", "Review", "Blocker", "Hold", "Won't Complete", "Done"] },
+        status: { type: Type.STRING, enum: ["To Do", "In Progress", "Review", "Blocker", "Hold", "Won't Do", "Done"] },
         priority: { type: Type.STRING, enum: ["Critical", "High", "Medium", "Low"] },
         dueDate: { type: Type.STRING, description: "ISO 8601 Date YYYY-MM-DD" },
         scheduledStartDateTime: { type: Type.STRING, description: "ISO 8601 Datetime" },

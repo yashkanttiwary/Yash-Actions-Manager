@@ -20,7 +20,7 @@ const getStatusColor = (status: Status, isSpaceMode: boolean): string => {
         case 'Review': return '#a855f7'; // Purple
         case 'Blocker': return '#ef4444'; // Red
         case 'Hold': return '#f59e0b'; // Amber
-        default: return isSpaceMode ? '#cbd5e1' : '#64748b'; // Slate
+        default: return isSpaceMode ? '#cbd5e1' : '#64748b'; // Slate (To Do / Won't Do)
     }
 };
 
