@@ -81,4 +81,3 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({ onConnect, onSkip })
         </div>
     );
 };
-        

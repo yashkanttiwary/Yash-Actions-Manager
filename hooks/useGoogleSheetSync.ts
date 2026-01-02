@@ -3,8 +3,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Task, GamificationData, Settings, Goal } from '../types';
 import * as sheetService from '../services/googleSheetService';
 
-const POLL_INTERVAL = 10000; // Relaxed poll interval to reduce quota usage
-const DEBOUNCE_DELAY = 500; // Faster debounce (0.5s) to capture edits quickly
+const POLL_INTERVAL = 15000; // 15s poll
+const DEBOUNCE_DELAY = 1000; // 1s debounce to batch rapid edits
 
 export const useGoogleSheetSync = (
     sheetId: string | undefined, 
@@ -46,6 +46,8 @@ export const useGoogleSheetSync = (
     useEffect(() => {
         if (appsScriptUrl) {
             setSyncMethod('script');
+            // Do not reset initialPullComplete if switching methods gracefully, 
+            // but usually we want a fresh pull on method change.
             initialPullComplete.current = false;
         } else if (sheetId && isSignedIn) {
             setSyncMethod('api');
@@ -80,10 +82,12 @@ export const useGoogleSheetSync = (
                 settings: safeSettings
             };
 
-            if (syncMethod === 'api' && sheetId) {
-                await sheetService.syncDataToSheet(sheetId, localTasksRef.current, localGoalsRef.current, metadata);
-            } else if (syncMethod === 'script' && appsScriptUrl) {
-                await sheetService.syncDataToAppsScript(appsScriptUrl, localTasksRef.current, localGoalsRef.current, metadata);
+            const target = syncMethod === 'api' ? sheetId! : appsScriptUrl!;
+
+            if (syncMethod === 'api') {
+                await sheetService.syncDataToSheet(target, localTasksRef.current, localGoalsRef.current, metadata);
+            } else {
+                await sheetService.syncDataToAppsScript(target, localTasksRef.current, localGoalsRef.current, metadata);
             }
             setLastSyncTime(new Date().toISOString());
             setStatus('success');
@@ -96,13 +100,14 @@ export const useGoogleSheetSync = (
     }, [syncMethod, sheetId, appsScriptUrl]);
 
     // --- MAIN PULL FUNCTION (SMART HYDRATION) ---
-    const executeStrictPull = useCallback(async (method: 'script' | 'api', idOrUrl: string) => {
-        console.log(`[Sync] Initializing via ${method}...`);
-        let remoteTasks: Task[] = [];
-        let remoteGoals: Goal[] = [];
-        let remoteMetadata: any = null;
+    const executeStrictPull = useCallback(async (method: 'script' | 'api', idOrUrl: string, isPolling = false) => {
+        if (!isPolling) console.log(`[Sync] Pulling via ${method}...`);
         
         try {
+            let remoteTasks: Task[] = [];
+            let remoteGoals: Goal[] = [];
+            let remoteMetadata: any = null;
+
             if (method === 'api') {
                 const data = await sheetService.syncDataFromSheet(idOrUrl);
                 remoteTasks = data.tasks;
@@ -116,39 +121,44 @@ export const useGoogleSheetSync = (
             }
 
             // SMART MERGE: Compare Remote vs Local
-            // We use the current refs because they contain what was loaded from localStorage on boot
+            // We use the current refs because they contain what was loaded from localStorage
             const currentLocalTasks = localTasksRef.current;
             const currentLocalGoals = localGoalsRef.current;
 
             // 1. Merge Tasks (Prefer Newest)
-            const { mergedTasks, hasLocalWins } = smartMergeTasks(currentLocalTasks, remoteTasks);
+            const { mergedTasks, hasLocalWins, hasRemoteChanges } = smartMergeTasks(currentLocalTasks, remoteTasks, isPolling);
             
             // 2. Merge Goals (Simple ID check + Newest wins)
             const mergedGoals = smartMergeGoals(currentLocalGoals, remoteGoals);
 
-            console.log(`[Sync] Merge Result: ${mergedTasks.length} tasks (Local wins: ${hasLocalWins})`);
-            
-            // Apply Update
-            isRemoteUpdate.current = true;
-            setAllData(mergedTasks, mergedGoals);
-            
-            // Handle Metadata
-            if (remoteMetadata) {
-                if (remoteMetadata.gamification && setGamification) {
-                    setGamification(remoteMetadata.gamification);
-                }
-                if (remoteMetadata.settings && setSettings) {
-                    const currentLocalSettings = settingsRef.current || {} as Settings;
-                    const mergedSettings = {
-                        ...remoteMetadata.settings,
-                        geminiApiKey: currentLocalSettings.geminiApiKey || remoteMetadata.settings.geminiApiKey,
-                        googleApiKey: currentLocalSettings.googleApiKey || remoteMetadata.settings.googleApiKey,
-                        googleClientId: currentLocalSettings.googleClientId || remoteMetadata.settings.googleClientId,
-                        googleAppsScriptUrl: currentLocalSettings.googleAppsScriptUrl || remoteMetadata.settings.googleAppsScriptUrl,
-                        googleSheetId: currentLocalSettings.googleSheetId || remoteMetadata.settings.googleSheetId,
-                        audio: currentLocalSettings.audio || remoteMetadata.settings.audio
-                    };
-                    setSettings(mergedSettings);
+            if (!isPolling || hasRemoteChanges) {
+                console.log(`[Sync] Merge Result: ${mergedTasks.length} tasks. Remote changes detected: ${hasRemoteChanges}`);
+                
+                // Apply Update
+                isRemoteUpdate.current = true;
+                setAllData(mergedTasks, mergedGoals);
+                
+                // Handle Metadata
+                if (remoteMetadata) {
+                    if (remoteMetadata.gamification && setGamification) {
+                        setGamification(remoteMetadata.gamification);
+                    }
+                    if (remoteMetadata.settings && setSettings) {
+                        const currentLocalSettings = settingsRef.current || {} as Settings;
+                        const mergedSettings = {
+                            ...remoteMetadata.settings,
+                            // Preserve local keys unless missing
+                            geminiApiKey: currentLocalSettings.geminiApiKey || remoteMetadata.settings.geminiApiKey,
+                            googleApiKey: currentLocalSettings.googleApiKey || remoteMetadata.settings.googleApiKey,
+                            googleClientId: currentLocalSettings.googleClientId || remoteMetadata.settings.googleClientId,
+                            // Preserve connection settings to avoid loops
+                            googleAppsScriptUrl: currentLocalSettings.googleAppsScriptUrl || remoteMetadata.settings.googleAppsScriptUrl,
+                            googleSheetId: currentLocalSettings.googleSheetId || remoteMetadata.settings.googleSheetId,
+                            // Merge audio settings
+                            audio: { ...currentLocalSettings.audio, ...(remoteMetadata.settings.audio || {}) }
+                        };
+                        setSettings(mergedSettings);
+                    }
                 }
             }
             
@@ -156,17 +166,20 @@ export const useGoogleSheetSync = (
             initialPullComplete.current = true;
             setStatus('success');
 
-            // CRITICAL FIX: If local data was newer (hasLocalWins), the sheet is now stale.
-            // We must schedule a push to update the sheet with our preserved local edits.
-            if (hasLocalWins) {
+            // CRITICAL: If local data was newer during an initial pull, the sheet is stale.
+            // Schedule a repair push.
+            if (hasLocalWins && !isPolling) {
                 console.log("[Sync] Local data was newer. Scheduling repair push.");
-                isDirtyRef.current = true; // Trigger the debounce effect
+                isDirtyRef.current = true; 
             }
 
         } catch (e: any) {
             console.error("Pull Failed", e);
-            setStatus('error');
-            setErrorMsg(e.message || "Initialization failed");
+            // Don't set error status on polling failures to avoid UI flickering
+            if (!isPolling) {
+                setStatus('error');
+                setErrorMsg(e.message || "Sync failed");
+            }
         }
     }, [setAllData, setGamification, setSettings]);
 
@@ -175,22 +188,22 @@ export const useGoogleSheetSync = (
         if (!syncMethod) return;
         setStatus('syncing');
         const target = syncMethod === 'api' ? sheetId! : appsScriptUrl!;
-        await executeStrictPull(syncMethod, target);
+        await executeStrictPull(syncMethod, target, false);
     }, [syncMethod, sheetId, appsScriptUrl, executeStrictPull]);
 
     // Initial Load Effect
     useEffect(() => {
         if (!syncMethod) return;
-        if (initialPullComplete.current) return; // Only run once per connection session
+        if (initialPullComplete.current) return;
 
         const target = syncMethod === 'api' ? sheetId! : appsScriptUrl!;
         
         // Short delay to ensure localStorage has fully loaded into state before we merge
         const timer = setTimeout(() => {
             if (syncMethod === 'api') {
-                sheetService.initializeSheetHeaders(target).then(() => executeStrictPull(syncMethod, target));
+                sheetService.initializeSheetHeaders(target).then(() => executeStrictPull(syncMethod, target, false));
             } else {
-                executeStrictPull(syncMethod, target);
+                executeStrictPull(syncMethod, target, false);
             }
         }, 100);
 
@@ -229,43 +242,36 @@ export const useGoogleSheetSync = (
         const pollInterval = setInterval(async () => {
             if (status === 'syncing' || isDirtyRef.current || !initialPullComplete.current) return;
 
-            try {
-                // Check if sync needed...
-                let shouldSync = true; // Simplified check for robustness
-                if (syncMethod === 'api' && sheetId) {
-                     // Optimization: Check Drive modifiedTime first if using API
-                     const sheetModified = await sheetService.checkSheetModifiedTime(sheetId);
-                     if (sheetModified && lastSyncTime && new Date(sheetModified) <= new Date(lastSyncTime)) {
-                         shouldSync = false;
-                     }
-                }
+            const target = syncMethod === 'api' ? sheetId! : appsScriptUrl!;
+            // Removed modifiedTime check - it is unreliable for instant collaboration.
+            await executeStrictPull(syncMethod, target, true);
 
-                if (shouldSync) {
-                    const target = syncMethod === 'api' ? sheetId! : appsScriptUrl!;
-                    let data;
-                    
-                    if (syncMethod === 'api') data = await sheetService.syncDataFromSheet(target);
-                    else {
-                        data = await sheetService.syncDataFromAppsScript(target);
-                    }
-
-                    // Polling Logic: Only accept remote changes if they are distinctly newer
-                    const { mergedTasks, hasRemoteChanges } = smartMergeTasks(localTasksRef.current, data.tasks, true);
-                    
-                    if (hasRemoteChanges) {
-                        console.log("[Sync] Background update applied.");
-                        isRemoteUpdate.current = true;
-                        setAllData(mergedTasks, data.goals); // Simplified goal sync for polling
-                        setLastSyncTime(new Date().toISOString());
-                    }
-                }
-            } catch (e) {
-                // Silent fail on poll
-            }
         }, POLL_INTERVAL);
 
         return () => clearInterval(pollInterval);
-    }, [syncMethod, sheetId, appsScriptUrl, lastSyncTime, status, setAllData]);
+    }, [syncMethod, sheetId, appsScriptUrl, status, executeStrictPull]);
+
+    // VISIBILITY LISTENER: Force pull when user returns to tab
+    useEffect(() => {
+        if (!syncMethod) return;
+
+        const handleFocus = () => {
+            // Only pull if we aren't currently editing (dirty)
+            if (!isDirtyRef.current && status !== 'syncing' && initialPullComplete.current) {
+                console.log("[Sync] Tab focused. Refreshing data...");
+                const target = syncMethod === 'api' ? sheetId! : appsScriptUrl!;
+                executeStrictPull(syncMethod, target, true);
+            }
+        };
+
+        window.addEventListener('focus', handleFocus);
+        document.addEventListener('visibilitychange', handleFocus);
+
+        return () => {
+            window.removeEventListener('focus', handleFocus);
+            document.removeEventListener('visibilitychange', handleFocus);
+        };
+    }, [syncMethod, sheetId, appsScriptUrl, status, executeStrictPull]);
 
     return { status, lastSyncTime, errorMsg, syncMethod, manualPull, manualPush };
 };
@@ -286,8 +292,6 @@ const smartMergeTasks = (local: Task[], remote: Task[], isPolling = false): { me
         
         if (!l) {
             // Task exists in Remote but not Local.
-            // On Boot: Accept it (restore backup).
-            // On Poll: Only accept if it's new/recent? No, usually accept to sync devices.
             taskMap.set(r.id, r);
             hasRemoteChanges = true;
         } else {
@@ -298,11 +302,14 @@ const smartMergeTasks = (local: Task[], remote: Task[], isPolling = false): { me
             // Threshold to prevent jitter (1 second)
             if (remoteTime > localTime + 1000) {
                 // Remote is significantly newer. Accept it.
-                taskMap.set(r.id, r);
-                hasRemoteChanges = true;
+                // NOTE: We trust server more if it's newer.
+                // Check equality to avoid unnecessary re-renders
+                if (JSON.stringify(l) !== JSON.stringify(r)) {
+                    taskMap.set(r.id, r);
+                    hasRemoteChanges = true;
+                }
             } else if (localTime > remoteTime + 1000) {
                 // Local is significantly newer. Keep Local.
-                // This means the sheet is stale and needs an update.
                 hasLocalWins = true;
             }
             // If timestamps are close, prefer Local (UI stability)
@@ -311,7 +318,7 @@ const smartMergeTasks = (local: Task[], remote: Task[], isPolling = false): { me
 
     return { 
         mergedTasks: Array.from(taskMap.values()), 
-        hasLocalWins: !isPolling && hasLocalWins, // Only care about local wins during initial hydrate
+        hasLocalWins: !isPolling && hasLocalWins, // Only care about local wins during initial hydrate to trigger repair
         hasRemoteChanges 
     };
 };

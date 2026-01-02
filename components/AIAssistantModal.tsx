@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { Task, Priority } from '../types';
-import { TaskDiff, manageTasksWithAI, generateTaskSummary, validateGeminiKey } from '../services/geminiService';
+import { TaskDiff, manageTasksWithAI, generateTaskSummary } from '../services/geminiService';
 import { PRIORITY_COLORS } from '../constants';
 
 interface AIAssistantModalProps {
@@ -209,14 +209,9 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
     const [inputValue, setInputValue] = useState('');
     const [isTyping, setIsTyping] = useState(false);
     const [tempKey, setTempKey] = useState('');
-    
-    // New Validation State
-    const [isVerifying, setIsVerifying] = useState(false);
-    const [connectError, setConnectError] = useState<string | null>(null);
-
     const scrollRef = useRef<HTMLDivElement>(null);
 
-    const { isListening, transcript, startListening, stopListening, resetTranscript, isSupported } = useSpeechRecognition({ continuous: true });
+    const { isListening, transcript, startListening, stopListening, resetTranscript } = useSpeechRecognition({ continuous: true });
 
     // Auto-scroll to bottom only if we are in chat mode
     useEffect(() => {
@@ -282,27 +277,6 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
     const handleProposalCancel = (messageId: string) => {
         addMessage('system', "Action cancelled.");
         setMessages(prev => prev.map(m => m.id === messageId ? { ...m, data: { ...m.data, cancelled: true } } : m));
-    };
-    
-    // --- NEW VALIDATION HANDLER ---
-    const handleConnectKey = async () => {
-        const key = tempKey.trim();
-        if(!key) return;
-        
-        setIsVerifying(true);
-        setConnectError(null);
-        
-        // Strict Validation: Must return true from network call
-        const isValid = await validateGeminiKey(key);
-        
-        if (isValid) {
-            onSaveApiKey(key);
-            // State update in Parent will cause re-render and remove this screen
-        } else {
-            setConnectError("Invalid API Key. Connection failed.");
-            setIsVerifying(false);
-            // Optional: Clear or highlight field to force user attention
-        }
     };
 
     // Determine view state
@@ -433,37 +407,22 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                                 <input 
                                     type="text" 
                                     value={tempKey} 
-                                    onChange={e => {
-                                        setTempKey(e.target.value);
-                                        if (connectError) setConnectError(null);
-                                    }}
+                                    onChange={e => setTempKey(e.target.value)}
                                     placeholder="AIzaSy..." 
-                                    className={`w-full p-4 bg-gray-100 dark:bg-gray-900 rounded-xl border-2 border-transparent focus:bg-white dark:focus:bg-black focus:outline-none transition-all text-gray-900 dark:text-white font-mono text-sm shadow-inner ${connectError ? 'border-red-500 focus:border-red-500 ring-2 ring-red-500/20' : 'focus:border-indigo-500'}`}
-                                    disabled={isVerifying}
+                                    className="w-full p-4 bg-gray-100 dark:bg-gray-900 rounded-xl border-2 border-transparent focus:border-indigo-500 focus:bg-white dark:focus:bg-black focus:outline-none transition-all text-gray-900 dark:text-white font-mono text-sm shadow-inner"
                                 />
                                 <div className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
                                     <i className="fas fa-key"></i>
                                 </div>
                             </div>
-                            {connectError && (
-                                <p className="text-xs text-red-500 font-bold ml-1 animate-pulse flex items-center gap-1">
-                                    <i className="fas fa-exclamation-circle"></i> {connectError}
-                                </p>
-                            )}
                         </div>
 
                         <button 
-                            onClick={handleConnectKey} 
-                            disabled={!tempKey.trim() || isVerifying}
-                            className={`w-full py-4 bg-indigo-600 text-white rounded-xl font-bold shadow-lg transition-all transform flex items-center justify-center gap-2 ${isVerifying ? 'opacity-80 cursor-wait' : 'hover:bg-indigo-700 hover:shadow-indigo-500/30 hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none'}`}
+                            onClick={() => onSaveApiKey(tempKey)} 
+                            disabled={!tempKey.trim()}
+                            className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg hover:shadow-indigo-500/30 transition-all transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
                         >
-                            {isVerifying ? (
-                                <>
-                                    <i className="fas fa-circle-notch fa-spin"></i> Verifying...
-                                </>
-                            ) : (
-                                "Connect My Assistant 🚀"
-                            )}
+                            Connect My Assistant 🚀
                         </button>
                         
                         <div className="text-center bg-gray-100 dark:bg-gray-800/50 p-2 rounded-lg border border-gray-200 dark:border-gray-700">
@@ -496,24 +455,9 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                         <i className="fas fa-sparkles text-indigo-500 text-lg"></i>
                         <h3 className="font-bold text-gray-900 dark:text-white text-lg">AI Assist</h3>
                     </div>
-                    <div className="flex items-center gap-2">
-                        {apiKey && (
-                            <button
-                                onClick={() => {
-                                    if(confirm("Disconnect and clear your API key?")) {
-                                        onSaveApiKey(''); // Clear key globally
-                                    }
-                                }}
-                                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 transition-colors"
-                                title="Disconnect / Change API Key"
-                            >
-                                <i className="fas fa-key text-xs"></i>
-                            </button>
-                        )}
-                        <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-                            <i className="fas fa-times text-gray-400"></i>
-                        </button>
-                    </div>
+                    <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                        <i className="fas fa-times text-gray-400"></i>
+                    </button>
                 </div>
 
                 {/* Content Area */}
@@ -642,16 +586,14 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                         />
                         
                         <div className="flex items-center gap-1 pr-1">
-                            {isSupported && (
-                                <button
-                                    type="button"
-                                    onClick={isListening ? stopListening : startListening}
-                                    className={`w-8 h-8 flex items-center justify-center rounded-full transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-600'}`}
-                                    title="Voice Input"
-                                >
-                                    <i className={`fas ${isListening ? 'fa-stop' : 'fa-microphone'}`}></i>
-                                </button>
-                            )}
+                            <button
+                                type="button"
+                                onClick={isListening ? stopListening : startListening}
+                                className={`w-8 h-8 flex items-center justify-center rounded-full transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-600'}`}
+                                title="Voice Input"
+                            >
+                                <i className={`fas ${isListening ? 'fa-stop' : 'fa-microphone'}`}></i>
+                            </button>
                             
                             <button 
                                 type="submit" 

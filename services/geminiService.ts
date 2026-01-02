@@ -300,29 +300,6 @@ const callGoogleAI = async (apiKey: string, model: string, systemPrompt: string,
 
 // --- PUBLIC METHODS ---
 
-// New Validation Method for Integrations UI
-export const validateGeminiKey = async (apiKey: string): Promise<boolean> => {
-    // 1. Structural Check
-    if (!apiKey || apiKey.length < 20) return false;
-
-    // 2. Network Check (Direct, no wrapper)
-    try {
-        const ai = new GoogleGenAI({ apiKey });
-        // Minimal token count request is often sufficient and faster/cheaper than generateContent
-        // But for absolute certainty of chat capability, we use generateContent with a tiny prompt.
-        const response = await ai.models.generateContent({
-            model: AI_MODELS.FAST,
-            contents: { parts: [{ text: "Test" }] },
-        });
-        
-        // If we get here without throwing, the key is valid for this model.
-        return true;
-    } catch (e) {
-        console.warn("API Key Validation Failed:", e);
-        return false;
-    }
-};
-
 const executeAIRequest = async (userApiKey: string | undefined, type: 'manage' | 'summary' | 'breakdown' | 'parse' | 'psychology', payload: any) => {
     const apiKey = getApiKey(userApiKey);
     const currentDate = new Date().toISOString();

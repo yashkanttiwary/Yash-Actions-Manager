@@ -2,33 +2,38 @@
 import React, { useState, useEffect } from 'react';
 import { Task, Goal } from '../types';
 import { PRIORITY_COLORS, TAG_COLORS, PRIORITY_LABELS } from '../constants';
-import { useTaskContext } from '../contexts';
 
 interface FocusTaskCardProps {
     task: Task;
     goals: Goal[];
     onEditTask: (task: Task) => void;
+    onUpdateTask: (task: Task) => void;
+    onSubtaskToggle: (taskId: string, subtaskId: string) => void;
+    onDeleteTask: (taskId: string) => void;
     onUnpin: (taskId: string) => void;
-    isCore: boolean; // Retained for visual logic
+    isCore: boolean; // Retained for compatibility but ignored visually
     isSpaceMode: boolean;
+    // Timer props
+    activeTaskTimer: {taskId: string, startTime: number} | null;
+    onToggleTimer: (taskId: string) => void;
     // Reorder props
     onDragStart: (e: React.DragEvent) => void;
     onDrop: (e: React.DragEvent, taskId: string) => void;
-    
-    // Legacy props (ignored)
-    onUpdateTask?: any;
-    onSubtaskToggle?: any;
-    onDeleteTask?: any;
-    activeTaskTimer?: any;
-    onToggleTimer?: any;
 }
 
-export const FocusTaskCard: React.FC<FocusTaskCardProps> = ({ 
-    task, goals, onEditTask, onUnpin, isSpaceMode, onDragStart, onDrop
-}) => {
-    // Consume Context
-    const { updateTask, toggleTimer, activeTaskTimer } = useTaskContext();
+const getTagColor = (tagName: string) => {
+    let hash = 0;
+    for (let i = 0; i < tagName.length; i++) {
+        hash = tagName.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const index = Math.abs(hash % TAG_COLORS.length);
+    return TAG_COLORS[index];
+};
 
+export const FocusTaskCard: React.FC<FocusTaskCardProps> = ({ 
+    task, goals, onEditTask, onUpdateTask, onSubtaskToggle, onUnpin, isSpaceMode,
+    activeTaskTimer, onToggleTimer, onDragStart, onDrop
+}) => {
     const priorityColors = PRIORITY_COLORS[task.priority];
     const assignedGoal = goals.find(g => g.id === task.goalId);
     
@@ -36,9 +41,11 @@ export const FocusTaskCard: React.FC<FocusTaskCardProps> = ({
     const isActiveTimer = activeTaskTimer?.taskId === task.id;
     const [currentSessionTime, setCurrentSessionTime] = useState(0);
 
+    // Subtask Edit State
     const [isEditingSteps, setIsEditingSteps] = useState(false);
     const [newStepText, setNewStepText] = useState('');
 
+    // Timer Sync
     useEffect(() => {
         if (isActiveTimer && task.currentSessionStartTime) {
              const interval = setInterval(() => {
@@ -52,9 +59,9 @@ export const FocusTaskCard: React.FC<FocusTaskCardProps> = ({
     
     const handleStatusToggle = () => {
         if (task.status === 'Done') {
-            updateTask({ ...task, status: 'To Do' });
+            onUpdateTask({ ...task, status: 'To Do' });
         } else {
-            updateTask({ ...task, status: 'Done', completionDate: new Date().toISOString() });
+            onUpdateTask({ ...task, status: 'Done', completionDate: new Date().toISOString() });
         }
     };
 
@@ -65,17 +72,18 @@ export const FocusTaskCard: React.FC<FocusTaskCardProps> = ({
     const handleDropInternal = (e: React.DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        onDrop(e, task.id);
+        onDrop(e, task.id); // Drop ONTO this task
     };
 
+    // --- Subtask Handlers ---
     const handleStepUpdate = (subtaskId: string, newTitle: string) => {
         const updated = task.subtasks?.map(st => st.id === subtaskId ? { ...st, title: newTitle } : st) || [];
-        updateTask({ ...task, subtasks: updated });
+        onUpdateTask({ ...task, subtasks: updated });
     };
 
     const handleStepDelete = (subtaskId: string) => {
         const updated = task.subtasks?.filter(st => st.id !== subtaskId) || [];
-        updateTask({ ...task, subtasks: updated });
+        onUpdateTask({ ...task, subtasks: updated });
     };
 
     const handleStepAdd = () => {
@@ -86,15 +94,12 @@ export const FocusTaskCard: React.FC<FocusTaskCardProps> = ({
             isCompleted: false
         };
         const updated = [...(task.subtasks || []), newStep];
-        updateTask({ ...task, subtasks: updated });
+        onUpdateTask({ ...task, subtasks: updated });
         setNewStepText('');
     };
-    
-    const handleSubtaskToggle = (subtaskId: string) => {
-        const updated = task.subtasks?.map(st => st.id === subtaskId ? { ...st, isCompleted: !st.isCompleted } : st) || [];
-        updateTask({ ...task, subtasks: updated });
-    }
 
+    // Card Styling Logic
+    // K-Mode: Removed "isCore" border distinction. All tasks are equal in potential.
     const baseClasses = isSpaceMode 
         ? `bg-slate-900/80 backdrop-blur-xl border ${isActiveTimer ? 'border-green-500 shadow-[0_0_30px_rgba(34,197,94,0.3)]' : 'border-slate-700/50'}`
         : `bg-white dark:bg-gray-800 border ${isActiveTimer ? 'border-green-500 ring-2 ring-green-100 dark:ring-green-900' : 'border-gray-200 dark:border-gray-700 shadow-md'}`;
@@ -112,8 +117,10 @@ export const FocusTaskCard: React.FC<FocusTaskCardProps> = ({
                 ${isDone ? 'opacity-70 grayscale' : 'hover:scale-[1.01]'}
             `}
         >
+            {/* Header / Status Bar */}
             <div className={`px-6 py-4 border-b flex justify-between items-center ${isSpaceMode ? 'border-white/10 bg-white/5' : 'border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50'}`}>
                 <div className="flex items-center gap-3">
+                    {/* K-Mode: Use factual priority label, remove "Must Do" badge */}
                     <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-md ${priorityColors.bg} ${priorityColors.text}`}>
                         {PRIORITY_LABELS[task.priority]}
                     </span>
@@ -129,9 +136,10 @@ export const FocusTaskCard: React.FC<FocusTaskCardProps> = ({
                 </div>
                 
                 <div className="flex items-center gap-2">
+                    {/* Timer Button */}
                     {!isDone && (
                         <button
-                            onClick={(e) => { e.stopPropagation(); toggleTimer(task.id); }}
+                            onClick={(e) => { e.stopPropagation(); onToggleTimer(task.id); }}
                             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
                                 isActiveTimer 
                                     ? 'bg-green-500 text-white animate-pulse shadow-green-500/50' 
@@ -162,6 +170,7 @@ export const FocusTaskCard: React.FC<FocusTaskCardProps> = ({
             </div>
 
             <div className="p-6 md:p-8">
+                {/* Title & Checkbox */}
                 <div className="flex items-start gap-4 mb-4">
                     <button
                         onClick={handleStatusToggle}
@@ -188,6 +197,7 @@ export const FocusTaskCard: React.FC<FocusTaskCardProps> = ({
                     </div>
                 </div>
 
+                {/* Subtasks Section with Inline Edit */}
                 <div className="mt-6 pl-0 md:pl-12">
                     <div className="flex items-center justify-between mb-3">
                         <h4 className={`text-xs font-bold uppercase tracking-widest ${isSpaceMode ? 'text-slate-500' : 'text-gray-400'}`}>
@@ -206,7 +216,13 @@ export const FocusTaskCard: React.FC<FocusTaskCardProps> = ({
                         <div className="space-y-2 animate-fadeIn">
                             {task.subtasks?.map(st => (
                                 <div key={st.id} className="flex items-center gap-2">
-                                    <button onClick={() => handleStepDelete(st.id)} className="text-red-400 hover:text-red-500 px-1"><i className="fas fa-minus-circle"></i></button>
+                                    <button 
+                                        onClick={() => handleStepDelete(st.id)}
+                                        className="text-red-400 hover:text-red-500 px-1"
+                                        title="Delete step"
+                                    >
+                                        <i className="fas fa-minus-circle"></i>
+                                    </button>
                                     <input 
                                         type="text" 
                                         value={st.title}
@@ -225,7 +241,13 @@ export const FocusTaskCard: React.FC<FocusTaskCardProps> = ({
                                     placeholder="Add a new step..."
                                     className={`flex-1 text-sm bg-transparent border-b ${isSpaceMode ? 'border-white/10 text-slate-300 placeholder-slate-600 focus:border-white/50' : 'border-gray-200 text-gray-800 placeholder-gray-400 focus:border-indigo-500'} focus:outline-none py-1 transition-colors`}
                                 />
-                                <button onClick={handleStepAdd} disabled={!newStepText.trim()} className={`text-xs font-bold px-2 py-1 rounded ${!newStepText.trim() ? 'opacity-50 cursor-not-allowed' : ''} ${isSpaceMode ? 'bg-indigo-500/20 text-indigo-300' : 'bg-indigo-100 text-indigo-600'}`}>Add</button>
+                                <button 
+                                    onClick={handleStepAdd}
+                                    disabled={!newStepText.trim()}
+                                    className={`text-xs font-bold px-2 py-1 rounded ${!newStepText.trim() ? 'opacity-50 cursor-not-allowed' : ''} ${isSpaceMode ? 'bg-indigo-500/20 text-indigo-300' : 'bg-indigo-100 text-indigo-600'}`}
+                                >
+                                    Add
+                                </button>
                             </div>
                         </div>
                     ) : (
@@ -234,7 +256,7 @@ export const FocusTaskCard: React.FC<FocusTaskCardProps> = ({
                                 task.subtasks.map(st => (
                                     <div 
                                         key={st.id} 
-                                        onClick={() => handleSubtaskToggle(st.id)}
+                                        onClick={() => onSubtaskToggle(task.id, st.id)}
                                         className={`group/sub flex items-start gap-3 cursor-pointer select-none transition-opacity ${st.isCompleted ? 'opacity-50' : 'opacity-100'}`}
                                     >
                                         <div className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center transition-colors ${st.isCompleted ? 'bg-green-500 border-green-500' : (isSpaceMode ? 'border-slate-600 group-hover/sub:border-white' : 'border-gray-300 dark:border-gray-600 group-hover/sub:border-indigo-500')}`}>
@@ -246,7 +268,10 @@ export const FocusTaskCard: React.FC<FocusTaskCardProps> = ({
                                     </div>
                                 ))
                             ) : (
-                                <div onClick={() => setIsEditingSteps(true)} className={`text-sm italic cursor-pointer transition-colors ${isSpaceMode ? 'text-slate-600 hover:text-slate-400' : 'text-gray-400 hover:text-gray-600'}`}>
+                                <div 
+                                    onClick={() => setIsEditingSteps(true)}
+                                    className={`text-sm italic cursor-pointer transition-colors ${isSpaceMode ? 'text-slate-600 hover:text-slate-400' : 'text-gray-400 hover:text-gray-600'}`}
+                                >
                                     No steps defined. Click to add breakdown.
                                 </div>
                             )}
@@ -254,12 +279,19 @@ export const FocusTaskCard: React.FC<FocusTaskCardProps> = ({
                     )}
                 </div>
 
+                {/* Footer Metadata */}
                 <div className="mt-8 flex flex-wrap items-center gap-3 pt-4 border-t border-dashed border-gray-200 dark:border-gray-700/50">
                     {task.timeEstimate && (
                         <span className={`text-xs flex items-center gap-1.5 px-2 py-1 rounded-md ${isSpaceMode ? 'bg-white/5 text-slate-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'}`}>
                             <i className="far fa-clock"></i> {task.timeEstimate}h Estimate
                         </span>
                     )}
+
+                    {task.tags && task.tags.map(tag => (
+                        <span key={tag} className={`text-xs px-2.5 py-1 rounded-full text-white shadow-sm ${getTagColor(tag)}`}>
+                            #{tag}
+                        </span>
+                    ))}
                 </div>
             </div>
         </div>

@@ -1,9 +1,9 @@
 
-import React, { useState, useCallback, useMemo } from 'react';
-import { SettingsProvider, AuthProvider, TaskProvider, useTaskContext, useSettingsContext, useAuthContext } from './contexts';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { KanbanBoard } from './components/KanbanBoard';
 import { Header } from './components/Header';
-import { Task, Status, Priority, SettingsTab, Goal, TaskDiff } from './types';
+import { useTaskManager } from './hooks/useTaskManager';
+import { Task, Status, Priority, GamificationData, Settings, Blocker, ConnectionHealth, SettingsTab, Goal } from './types';
 import { EditTaskModal } from './components/EditTaskModal';
 import { BlockerModal } from './components/BlockerModal';
 import { ResolveBlockerModal } from './components/ResolveBlockerModal';
@@ -12,111 +12,369 @@ import { CalendarView } from './components/CalendarView';
 import { TimelineGantt } from './components/TimelineGantt';
 import { GoalBoard } from './components/GoalBoard';
 import { FocusView } from './components/FocusView';
-import { breakDownTask, parseTaskFromVoice, analyzeTaskPsychology } from './services/geminiService';
+import { breakDownTask, parseTaskFromVoice, TaskDiff, analyzeTaskPsychology } from './services/geminiService';
+import { initGoogleClient, signIn, signOut } from './services/googleAuthService';
 import { COLUMN_STATUSES, UNASSIGNED_GOAL_ID } from './constants';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { IntegrationsModal } from './components/IntegrationsModal';
+import { useGoogleSheetSync } from './hooks/useGoogleSheetSync';
+import { checkCalendarConnection } from './services/googleCalendarService'; 
+import { resumeAudioContext } from './utils/audio';
+import { storage } from './utils/storage';
 import { useBackgroundAudio } from './hooks/useBackgroundAudio';
+import { useSettings } from './hooks/useSettings'; 
+import { setUserTimeOffset } from './services/timeService';
 import { ConfirmModal } from './components/ConfirmModal';
 import { getEnvVar } from './utils/env';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { StarField } from './components/StarField';
 import { TrashModal } from './components/TrashModal';
-import { WelcomeModal } from './components/WelcomeModal'; // Import
+import { WelcomeModal } from './components/WelcomeModal';
 
-// --- MAIN APP CONTENT COMPONENT ---
-// Separated to use Context Hooks
-const AppContent: React.FC = () => {
-    // Context Consumption
-    const { 
-        tasks, goals, columns, columnLayouts, deletedTasks,
-        addTask, updateTask, deleteTask, restoreTask, permanentlyDeleteTask, emptyTrash,
-        moveTask, setAllTasks, addGoal, updateGoal, deleteGoal,
-        toggleTaskPin, reorderPinnedTasks, getTasksByStatus, updateColumnLayout, resetColumnLayouts,
-        isLoading, activeTaskTimer, toggleTimer, 
-        syncStatus, manualPull, manualPush, connectionHealth
-    } = useTaskContext();
+interface GoogleAuthState {
+    gapiLoaded: boolean;
+    gisLoaded: boolean;
+    isSignedIn: boolean;
+    error?: Error;
+    disabled?: boolean;
+}
 
-    const { settings, updateSettings } = useSettingsContext();
-    const { googleAuth, signIn, signOut } = useAuthContext();
-
-    // Local UI State
-    const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
+const App: React.FC = () => {
+    const [theme, setTheme] = useState('light');
+    
     const [isCompactMode, setIsCompactMode] = useState(true);
     const [isFitToScreen, setIsFitToScreen] = useState(true);
     const [zoomLevel, setZoomLevel] = useState(0.9);
     const [showTimeline, setShowTimeline] = useState(false);
-    const [isMenuLocked, setIsMenuLocked] = useState(localStorage.getItem('isMenuLocked') === 'true');
-    const [isMenuHovered, setIsMenuHovered] = useState(false);
-    const [isRocketFlying, setIsRocketFlying] = useState(false);
     
-    // View State
-    const [viewMode, setViewMode] = useState<'kanban' | 'calendar' | 'goals' | 'focus'>((localStorage.getItem('viewMode') as any) || 'kanban');
-    const [focusMode, setFocusMode] = useState<Status | 'None'>((localStorage.getItem('focusMode') as any) || 'None');
-    const [focusedGoalId, setFocusedGoalId] = useState<string | null>(localStorage.getItem('focusedGoalId'));
-    const [isTodayView, setIsTodayView] = useState<boolean>(localStorage.getItem('isTodayView') === 'true');
+    const [isMenuLocked, setIsMenuLocked] = useState(false);
+    const [isMenuHovered, setIsMenuHovered] = useState(false);
+    
+    const [isRocketFlying, setIsRocketFlying] = useState(false);
 
-    // Modals
+    const isSpaceModeActive = useMemo(() => theme === 'space', [theme]);
+
+    const { settings, updateSettings, loaded: settingsLoaded } = useSettings();
+
+    const isSheetConfigured = useMemo(() => {
+        return !!(settings.googleSheetId || settings.googleAppsScriptUrl);
+    }, [settings.googleSheetId, settings.googleAppsScriptUrl]);
+
+    // Setup State
+    const [hasSkippedSetup, setHasSkippedSetup] = useState(false);
+    // Show welcome if not configured AND user hasn't explicitly skipped it this session
+    // AND settings have actually loaded
+    const showWelcome = settingsLoaded && !isSheetConfigured && !hasSkippedSetup;
+
+    const hasApiKey = useMemo(() => {
+        return !!settings.geminiApiKey || !!getEnvVar('VITE_GEMINI_API_KEY');
+    }, [settings.geminiApiKey]);
+
+    const {
+        tasks,
+        allTasks, // FIX: Use this for Sync
+        deletedTasks, // Use this for Trash UI
+        goals, 
+        columns,
+        columnLayouts,
+        addTask,
+        updateTask,
+        deleteTask,
+        restoreTask,
+        permanentlyDeleteTask,
+        emptyTrash,
+        moveTask,
+        setAllTasks,
+        setAllData, 
+        addGoal, 
+        updateGoal, 
+        deleteGoal, 
+        toggleTaskPin,
+        reorderPinnedTasks, 
+        getTasksByStatus,
+        updateColumnLayout,
+        resetColumnLayouts,
+        isLoading,
+        error
+    } = useTaskManager(settingsLoaded); // Always load tasks locally
+
+    const audioControls = useBackgroundAudio(settings.audio);
+
     const [editingTask, setEditingTask] = useState<Task | null>(null);
     const [blockingTask, setBlockingTask] = useState<Task | null>(null);
     const [resolvingBlockerTask, setResolvingBlockerTask] = useState<{ task: Task; newStatus: Status; newIndex: number } | null>(null);
+    const [isTodayView, setIsTodayView] = useState<boolean>(false);
     const [showAIModal, setShowAIModal] = useState(false);
     const [showTrashModal, setShowTrashModal] = useState(false);
+    
+    const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'warning'; action?: { label: string; onClick: () => void } } | null>(null);
+
     const [showIntegrationsModal, setShowIntegrationsModal] = useState(false);
     const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>('general');
+    
+    const [viewMode, setViewMode] = useState<'kanban' | 'calendar' | 'goals' | 'focus'>('kanban');
+    const [focusMode, setFocusMode] = useState<Status | 'None'>('None');
+    const [focusedGoalId, setFocusedGoalId] = useState<string | null>(null);
+    
+    const [confirmModalState, setConfirmModalState] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+        isDestructive?: boolean;
+        onConfirm: () => void;
+    }>({
+        isOpen: false,
+        title: '',
+        message: '',
+        onConfirm: () => {}
+    });
+
+    const activeTaskTimer = useMemo(() => {
+        const activeTask = tasks.find(t => t.currentSessionStartTime);
+        return activeTask ? { taskId: activeTask.id, startTime: activeTask.currentSessionStartTime! } : null;
+    }, [tasks]);
+
+    const [gamification, setGamification] = useState<GamificationData>({
+        xp: 0,
+        level: 1,
+        streak: { current: 0, longest: 0, lastCompletionDate: null }
+    });
+    
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; task: Task } | null>(null);
     const [showShortcutsModal, setShowShortcutsModal] = useState(false);
-    const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'warning'; action?: { label: string; onClick: () => void } } | null>(null);
-    const [confirmModalState, setConfirmModalState] = useState<{ isOpen: boolean; title: string; message: string; isDestructive?: boolean; onConfirm: () => void; }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+
+    const [googleAuth, setGoogleAuth] = useState<GoogleAuthState>({
+        gapiLoaded: false,
+        gisLoaded: false,
+        isSignedIn: false,
+        disabled: false,
+    });
+
+    const [connectionHealth, setConnectionHealth] = useState<ConnectionHealth>({
+        auth: { status: 'loading', message: 'Initializing...' },
+        sheet: { status: 'pending', message: 'Not configured' },
+        calendar: { status: 'pending', message: 'Not configured' },
+        api: { status: 'missing', message: 'API Keys missing' }
+    });
     
-    // Setup State
-    const isSheetConfigured = !!(settings.googleSheetId || settings.googleAppsScriptUrl);
-    // Show welcome if not configured AND user hasn't explicitly skipped it this session (could persist skip in localStorage if desired)
-    const [hasSkippedSetup, setHasSkippedSetup] = useState(false);
-    const showWelcome = !isSheetConfigured && !hasSkippedSetup && !isLoading;
+    useEffect(() => {
+        if (isMenuLocked) {
+            setZoomLevel(0.8);
+        } else {
+            setZoomLevel(0.9);
+        }
+        storage.set('isMenuLocked', String(isMenuLocked));
+    }, [isMenuLocked]);
 
-    // Services
-    const audioControls = useBackgroundAudio(settings.audio);
-    
-    const isSpaceModeActive = useMemo(() => theme === 'space', [theme]);
-    const hasApiKey = !!(settings.geminiApiKey || getEnvVar('VITE_GEMINI_API_KEY'));
-
-    // Effects
-    React.useEffect(() => {
-        const root = window.document.documentElement;
-        root.classList.remove('dark');
-        if (theme === 'dark' || theme === 'space') root.classList.add('dark');
-        localStorage.setItem('theme', theme);
-    }, [theme]);
-
-    React.useEffect(() => {
-        localStorage.setItem('viewMode', viewMode);
-        localStorage.setItem('isTodayView', String(isTodayView));
-        if (focusMode !== 'None') localStorage.setItem('focusMode', focusMode); else localStorage.removeItem('focusMode');
-        if (focusedGoalId) localStorage.setItem('focusedGoalId', focusedGoalId); else localStorage.removeItem('focusedGoalId');
-    }, [viewMode, isTodayView, focusMode, focusedGoalId]);
-
-    React.useEffect(() => {
+    useEffect(() => {
         if (notification) {
-            const timer = setTimeout(() => setNotification(null), 5000);
+            const timer = setTimeout(() => setNotification(null), 3000);
             return () => clearTimeout(timer);
         }
     }, [notification]);
 
-    React.useEffect(() => {
-        const handleClick = () => setContextMenu(null);
-        window.addEventListener("click", handleClick);
-        return () => window.removeEventListener("click", handleClick);
+    useEffect(() => {
+        if (!settingsLoaded) return; 
+
+        const initialize = async () => {
+            try {
+                const { gapiLoaded, gisLoaded, disabled } = await initGoogleClient(settings.googleApiKey, settings.googleClientId);
+                
+                if (disabled) {
+                    setGoogleAuth(prev => ({ ...prev, disabled: true }));
+                    if (!settings.googleAppsScriptUrl) {
+                        setConnectionHealth(prev => ({...prev, api: { status: 'missing', message: 'Keys missing' }}));
+                    } else {
+                         setConnectionHealth(prev => ({...prev, api: { status: 'configured', message: 'Not needed for Script Mode' }}));
+                    }
+                } else {
+                    const token = gapi.client.getToken();
+                    const isSignedIn = token !== null;
+                    setGoogleAuth(prev => ({ 
+                        ...prev, 
+                        gapiLoaded, 
+                        gisLoaded,
+                        isSignedIn 
+                    }));
+                    setConnectionHealth(prev => ({...prev, api: { status: 'configured', message: 'Keys valid' }}));
+                }
+            } catch (error: any) {
+                console.error("Error initializing Google clients:", error);
+                setGoogleAuth(prev => ({...prev, error: new Error("Could not connect to Google services.") }));
+                setConnectionHealth(prev => ({...prev, api: { status: 'missing', message: 'Initialization failed' }}));
+            }
+        };
+        setTimeout(initialize, 500); 
+    }, [settings.googleApiKey, settings.googleClientId, settings.googleAppsScriptUrl, settingsLoaded]);
+
+    useEffect(() => {
+        const loadPersistedData = async () => {
+            try {
+                const savedTheme = await storage.get('theme');
+                if (savedTheme && savedTheme !== theme) setTheme(savedTheme);
+
+                const savedFit = await storage.get('isFitToScreen');
+                if (savedFit !== null) {
+                    const shouldFit = savedFit === 'true';
+                    setIsFitToScreen(shouldFit);
+                    if (shouldFit) setZoomLevel(0.9);
+                    else setZoomLevel(1);
+                }
+                
+                const savedTimeline = await storage.get('showTimeline');
+                if (savedTimeline !== null) setShowTimeline(savedTimeline === 'true');
+                
+                const savedMenuLock = await storage.get('isMenuLocked');
+                if (savedMenuLock === 'true') setIsMenuLocked(true);
+
+                const savedFocusedGoalId = await storage.get('focusedGoalId');
+                if (savedFocusedGoalId) setFocusedGoalId(savedFocusedGoalId);
+
+                const savedViewMode = await storage.get('viewMode');
+                if (savedViewMode) setViewMode(savedViewMode as any);
+
+                const savedTodayView = await storage.get('isTodayView');
+                if (savedTodayView) setIsTodayView(savedTodayView === 'true');
+
+                const savedFocusMode = await storage.get('focusMode');
+                if (savedFocusMode) setFocusMode(savedFocusMode as any);
+            } catch (e) {
+                console.error("Error loading persisted data", e);
+            }
+        };
+        loadPersistedData();
     }, []);
 
-    // Handlers
-    const toggleTheme = () => {
-        setTheme(prev => {
-            if (prev === 'light') return 'dark';
-            if (prev === 'dark') return 'space';
-            return 'light';
-        });
-    };
+    useEffect(() => {
+        const root = window.document.documentElement;
+        root.classList.remove('dark');
+        if (theme === 'dark' || theme === 'space') {
+            root.classList.add('dark');
+        } else {
+            root.classList.remove('dark');
+        }
+        storage.set('theme', theme);
+    }, [theme]);
+
+    useEffect(() => {
+        if (!settingsLoaded) return;
+        storage.set('viewMode', viewMode);
+        storage.set('isTodayView', String(isTodayView));
+        if (focusMode !== 'None') {
+            storage.set('focusMode', focusMode);
+        } else {
+            storage.remove('focusMode');
+        }
+    }, [viewMode, isTodayView, focusMode, settingsLoaded]);
+
+    useEffect(() => {
+        storage.set('isFitToScreen', String(isFitToScreen));
+        storage.set('showTimeline', String(showTimeline));
+    }, [isFitToScreen, showTimeline]);
+
+    useEffect(() => {
+        if (settingsLoaded) {
+            if (focusedGoalId) {
+                storage.set('focusedGoalId', focusedGoalId);
+            } else {
+                storage.remove('focusedGoalId');
+            }
+        }
+    }, [focusedGoalId, settingsLoaded]);
+
+    useEffect(() => {
+        if (settingsLoaded) {
+            setUserTimeOffset(settings.userTimeOffset);
+        }
+    }, [settings.userTimeOffset, settingsLoaded]);
+
+    const shouldSync = settingsLoaded && isSheetConfigured && !isLoading;
+    
+    // FIX SYNC BUG: Pass 'allTasks' instead of 'tasks' to ensure deletions are synced
+    const { status: syncStatus, errorMsg: syncError, syncMethod, manualPull, manualPush } = useGoogleSheetSync(
+        shouldSync ? settings.googleSheetId : undefined,
+        allTasks, // <--- CRITICAL FIX: Pass all tasks including deleted ones
+        setAllData, 
+        googleAuth.isSignedIn,
+        shouldSync ? settings.googleAppsScriptUrl : undefined,
+        gamification,
+        settings,
+        setGamification,
+        (s) => updateSettings(s),
+        goals 
+    );
+
+    useEffect(() => {
+        const isScriptMode = !!settings.googleAppsScriptUrl;
+
+        if (isScriptMode) {
+             setConnectionHealth(prev => ({
+                 ...prev, 
+                 auth: { status: 'optional', message: 'Not required for Script' },
+                 api: { status: 'configured', message: 'Not required for Script' }
+            }));
+        } else {
+             if (googleAuth.disabled) {
+                  setConnectionHealth(prev => ({...prev, auth: { status: 'optional', message: 'Keys Missing' }}));
+             } else if (!googleAuth.isSignedIn) {
+                  setConnectionHealth(prev => ({...prev, auth: { status: 'disconnected', message: 'Sign In Required for API' }}));
+             } else {
+                  setConnectionHealth(prev => ({...prev, auth: { status: 'connected', message: 'Signed In' }}));
+             }
+        }
+
+        if (!settings.googleSheetId && !settings.googleAppsScriptUrl) {
+             setConnectionHealth(prev => ({...prev, sheet: { status: 'pending', message: 'Not configured' }}));
+        } else if (syncStatus === 'error') {
+             setConnectionHealth(prev => ({...prev, sheet: { status: 'error', message: syncError || 'Sync Failed' }}));
+        } else if (syncStatus === 'idle' && !settings.googleAppsScriptUrl && !googleAuth.isSignedIn) {
+             setConnectionHealth(prev => ({...prev, sheet: { status: 'pending', message: 'Waiting for Auth' }}));
+        } else {
+             const methodMsg = syncMethod === 'script' ? 'via Script' : 'via API';
+             const statusMsg = syncStatus === 'syncing' ? 'Syncing...' : `Connected ${methodMsg}`;
+             setConnectionHealth(prev => ({...prev, sheet: { status: 'connected', message: statusMsg }}));
+        }
+    }, [googleAuth.isSignedIn, googleAuth.disabled, settings.googleSheetId, settings.googleAppsScriptUrl, syncStatus, syncError, syncMethod]);
+
+    useEffect(() => {
+        if (!googleAuth.isSignedIn || !settings.googleCalendarId) {
+             setConnectionHealth(prev => ({...prev, calendar: { status: 'pending', message: 'Not Connected' }}));
+             return;
+        }
+        const checkCalendar = async () => {
+            try {
+                await checkCalendarConnection(settings.googleCalendarId || 'primary');
+                setConnectionHealth(prev => ({...prev, calendar: { status: 'connected', message: 'Connected' }}));
+            } catch (e: any) {
+                let msg = 'Connection Failed';
+                if (e.result?.error?.code === 404) msg = 'Calendar Not Found';
+                if (e.result?.error?.code === 403) msg = 'Permission Denied';
+                setConnectionHealth(prev => ({...prev, calendar: { status: 'error', message: msg }}));
+            }
+        };
+        checkCalendar();
+        const interval = setInterval(checkCalendar, 60000);
+        return () => clearInterval(interval);
+    }, [googleAuth.isSignedIn, settings.googleCalendarId]);
+
+
+    useEffect(() => {
+        const unlockAudio = () => {
+            resumeAudioContext();
+            window.removeEventListener('click', unlockAudio);
+            window.removeEventListener('keydown', unlockAudio);
+        };
+        window.addEventListener('click', unlockAudio);
+        window.addEventListener('keydown', unlockAudio);
+        
+        const handleClick = () => setContextMenu(null);
+        window.addEventListener("click", handleClick);
+        return () => {
+            window.removeEventListener("click", handleClick);
+            window.removeEventListener('click', unlockAudio);
+            window.removeEventListener('keydown', unlockAudio);
+        };
+    }, []);
 
     const handleOpenAddTaskModal = useCallback((status: Status, scheduledDateTime?: string) => {
         const baseDate = scheduledDateTime ? new Date(scheduledDateTime) : new Date();
@@ -128,40 +386,329 @@ const AppContent: React.FC = () => {
             dueDate: baseDate.toISOString().split('T')[0],
             createdDate: new Date().toISOString(),
             lastModified: new Date().toISOString(),
-            tags: [], subtasks: [], statusChangeDate: new Date().toISOString(), actualTimeSpent: 0,
-            scheduledStartDateTime: scheduledDateTime, dependencies: [], blockers: [], currentSessionStartTime: null,
+            tags: [],
+            subtasks: [],
+            statusChangeDate: new Date().toISOString(),
+            actualTimeSpent: 0,
+            scheduledStartDateTime: scheduledDateTime,
+            dependencies: [],
+            blockers: [],
+            currentSessionStartTime: null,
             goalId: focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined,
             isPinned: false
         });
     }, [focusedGoalId]);
 
+    const runPsychologyCheck = useCallback(async (task: Task) => {
+        const apiKey = settings.geminiApiKey || getEnvVar('VITE_GEMINI_API_KEY');
+        if (!apiKey) return;
+
+        try {
+            const analysis = await analyzeTaskPsychology(task, apiKey);
+            if (analysis.isBecoming) {
+                updateTask({
+                    ...task,
+                    isBecoming: true,
+                    becomingWarning: analysis.warning
+                });
+            }
+        } catch (e) {
+            console.error("Psych check failed", e);
+        }
+    }, [settings.geminiApiKey, updateTask]);
+
+    const handleQuickAddTask = useCallback((title: string, status: Status) => {
+        const newTaskData = {
+            title,
+            status,
+            priority: 'Medium' as Priority,
+            dueDate: new Date().toISOString().split('T')[0],
+            description: '',
+            goalId: focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined, 
+        };
+        const newTask = addTask(newTaskData);
+        runPsychologyCheck(newTask);
+    }, [addTask, focusedGoalId, runPsychologyCheck]);
+
     const handleVoiceTaskAdd = useCallback(async (transcript: string, defaultStatus: Status) => {
         const effectiveKey = settings.geminiApiKey || getEnvVar('VITE_GEMINI_API_KEY');
+        
         if (!effectiveKey) {
-             addTask({ title: transcript, status: defaultStatus, priority: 'Medium', dueDate: new Date().toISOString().split('T')[0], goalId: focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined });
+             const basicTask = addTask({
+                title: transcript,
+                status: defaultStatus,
+                priority: 'Medium',
+                dueDate: new Date().toISOString().split('T')[0],
+                description: '', 
+                goalId: focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined
+             });
              return;
         }
+
         try {
             const parsedData = await parseTaskFromVoice(transcript, effectiveKey, goals);
-            setEditingTask({
-                ...parsedData,
+            const draftTask: Task = {
                 id: `new-${Date.now()}`,
+                title: parsedData.title || transcript, 
+                description: parsedData.description || '',
+                status: (parsedData.status || defaultStatus) as Status,
+                priority: (parsedData.priority || 'Medium') as Priority,
+                dueDate: parsedData.dueDate || new Date().toISOString().split('T')[0],
+                scheduledStartDateTime: parsedData.scheduledStartDateTime,
+                tags: parsedData.tags || [],
+                timeEstimate: parsedData.timeEstimate,
+                goalId: parsedData.goalId || (focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined), 
+                blockers: parsedData.blockerReason ? [{
+                    id: `blocker-${Date.now()}`,
+                    reason: parsedData.blockerReason,
+                    createdDate: new Date().toISOString(),
+                    resolved: false
+                }] : [],
+                subtasks: parsedData.subtasks?.map((st: any) => ({
+                    id: `sub-${Date.now()}-${Math.random().toString(36).substr(2,5)}`,
+                    title: st.title,
+                    isCompleted: false
+                })) || [],
                 createdDate: new Date().toISOString(),
                 lastModified: new Date().toISOString(),
                 statusChangeDate: new Date().toISOString(),
                 actualTimeSpent: 0,
-                isPinned: false,
-                isDeleted: false,
-                blockers: parsedData.blockerReason ? [{ id: `blocker-${Date.now()}`, reason: parsedData.blockerReason, createdDate: new Date().toISOString(), resolved: false }] : []
-            });
+                isPinned: false
+            };
+            setEditingTask(draftTask);
         } catch (error) {
-            addTask({ title: transcript, status: defaultStatus, priority: 'Medium', dueDate: new Date().toISOString().split('T')[0] });
+            console.error("Voice parse failed:", error);
+            const fallbackTask = addTask({
+                title: transcript.length > 60 ? `${transcript.substring(0, 57)}...` : transcript,
+                description: `> 🎙️ **Voice Note**\n> "${transcript}"`,
+                status: defaultStatus,
+                priority: 'Medium',
+                dueDate: new Date().toISOString().split('T')[0],
+                goalId: focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined
+            });
+            runPsychologyCheck(fallbackTask);
         }
-    }, [addTask, settings.geminiApiKey, focusedGoalId, goals]);
+    }, [addTask, settings.geminiApiKey, focusedGoalId, goals, runPsychologyCheck]);
+
+    const handleOpenSettings = (tab: SettingsTab = 'general') => {
+        setActiveSettingsTab(tab);
+        setShowIntegrationsModal(true);
+    };
+
+    const handleSubtaskToggle = useCallback((taskId: string, subtaskId: string) => {
+        const task = tasks.find(t => t.id === taskId);
+        if (!task || !task.subtasks) return;
+        
+        const updatedSubtasks = task.subtasks.map(st => 
+            st.id === subtaskId ? { ...st, isCompleted: !st.isCompleted } : st
+        );
+        updateTask({ ...task, subtasks: updatedSubtasks });
+    }, [tasks, updateTask]);
+
+    const handleBreakDownTask = useCallback(async (taskId: string) => {
+        const task = tasks.find(t => t.id === taskId);
+        if (!task) return;
+
+        try {
+            const steps = await breakDownTask(task.title, settings.geminiApiKey);
+            const currentSubtasks = task.subtasks || [];
+            const newSubtasks = [...currentSubtasks];
+            steps.forEach(step => {
+                if (!newSubtasks.some(s => s.title === step.title)) {
+                    newSubtasks.push(step);
+                }
+            });
+            updateTask({ ...task, subtasks: newSubtasks });
+        } catch (error) {
+            console.error("Failed to break down task:", error);
+        }
+    }, [tasks, updateTask, settings.geminiApiKey]);
+
+    const handleTogglePin = useCallback((taskId: string) => {
+        const result = toggleTaskPin(taskId);
+        if (!result.success && result.message) {
+            setNotification({ message: result.message, type: 'error' });
+        }
+    }, [toggleTaskPin]);
+
+    useKeyboardShortcuts({
+        isSheetConfigured,
+        handleOpenAddTaskModal,
+        setShowAIModal,
+        setIsTodayView,
+        setViewMode: (newMode) => {
+            if (typeof newMode === 'function') {
+                setViewMode(prev => (prev === 'kanban' ? 'calendar' : 'kanban'));
+            } else {
+                setViewMode(newMode as any);
+            }
+        },
+        setShowShortcutsModal,
+        setZoomLevel,
+        closeAllModals: () => {
+            if (contextMenu) setContextMenu(null);
+            else if (editingTask) setEditingTask(null);
+            else if (blockingTask) setBlockingTask(null);
+            else if (resolvingBlockerTask) setResolvingBlockerTask(null);
+            else if (showAIModal) setShowAIModal(false);
+            else if (showShortcutsModal) setShowShortcutsModal(false);
+            else if (showIntegrationsModal) setShowIntegrationsModal(false);
+            else if (confirmModalState.isOpen) setConfirmModalState(prev => ({...prev, isOpen: false}));
+            else if (showTrashModal) setShowTrashModal(false);
+        },
+        isAnyModalOpen: !!(contextMenu || editingTask || blockingTask || resolvingBlockerTask || showAIModal || showShortcutsModal || showIntegrationsModal || confirmModalState.isOpen || showTrashModal)
+    });
+
+    const toggleTheme = () => {
+        setTheme(prevTheme => {
+            if (prevTheme === 'light') return 'dark';
+            if (prevTheme === 'dark') return 'space';
+            return 'light';
+        });
+    };
+
+    const handleToggleFitToScreen = () => {
+        setIsFitToScreen(prev => {
+            const newValue = !prev;
+            if (newValue) setZoomLevel(0.9);
+            else setZoomLevel(1);
+            return newValue;
+        });
+    };
+
+    const handleToggleTimer = (taskId: string) => {
+        const now = Date.now();
+        const currentlyActiveTask = tasks.find(t => t.currentSessionStartTime);
+        
+        if (currentlyActiveTask) {
+            const startTime = currentlyActiveTask.currentSessionStartTime!;
+            const duration = now - startTime;
+            const updatedTask = {
+                ...currentlyActiveTask,
+                actualTimeSpent: (currentlyActiveTask.actualTimeSpent || 0) + Math.round(duration / 1000),
+                currentSessionStartTime: null 
+            };
+            updateTask(updatedTask);
+            if (currentlyActiveTask.id === taskId) return;
+        }
+
+        const taskToStart = tasks.find(t => t.id === taskId);
+        if (taskToStart) {
+            updateTask({
+                ...taskToStart,
+                currentSessionStartTime: now
+            });
+        }
+    };
+    
+    const performActualTaskMove = useCallback((task: Task, newStatus: Status, newIndex: number) => {
+        if (task.status === 'In Progress' && newStatus !== 'In Progress' && task.currentSessionStartTime) {
+             const duration = Date.now() - task.currentSessionStartTime;
+             task.actualTimeSpent = (task.actualTimeSpent || 0) + Math.round(duration / 1000),
+             task.currentSessionStartTime = null;
+        }
+        moveTask(task.id, newStatus, newIndex);
+    }, [moveTask]);
+
+
+    const handleTaskMove = (taskId: string, newStatus: Status, newIndex: number) => {
+        const task = tasks.find(t => t.id === taskId);
+        if (!task) return;
+
+        if (task.isBlockedByDependencies && newStatus === 'In Progress') {
+            const blockerTasks = task.dependencies?.map(depId => tasks.find(t => t.id === depId)?.title).filter(Boolean).join(', ');
+            setNotification({ message: `Blocked by: ${blockerTasks}`, type: 'error' });
+            return;
+        }
+
+        const activeBlocker = task.blockers?.find(b => !b.resolved);
+        if (task.status === 'Blocker' && newStatus !== 'Blocker' && activeBlocker) {
+            setResolvingBlockerTask({ task, newStatus, newIndex });
+            return;
+        }
+        if (newStatus === 'Blocker' && !activeBlocker) {
+            setBlockingTask(task);
+            return; 
+        }
+
+        performActualTaskMove(task, newStatus, newIndex);
+    };
+    
+    const handleTaskGoalMove = (taskId: string, newGoalId: string) => {
+        const task = tasks.find(t => t.id === taskId);
+        if (task) {
+            updateTask({ ...task, goalId: newGoalId });
+        }
+    };
+
+    const handleSetBlocker = (task: Task, reason: string) => {
+        const newBlocker: Blocker = {
+            id: `blocker-${Date.now()}-${Math.random()}`,
+            reason: reason,
+            createdDate: new Date().toISOString(),
+            resolved: false,
+        };
+        const updatedTask = {
+            ...task,
+            blockers: [...(task.blockers || []), newBlocker],
+        };
+        updateTask(updatedTask);
+        moveTask(task.id, 'Blocker', 0);
+        setBlockingTask(null);
+    };
+
+    const handleResolveBlocker = (task: Task) => {
+        if (!resolvingBlockerTask) return;
+        const { newStatus, newIndex } = resolvingBlockerTask;
+        const now = new Date().toISOString();
+
+        const updatedBlockers = task.blockers?.map(b => 
+            !b.resolved ? { ...b, resolved: true, resolvedDate: now } : b
+        );
+
+        const updatedTask = { ...task, blockers: updatedBlockers };
+        updateTask(updatedTask);
+        performActualTaskMove(updatedTask, newStatus, newIndex);
+        setResolvingBlockerTask(null);
+    };
+
+    const handleEditTask = (task: Task) => {
+        setEditingTask(task);
+    };
+
+    const handleSaveTask = async (taskToSave: Task) => {
+        let savedTask = taskToSave;
+        if (taskToSave.id.startsWith('new-')) {
+            const { id, createdDate, lastModified, ...newTaskData } = taskToSave;
+            const newTask = addTask(newTaskData as any);
+            runPsychologyCheck(newTask);
+        } else {
+            updateTask(savedTask);
+            runPsychologyCheck(savedTask);
+        }
+        setEditingTask(null);
+    };
+    
+    const handleApplyAIChanges = async (changes: TaskDiff) => {
+        if (changes.added && changes.added.length > 0) {
+            changes.added.forEach(t => addTask(t as any));
+        }
+        if (changes.updated && changes.updated.length > 0) {
+            changes.updated.forEach(partialTask => {
+                const existing = tasks.find(t => t.id === partialTask.id);
+                if (existing) {
+                    updateTask({ ...existing, ...partialTask });
+                }
+            });
+        }
+        if (changes.deletedIds && changes.deletedIds.length > 0) {
+            changes.deletedIds.forEach(id => deleteTask(id));
+        }
+        setNotification({ message: "Changes applied.", type: 'success' });
+    };
 
     const filteredTasks = useMemo(() => {
         return tasks.filter(task => {
-            if (task.isDeleted) return false;
             if (focusedGoalId) {
                 if (focusedGoalId === UNASSIGNED_GOAL_ID) {
                     if (task.goalId && goals.some(g => g.id === task.goalId)) return false; 
@@ -169,6 +716,7 @@ const AppContent: React.FC = () => {
                     if (task.goalId !== focusedGoalId) return false;
                 }
             }
+
             if (isTodayView) {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
@@ -176,161 +724,426 @@ const AppContent: React.FC = () => {
                 dueDate.setHours(0, 0, 0, 0);
                 if (dueDate.getTime() !== today.getTime()) return false;
             }
+
+            if (task.status === 'Done' && task.completionDate) {
+                const completedTime = new Date(task.completionDate).getTime();
+                const now = new Date().getTime();
+                const hoursSinceCompletion = (now - completedTime) / (1000 * 60 * 60);
+                if (hoursSinceCompletion > 48) {
+                    return false; 
+                }
+            }
+
             return true;
         });
     }, [tasks, isTodayView, focusedGoalId, goals]);
 
-    // Derived
-    const activeFocusGoal = useMemo(() => focusedGoalId ? (focusedGoalId === UNASSIGNED_GOAL_ID ? { id: UNASSIGNED_GOAL_ID, title: 'Unassigned', color: '#64748b' } as Goal : goals.find(g => g.id === focusedGoalId)) : null, [focusedGoalId, goals]);
-    const gamification = { xp: 0, level: 1, streak: { current: 0, longest: 0, lastCompletionDate: null } }; // Placeholder
+    const handleGoalDelete = useCallback((goalId: string) => {
+        if (focusedGoalId === goalId) {
+            setFocusedGoalId(null);
+        }
+        deleteGoal(goalId);
+    }, [deleteGoal, focusedGoalId]);
 
-    // Keyboard Shortcuts
-    useKeyboardShortcuts({
-        isSheetConfigured,
-        handleOpenAddTaskModal, setShowAIModal, setIsTodayView,
-        setViewMode: (val) => setViewMode(val as any),
-        setShowShortcutsModal, setZoomLevel,
-        closeAllModals: () => { setEditingTask(null); setShowAIModal(false); setShowTrashModal(false); setShowIntegrationsModal(false); },
-        isAnyModalOpen: !!(editingTask || showAIModal || showTrashModal || showIntegrationsModal)
-    });
+    const activeFocusGoal = useMemo(() => {
+        if (!focusedGoalId) return null;
+        if (focusedGoalId === UNASSIGNED_GOAL_ID) return { id: UNASSIGNED_GOAL_ID, title: 'Unassigned Tasks', color: '#64748b' } as Goal;
+        return goals.find(g => g.id === focusedGoalId);
+    }, [focusedGoalId, goals]);
+
+
+    const handleGoogleSignIn = async () => {
+        try {
+            await signIn();
+            setGoogleAuth(prev => ({ ...prev, isSignedIn: true }));
+        } catch (error) {
+            console.error("Sign in failed", error);
+        }
+    };
+    
+    const handleGoogleSignOut = () => {
+        signOut();
+        setGoogleAuth(prev => ({ ...prev, isSignedIn: false }));
+    };
+    
+    const handleOpenContextMenu = (e: React.MouseEvent, task: Task) => {
+        e.preventDefault();
+        setContextMenu({ x: e.clientX, y: e.clientY, task });
+    };
+
+    const handleChangeStatusFromContextMenu = (task: Task, newStatus: Status) => {
+        handleTaskMove(task.id, newStatus, 0);
+        setContextMenu(null);
+    };
+
+    const handleEditFromContextMenu = (task: Task) => {
+        setEditingTask(task);
+        setContextMenu(null);
+    };
+
+    const requestDeleteTask = useCallback((taskId: string) => {
+        const task = tasks.find(t => t.id === taskId);
+        if (!task) return;
+        
+        setConfirmModalState({
+            isOpen: true,
+            title: "Delete Task?",
+            message: `Are you sure you want to delete "${task.title}"?`,
+            isDestructive: true,
+            onConfirm: () => {
+                deleteTask(taskId);
+                setConfirmModalState(prev => ({...prev, isOpen: false}));
+                setEditingTask(null);
+                setNotification({ 
+                    message: "Task moved to trash", 
+                    type: 'success', 
+                    action: { label: "UNDO", onClick: () => restoreTask(taskId) } 
+                });
+            }
+        });
+    }, [tasks, deleteTask, restoreTask]);
+
+    const handleDeleteFromContextMenu = (task: Task) => {
+        requestDeleteTask(task.id);
+        setContextMenu(null);
+    };
+
+    const headerHeightDesktop = (isMenuLocked || isMenuHovered) ? '200px' : '50px';
 
     return (
         <div className={`bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-white h-screen flex flex-col overflow-hidden font-sans ${isSpaceModeActive ? 'bg-transparent' : 'bg-dots'} transition-colors duration-300 relative`}>
             {isSpaceModeActive && <StarField />}
             
             <Header
-                tasks={filteredTasks} goals={goals} isTodayView={isTodayView} setIsTodayView={setIsTodayView}
-                onOpenAIAssistant={() => setShowAIModal(true)} onToggleTheme={toggleTheme} currentTheme={theme}
-                onResetLayout={resetColumnLayouts} gamification={gamification} settings={settings} onUpdateSettings={updateSettings}
-                currentViewMode={viewMode} onViewModeChange={setViewMode} googleAuthState={googleAuth}
-                onGoogleSignIn={signIn} onGoogleSignOut={signOut} onOpenShortcutsModal={() => setShowShortcutsModal(true)}
-                focusMode={focusMode} setFocusMode={setFocusMode} onOpenSettings={(tab) => { setActiveSettingsTab(tab || 'general'); setShowIntegrationsModal(true); }}
-                connectionHealth={connectionHealth} syncStatus={syncStatus} onManualPull={manualPull} onManualPush={manualPush}
-                isCompactMode={isCompactMode} onToggleCompactMode={() => setIsCompactMode(!isCompactMode)}
-                isFitToScreen={isFitToScreen} onToggleFitToScreen={() => setIsFitToScreen(!isFitToScreen)}
-                zoomLevel={zoomLevel} setZoomLevel={setZoomLevel} audioControls={audioControls}
-                isTimelineVisible={showTimeline} onToggleTimeline={() => setShowTimeline(!showTimeline)}
-                isMenuLocked={isMenuLocked} setIsMenuLocked={setIsMenuLocked}
-                isRocketFlying={isRocketFlying} onRocketLaunch={setIsRocketFlying}
-                isMenuHovered={isMenuHovered} onMenuHoverChange={setIsMenuHovered}
-                activeFocusGoal={activeFocusGoal} onFocusGoal={setFocusedGoalId} onExitFocus={() => setFocusedGoalId(null)}
+                tasks={tasks}
+                goals={goals} 
+                isTodayView={isTodayView}
+                setIsTodayView={setIsTodayView}
+                onOpenAIAssistant={() => setShowAIModal(true)}
+                onToggleTheme={toggleTheme}
+                currentTheme={theme}
+                onResetLayout={resetColumnLayouts}
+                gamification={gamification}
+                settings={settings}
+                onUpdateSettings={updateSettings}
+                currentViewMode={viewMode}
+                onViewModeChange={setViewMode}
+                googleAuthState={googleAuth}
+                onGoogleSignIn={handleGoogleSignIn}
+                onGoogleSignOut={handleGoogleSignOut}
+                onOpenShortcutsModal={() => setShowShortcutsModal(true)}
+                focusMode={focusMode}
+                setFocusMode={setFocusMode}
+                onOpenSettings={handleOpenSettings}
+                connectionHealth={connectionHealth}
+                syncStatus={syncStatus} 
+                onManualPull={manualPull}
+                onManualPush={manualPush}
+                isCompactMode={isCompactMode}
+                onToggleCompactMode={() => setIsCompactMode(prev => !prev)}
+                isFitToScreen={isFitToScreen}
+                onToggleFitToScreen={handleToggleFitToScreen}
+                zoomLevel={zoomLevel}
+                setZoomLevel={setZoomLevel}
+                audioControls={audioControls}
+                isTimelineVisible={showTimeline}
+                onToggleTimeline={() => setShowTimeline(prev => !prev)}
+                isMenuLocked={isMenuLocked} 
+                setIsMenuLocked={setIsMenuLocked} 
+                isRocketFlying={isRocketFlying}
+                onRocketLaunch={setIsRocketFlying}
+                isMenuHovered={isMenuHovered} 
+                onMenuHoverChange={setIsMenuHovered}
+                activeFocusGoal={activeFocusGoal}
+                onFocusGoal={setFocusedGoalId} 
+                onExitFocus={() => setFocusedGoalId(null)}
             />
 
+            {audioControls.isSuspended && (
+                <div 
+                    className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[60] bg-indigo-600 text-white px-4 py-2 rounded-full shadow-lg cursor-pointer animate-bounce flex items-center gap-2"
+                    onClick={() => resumeAudioContext()}
+                >
+                    <i className="fas fa-volume-mute"></i>
+                    <span className="text-sm font-bold">Tap to Unmute Audio</span>
+                </div>
+            )}
+
+            {/* Trash Button - Only visible if items in trash */}
             {deletedTasks.length > 0 && (
-                <button onClick={() => setShowTrashModal(true)} className="fixed bottom-24 right-6 z-50 bg-gray-800 text-white dark:bg-gray-700 w-12 h-12 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform md:bottom-6 md:right-auto md:left-6">
+                <button 
+                    onClick={() => setShowTrashModal(true)}
+                    className="fixed bottom-24 right-6 z-50 bg-gray-800 text-white dark:bg-gray-700 w-12 h-12 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform md:bottom-6 md:right-auto md:left-6"
+                    title="Open Trash"
+                >
                     <i className="fas fa-trash-alt"></i>
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">{deletedTasks.length}</span>
                 </button>
             )}
 
-            <main className="flex-1 overflow-auto pl-2 sm:pl-6 pr-2 pb-2 relative flex flex-col scroll-smooth transition-all duration-700 z-10 md:pt-[50px] pt-16 pb-20 md:pb-2" style={{ paddingTop: window.innerWidth >= 768 && (isMenuLocked || isMenuHovered) ? '200px' : undefined }}>
+            <main 
+                className="flex-1 overflow-auto pl-2 sm:pl-6 pr-2 pb-2 relative flex flex-col scroll-smooth transition-all duration-700 z-10 
+                           md:pt-[50px] pt-16 pb-20 md:pb-2"
+                style={{ 
+                    paddingTop: window.innerWidth >= 768 ? headerHeightDesktop : undefined
+                }}
+            >
                 {notification && (
                     <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top-2 fade-in duration-300">
-                        <div className={`px-4 py-2 rounded-lg shadow-xl text-sm font-bold flex items-center gap-2 ${notification.type === 'error' ? 'bg-red-500 text-white' : 'bg-indigo-600 text-white'}`}>
+                        <div className={`px-4 py-2 rounded-lg shadow-xl text-sm font-bold flex items-center gap-2 ${notification.type === 'error' ? 'bg-red-500 text-white' : 'bg-green-600 text-white'}`}>
+                            <i className={`fas ${notification.type === 'error' ? 'fa-exclamation-circle' : 'fa-check-circle'}`}></i>
                             {notification.message}
-                            {notification.action && <button onClick={notification.action.onClick} className="ml-2 bg-white text-indigo-600 px-2 py-0.5 rounded text-xs font-extrabold uppercase">{notification.action.label}</button>}
+                            {notification.action && (
+                                <button 
+                                    onClick={notification.action.onClick}
+                                    className="ml-2 bg-white text-green-600 px-2 py-0.5 rounded text-xs font-extrabold uppercase hover:bg-green-50"
+                                >
+                                    {notification.action.label}
+                                </button>
+                            )}
                         </div>
                     </div>
                 )}
 
-                {isLoading ? (
-                    <div className="flex justify-center items-center h-full"><i className="fas fa-spinner fa-spin text-4xl text-indigo-500"></i></div>
-                ) : (
+                {showWelcome && (
+                    <WelcomeModal 
+                        onConnect={(url) => updateSettings({ googleAppsScriptUrl: url })}
+                        onSkip={() => setHasSkippedSetup(true)}
+                    />
+                )}
+
+                {!showWelcome && !isSheetConfigured && hasSkippedSetup && tasks.length === 0 && (
+                     <div className="text-center mt-20 opacity-50">
+                        <p>No tasks yet. Press 'N' to create one!</p>
+                     </div>
+                )}
+
+                {(!showWelcome && (isSheetConfigured || hasSkippedSetup)) && (
                     <>
-                        {viewMode === 'kanban' && (
+                        {isLoading && (
+                            <div className="flex justify-center items-center h-full">
+                                <i className="fas fa-spinner fa-spin text-4xl text-indigo-500 dark:text-indigo-400"></i>
+                                <span className="ml-4 text-xl">Loading tasks...</span>
+                            </div>
+                        )}
+                        {error && <div className="text-center text-red-500 dark:text-red-400 text-lg">{error}</div>}
+                        
+                        {!isLoading && !error && (
                             <>
-                                <TimelineGantt tasks={filteredTasks} onEditTask={setEditingTask} onUpdateTask={updateTask} addTask={addTask} isVisible={showTimeline} timezone={settings.timezone} />
-                                <div className="flex-grow">
-                                    <KanbanBoard
-                                        tasks={filteredTasks} columns={columns} columnLayouts={columnLayouts}
-                                        getTasksByStatus={(s) => getTasksByStatus(s, filteredTasks)}
-                                        onTaskMove={(id, s, i) => { 
-                                            const task = tasks.find(t => t.id === id);
-                                            // Handle blocker logic locally or in moveTask
-                                            moveTask(id, s, i); 
-                                        }}
-                                        onEditTask={setEditingTask} onAddTask={handleOpenAddTaskModal}
-                                        onQuickAddTask={(title, status) => addTask({ title, status, priority: 'Medium', dueDate: new Date().toISOString().split('T')[0] })}
-                                        onSmartAddTask={handleVoiceTaskAdd}
-                                        onUpdateTask={updateTask} onUpdateColumnLayout={updateColumnLayout}
-                                        activeTaskTimer={activeTaskTimer} onToggleTimer={toggleTimer}
-                                        onOpenContextMenu={(e, t) => setContextMenu({ x: e.clientX, y: e.clientY, task: t })}
-                                        focusMode={focusMode} onDeleteTask={deleteTask} onSubtaskToggle={(tid, sid) => { const t = tasks.find(x => x.id === tid); if(t) updateTask({...t, subtasks: t.subtasks?.map(s => s.id === sid ? {...s, isCompleted: !s.isCompleted} : s)}) }}
-                                        onBreakDownTask={async (id) => { const t = tasks.find(x => x.id === id); if(t) { const steps = await breakDownTask(t.title, settings.geminiApiKey); updateTask({...t, subtasks: [...(t.subtasks||[]), ...steps]}); } }}
-                                        isCompactMode={isCompactMode} isFitToScreen={isFitToScreen} zoomLevel={zoomLevel} isSpaceMode={isSpaceModeActive} goals={goals} onTogglePin={toggleTaskPin}
+                                {viewMode === 'kanban' && (
+                                    <TimelineGantt 
+                                        tasks={filteredTasks} 
+                                        onEditTask={handleEditTask}
+                                        onUpdateTask={updateTask}
+                                        addTask={addTask} 
+                                        isVisible={showTimeline}
+                                        timezone={settings.timezone}
                                     />
-                                </div>
+                                )}
+
+                                {viewMode === 'kanban' && (
+                                    <div className="flex-grow">
+                                        <KanbanBoard
+                                            tasks={filteredTasks} 
+                                            columns={columns}
+                                            columnLayouts={columnLayouts}
+                                            getTasksByStatus={(status) => getTasksByStatus(status, filteredTasks)}
+                                            onTaskMove={handleTaskMove}
+                                            onEditTask={handleEditTask}
+                                            onAddTask={(status) => handleOpenAddTaskModal(status)}
+                                            onQuickAddTask={handleQuickAddTask}
+                                            onSmartAddTask={handleVoiceTaskAdd}
+                                            onUpdateTask={updateTask}
+                                            onUpdateColumnLayout={updateColumnLayout}
+                                            activeTaskTimer={activeTaskTimer}
+                                            onToggleTimer={handleToggleTimer}
+                                            onOpenContextMenu={handleOpenContextMenu}
+                                            focusMode={focusMode}
+                                            onDeleteTask={requestDeleteTask}
+                                            onSubtaskToggle={handleSubtaskToggle}
+                                            onBreakDownTask={handleBreakDownTask}
+                                            isCompactMode={isCompactMode}
+                                            isFitToScreen={isFitToScreen}
+                                            zoomLevel={zoomLevel}
+                                            isSpaceMode={isSpaceModeActive} 
+                                            goals={goals} 
+                                            onTogglePin={handleTogglePin} 
+                                        />
+                                    </div>
+                                )}
+                                {viewMode === 'calendar' && (
+                                    <div className="flex-grow h-full">
+                                        <CalendarView
+                                            tasks={filteredTasks} 
+                                            onUpdateTask={updateTask}
+                                            onEditTask={handleEditTask}
+                                            onAddTask={handleOpenAddTaskModal}
+                                            timezone={settings.timezone}
+                                        />
+                                    </div>
+                                )}
+                                {viewMode === 'goals' && (
+                                    <div className="flex-grow h-full">
+                                        <GoalBoard
+                                            tasks={filteredTasks} 
+                                            goals={goals}
+                                            onTaskMove={handleTaskGoalMove}
+                                            onEditTask={handleEditTask}
+                                            onDeleteTask={requestDeleteTask}
+                                            onAddGoal={addGoal}
+                                            onEditGoal={updateGoal}
+                                            onUpdateTask={updateTask}
+                                            onDeleteGoal={handleGoalDelete} 
+                                            activeTaskTimer={activeTaskTimer}
+                                            onToggleTimer={handleToggleTimer}
+                                            onSubtaskToggle={handleSubtaskToggle}
+                                            isCompactMode={isCompactMode}
+                                            isSpaceMode={isSpaceModeActive}
+                                            zoomLevel={zoomLevel}
+                                            onFocusGoal={setFocusedGoalId}
+                                            currentFocusId={focusedGoalId}
+                                        />
+                                    </div>
+                                )}
+                                {viewMode === 'focus' && (
+                                    <FocusView
+                                        tasks={tasks}
+                                        goals={goals}
+                                        onEditTask={handleEditTask}
+                                        onUpdateTask={updateTask}
+                                        onTogglePin={handleTogglePin}
+                                        onSubtaskToggle={handleSubtaskToggle}
+                                        onDeleteTask={requestDeleteTask}
+                                        isSpaceMode={isSpaceModeActive}
+                                        activeTaskTimer={activeTaskTimer}
+                                        onToggleTimer={handleToggleTimer}
+                                        onReorderTasks={reorderPinnedTasks}
+                                        headerHeight={headerHeightDesktop}
+                                    />
+                                )}
                             </>
-                        )}
-                        {viewMode === 'calendar' && (
-                            <div className="flex-grow h-full">
-                                <CalendarView tasks={filteredTasks} onUpdateTask={updateTask} onEditTask={setEditingTask} onAddTask={handleOpenAddTaskModal} timezone={settings.timezone} />
-                            </div>
-                        )}
-                        {viewMode === 'goals' && (
-                            <div className="flex-grow h-full">
-                                <GoalBoard
-                                    tasks={filteredTasks} goals={goals} onTaskMove={(tid, gid) => { const t = tasks.find(x => x.id === tid); if(t) updateTask({...t, goalId: gid}); }}
-                                    onEditTask={setEditingTask} onDeleteTask={deleteTask} onAddGoal={addGoal} onEditGoal={updateGoal} onUpdateTask={updateTask}
-                                    onDeleteGoal={(gid) => { deleteGoal(gid); setFocusedGoalId(null); }} activeTaskTimer={activeTaskTimer} onToggleTimer={toggleTimer}
-                                    onSubtaskToggle={(tid, sid) => { const t = tasks.find(x => x.id === tid); if(t) updateTask({...t, subtasks: t.subtasks?.map(s => s.id === sid ? {...s, isCompleted: !s.isCompleted} : s)}) }}
-                                    isCompactMode={isCompactMode} isSpaceMode={isSpaceModeActive} zoomLevel={zoomLevel} onFocusGoal={setFocusedGoalId} currentFocusId={focusedGoalId}
-                                />
-                            </div>
-                        )}
-                        {viewMode === 'focus' && (
-                            <FocusView
-                                tasks={filteredTasks} goals={goals} onEditTask={setEditingTask} onUpdateTask={updateTask}
-                                onTogglePin={toggleTaskPin} onSubtaskToggle={(tid, sid) => { const t = tasks.find(x => x.id === tid); if(t) updateTask({...t, subtasks: t.subtasks?.map(s => s.id === sid ? {...s, isCompleted: !s.isCompleted} : s)}) }}
-                                onDeleteTask={deleteTask} isSpaceMode={isSpaceModeActive} activeTaskTimer={activeTaskTimer} onToggleTimer={toggleTimer}
-                                onReorderTasks={reorderPinnedTasks} headerHeight={isMenuLocked || isMenuHovered ? '200px' : '50px'}
-                            />
                         )}
                     </>
                 )}
             </main>
-
-            {showWelcome && (
-                <WelcomeModal 
-                    onConnect={(url) => {
-                        updateSettings({ googleAppsScriptUrl: url });
-                    }}
-                    onSkip={() => setHasSkippedSetup(true)}
+            
+            {editingTask && (
+                <EditTaskModal
+                    task={editingTask}
+                    allTasks={tasks} 
+                    onSave={handleSaveTask}
+                    onDelete={requestDeleteTask}
+                    onClose={() => setEditingTask(null)}
+                    onAddGoal={addGoal}
                 />
             )}
+            {blockingTask && (
+                 <BlockerModal
+                    task={blockingTask}
+                    onSetBlocker={handleSetBlocker}
+                    onClose={() => setBlockingTask(null)}
+                />
+            )}
+            {resolvingBlockerTask && (
+                <ResolveBlockerModal
+                    task={resolvingBlockerTask.task}
+                    onResolve={handleResolveBlocker}
+                    onClose={() => setResolvingBlockerTask(null)}
+                />
+            )}
+             {showAIModal && (
+                <AIAssistantModal
+                    onClose={() => setShowAIModal(false)}
+                    onApplyChanges={handleApplyAIChanges}
+                    tasks={tasks}
+                    apiKey={hasApiKey ? (settings.geminiApiKey || getEnvVar('VITE_GEMINI_API_KEY')) : undefined}
+                    onSaveApiKey={(key) => updateSettings({ geminiApiKey: key })}
+                />
+            )}
+            {showShortcutsModal && (
+                <ShortcutsModal onClose={() => setShowShortcutsModal(false)} />
+            )}
+            {showIntegrationsModal && (
+                <IntegrationsModal
+                    settings={settings}
+                    onUpdateSettings={updateSettings}
+                    onClose={() => setShowIntegrationsModal(false)}
+                    googleAuthState={googleAuth}
+                    onGoogleSignIn={handleGoogleSignIn}
+                    onGoogleSignOut={handleGoogleSignOut}
+                    initialTab={activeSettingsTab}
+                />
+            )}
+            {showTrashModal && (
+                <TrashModal 
+                    deletedTasks={deletedTasks}
+                    onRestore={restoreTask}
+                    onDeleteForever={permanentlyDeleteTask}
+                    onEmptyTrash={() => { emptyTrash(); setShowTrashModal(false); }}
+                    onClose={() => setShowTrashModal(false)}
+                />
+            )}
+            
+            <ConfirmModal 
+                isOpen={confirmModalState.isOpen}
+                title={confirmModalState.title}
+                message={confirmModalState.message}
+                isDestructive={confirmModalState.isDestructive}
+                onConfirm={confirmModalState.onConfirm}
+                onCancel={() => setConfirmModalState(prev => ({...prev, isOpen: false}))}
+                confirmLabel="Delete"
+            />
 
-            {editingTask && <EditTaskModal task={editingTask} allTasks={tasks} onSave={(t) => { t.id.startsWith('new-') ? addTask(t as any) : updateTask(t); setEditingTask(null); }} onDelete={deleteTask} onClose={() => setEditingTask(null)} onAddGoal={addGoal} />}
-            {blockingTask && <BlockerModal task={blockingTask} onSetBlocker={(t, r) => { updateTask({...t, blockers: [...(t.blockers||[]), {id: Date.now().toString(), reason: r, createdDate: new Date().toISOString(), resolved: false}], status: 'Blocker'}); setBlockingTask(null); }} onClose={() => setBlockingTask(null)} />}
-            {resolvingBlockerTask && <ResolveBlockerModal task={resolvingBlockerTask.task} onResolve={(t) => { updateTask({...t, blockers: t.blockers?.map(b => ({...b, resolved: true}))}); moveTask(t.id, resolvingBlockerTask.newStatus, resolvingBlockerTask.newIndex); setResolvingBlockerTask(null); }} onClose={() => setResolvingBlockerTask(null)} />}
-            {showAIModal && <AIAssistantModal onClose={() => setShowAIModal(false)} onApplyChanges={async (diff) => { diff.added.forEach(t => addTask(t as any)); diff.updated.forEach(t => { const ex = tasks.find(x => x.id === t.id); if(ex) updateTask({...ex, ...t}); }); diff.deletedIds.forEach(id => deleteTask(id)); }} tasks={filteredTasks} apiKey={settings.geminiApiKey} onSaveApiKey={(k) => updateSettings({ geminiApiKey: k })} />}
-            {showTrashModal && <TrashModal deletedTasks={deletedTasks} onRestore={restoreTask} onDeleteForever={permanentlyDeleteTask} onEmptyTrash={() => { emptyTrash(); setShowTrashModal(false); }} onClose={() => setShowTrashModal(false)} />}
-            {showShortcutsModal && <ShortcutsModal onClose={() => setShowShortcutsModal(false)} />}
-            {showIntegrationsModal && <IntegrationsModal settings={settings} onUpdateSettings={updateSettings} onClose={() => setShowIntegrationsModal(false)} googleAuthState={googleAuth} onGoogleSignIn={signIn} onGoogleSignOut={signOut} initialTab={activeSettingsTab} />}
-            <ConfirmModal isOpen={confirmModalState.isOpen} title={confirmModalState.title} message={confirmModalState.message} isDestructive={confirmModalState.isDestructive} onConfirm={confirmModalState.onConfirm} onCancel={() => setConfirmModalState(prev => ({ ...prev, isOpen: false }))} />
-            {contextMenu && (
-                <div style={{ top: contextMenu.y, left: contextMenu.x }} className="absolute z-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg py-1 w-48" onClick={(e) => e.stopPropagation()} onContextMenu={(e) => e.preventDefault()}>
+             {contextMenu && (
+                <div
+                    style={{ top: contextMenu.y, left: contextMenu.x }}
+                    className="absolute z-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg py-1 w-48"
+                    onClick={(e) => e.stopPropagation()} 
+                    onContextMenu={(e) => e.preventDefault()}
+                >
                     <div className="px-3 py-1 text-sm font-bold border-b border-gray-200 dark:border-gray-700 mb-1 truncate">{contextMenu.task.title}</div>
-                    <button onClick={() => { setEditingTask(contextMenu.task); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"><i className="fas fa-edit text-blue-500 w-4"></i> Edit Task</button>
-                    <button onClick={() => { toggleTaskPin(contextMenu.task.id); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"><i className={`fas fa-thumbtack w-4 ${contextMenu.task.isPinned ? 'text-indigo-500' : 'text-gray-400'}`}></i> {contextMenu.task.isPinned ? 'Unpin' : 'Pin'}</button>
-                    <button onClick={() => { deleteTask(contextMenu.task.id); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center gap-2 mb-1"><i className="fas fa-trash-alt w-4"></i> Trash</button>
+                    
+                    <button
+                        onClick={() => handleEditFromContextMenu(contextMenu.task)}
+                        className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                    >
+                        <i className="fas fa-edit text-blue-500 w-4"></i> Edit Task
+                    </button>
+                    
+                    <button
+                        onClick={() => {
+                            handleTogglePin(contextMenu.task.id);
+                            setContextMenu(null);
+                        }}
+                        className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                    >
+                        <i className={`fas fa-thumbtack w-4 ${contextMenu.task.isPinned ? 'text-indigo-500' : 'text-gray-400'}`}></i> 
+                        {contextMenu.task.isPinned ? 'Unpin' : 'Pin'}
+                    </button>
+
+                    <button
+                        onClick={() => handleDeleteFromContextMenu(contextMenu.task)}
+                        className="w-full text-left px-3 py-1.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center gap-2 mb-1"
+                    >
+                        <i className="fas fa-trash-alt w-4"></i> Delete
+                    </button>
+
                     <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
-                    {COLUMN_STATUSES.map(s => <button key={s} onClick={() => { moveTask(contextMenu.task.id, s, 0); setContextMenu(null); }} className="block w-full text-left px-3 py-1 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50" disabled={contextMenu.task.status === s}>{s}</button>)}
+                    <p className="px-3 py-1 text-xs text-gray-500 dark:text-gray-400 font-semibold uppercase">Move to:</p>
+                    {COLUMN_STATUSES.map(status => (
+                        <button
+                            key={status}
+                            onClick={() => handleChangeStatusFromContextMenu(contextMenu.task, status)}
+                            className="block w-full text-left px-3 py-1 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+                            disabled={contextMenu.task.status === status}
+                        >
+                            {status}
+                        </button>
+                    ))}
                 </div>
             )}
         </div>
     );
 };
 
-const App: React.FC = () => {
-    return (
-        <SettingsProvider>
-            <AuthProvider>
-                <TaskProvider>
-                    <AppContent />
-                </TaskProvider>
-            </AuthProvider>
-        </SettingsProvider>
-    );
-};
-
 export default App;
-        

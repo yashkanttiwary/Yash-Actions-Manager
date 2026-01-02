@@ -180,9 +180,6 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
     const [accurateNow, setAccurateNow] = useState(new Date());
     const [dependencyLines, setDependencyLines] = useState<LineCoordinate[]>([]);
     
-    // Virtualization State
-    const [scrollState, setScrollState] = useState({ left: 0, width: 1000 });
-    
     // Theme state
     const [isDarkTheme, setIsDarkTheme] = useState(false);
     const [activeTool, setActiveTool] = useState<ToolType>('select');
@@ -322,16 +319,6 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
             msPerPixel: msPerPx
         };
     }, [viewMode, referenceDate, zoomIndex, accurateNow, timezone]);
-
-    // Handle Scroll for Virtualization
-    const handleScroll = () => {
-        if (scrollContainerRef.current) {
-            setScrollState({
-                left: scrollContainerRef.current.scrollLeft,
-                width: scrollContainerRef.current.clientWidth
-            });
-        }
-    };
 
     // Handle Skimmer Movement
     const handleContainerMouseMove = useCallback((e: React.MouseEvent) => {
@@ -658,28 +645,9 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
         });
 
         return { packedTasks: packed, totalRows: Math.max(5, lanes.length), gapSegments: calculatedGaps };
-    }, [tasks, viewStartDate, viewEndDate, optimisticTaskOverride, msPerPixel, dragState, accurateNow]);
+    }, [tasks, viewStartDate, viewEndDate, optimisticTaskOverride, msPerPixel, dragState, accurateNow]); // Added accurateNow dependency for ripple
 
-    // MED-002: Virtualization Filter
-    // Filter visible tasks based on scroll position + buffer
-    const visiblePackedTasks = useMemo(() => {
-        const BUFFER_PX = 800; // Render 800px outside view
-        const viewLeft = scrollState.left - BUFFER_PX;
-        const viewRight = scrollState.left + scrollState.width + BUFFER_PX;
-
-        return packedTasks.filter(task => {
-            const viewStartMs = viewStartDate.getTime();
-            const msFromStart = task.startMs - viewStartMs;
-            const durationMs = task.endMs - task.startMs;
-            const left = msFromStart / msPerPixel;
-            const width = durationMs / msPerPixel;
-            const right = left + width;
-
-            return right >= viewLeft && left <= viewRight;
-        });
-    }, [packedTasks, scrollState, msPerPixel, viewStartDate]);
-
-
+    // ... (keep getBarMetrics and dependency effects) ...
     const getBarMetrics = (taskStartMs: number, taskEndMs: number) => {
         const viewStartMs = viewStartDate.getTime();
         const msFromStart = taskStartMs - viewStartMs;
@@ -698,8 +666,7 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
         const taskMap = new Map<string, { startMs: number, endMs: number, rowIndex: number }>();
         packedTasks.forEach(t => taskMap.set(t.id, { startMs: t.startMs, endMs: t.endMs, rowIndex: t.rowIndex }));
 
-        // Use ONLY visible tasks to calculate lines to improve perf
-        visiblePackedTasks.forEach((task) => {
+        packedTasks.forEach((task) => {
             if (task.dependencies && task.dependencies.length > 0) {
                 task.dependencies.forEach(depId => {
                     const depInfo = taskMap.get(depId);
@@ -724,8 +691,9 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
             }
         });
         setDependencyLines(lines);
-    }, [packedTasks, visiblePackedTasks, viewStartDate, msPerPixel]);
+    }, [packedTasks, viewStartDate, msPerPixel]);
 
+    // ... (keep navigation and minimap handlers) ...
     const handleNavigate = (direction: -1 | 1) => {
         const newDate = new Date(referenceDate);
         if (viewMode === 'Day') newDate.setDate(newDate.getDate() + direction);
@@ -750,11 +718,7 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
         if (isVisible && scrollContainerRef.current && viewMode === 'Day') {
             const hour8ms = 8 * 60 * 60 * 1000;
             const pixels = hour8ms / msPerPixel;
-            scrollContainerRef.current.scrollLeft = pixels;
-            setScrollState({
-                left: pixels,
-                width: scrollContainerRef.current.clientWidth
-            });
+            scrollContainerRef.current.scrollLeft = pixels; 
         }
     }, [isVisible, viewMode, msPerPixel]); 
 
@@ -844,7 +808,6 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
             {/* Main Timeline Area */}
             <div 
                 ref={scrollContainerRef}
-                onScroll={handleScroll}
                 onMouseMove={handleContainerMouseMove}
                 onMouseLeave={handleContainerMouseLeave}
                 className={`overflow-x-auto relative custom-scrollbar ${styles.scrollArea}`}
@@ -965,9 +928,9 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
                         <DependencyLines lines={dependencyLines} />
                     </div>
 
-                    {/* Tasks Layer - VIRTUALIZED */}
+                    {/* Tasks Layer */}
                     <div className="relative w-full h-full z-20">
-                        {visiblePackedTasks.map((task) => {
+                        {packedTasks.map((task) => {
                             const metrics = getBarMetrics(task.startMs, task.endMs);
                             const statusStyle = STATUS_STYLES[task.status] || STATUS_STYLES['To Do'];
                             const priorityConfig = PRIORITY_COLORS[task.priority] || PRIORITY_COLORS['Medium'];
@@ -1018,7 +981,7 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
                 </div>
             </div>
 
-            {/* Mini-Map */}
+            {/* Mini-Map ... (Same as before) */}
             <div className={`h-[60px] border-t ${isDarkTheme ? 'border-gray-700 bg-gray-900' : 'border-gray-300 bg-gray-100'} relative overflow-hidden`} onClick={handleMiniMapDrag}>
                 {packedTasks.map((task) => {
                     if ((task as any).isGhost) return null;

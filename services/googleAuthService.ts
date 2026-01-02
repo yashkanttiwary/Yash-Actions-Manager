@@ -33,19 +33,8 @@ const loadScript = (src: string): Promise<void> => {
     });
 };
 
-// Force reset of the initialized state to allow re-entry of keys
-export const resetGoogleClient = () => {
-    gapiInitialized = false;
-    gisInitialized = false;
-    currentInitPromise = null;
-    // We don't unload scripts, but we reset flags so init tries again
-};
 
-export const initGoogleClient = async (customApiKey?: string, customClientId?: string, forceReset: boolean = false) => {
-    if (forceReset) {
-        resetGoogleClient();
-    }
-
+export const initGoogleClient = async (customApiKey?: string, customClientId?: string) => {
     // If a request is already in progress, return that promise to prevent race conditions
     if (currentInitPromise) {
         return currentInitPromise;
@@ -62,8 +51,9 @@ export const initGoogleClient = async (customApiKey?: string, customClientId?: s
             return { gapiLoaded: false, gisLoaded: false, disabled: true };
         }
 
-        // If already initialized with the same keys, don't re-initialize unless forced
-        if (gapiInitialized && gisInitialized && !forceReset) {
+        // Fix MED-002: If already initialized with the same keys, don't re-initialize.
+        // Note: The Google Client library doesn't easily support switching API keys without reload.
+        if (gapiInitialized && gisInitialized) {
             return { gapiLoaded: true, gisLoaded: true, disabled: false };
         }
 
@@ -76,8 +66,7 @@ export const initGoogleClient = async (customApiKey?: string, customClientId?: s
             }
 
             // Initialize gapi client
-            // Note: gapi.load might have run already, but client.init can be called again with new keys
-            if (!gapiInitialized || forceReset) {
+            if (!gapiInitialized) {
                 await new Promise<void>((resolve, reject) => {
                     gapi.load('client', {
                         callback: resolve,
@@ -98,7 +87,7 @@ export const initGoogleClient = async (customApiKey?: string, customClientId?: s
             }
 
             // Initialize gis client
-            if (!gisInitialized || forceReset) {
+            if (!gisInitialized) {
                 tokenClient = google.accounts.oauth2.initTokenClient({
                     client_id: CLIENT_ID!,
                     scope: SCOPES,
@@ -110,9 +99,7 @@ export const initGoogleClient = async (customApiKey?: string, customClientId?: s
             return { gapiLoaded: gapiInitialized, gisLoaded: gisInitialized, disabled: false };
         } catch(error) {
             console.error("Error during Google Client initialization:", error);
-            // Allow retry
-            resetGoogleClient(); 
-            throw new Error("Failed to initialize Google services. Keys may be invalid.");
+            throw new Error("Failed to initialize Google services.");
         } finally {
             currentInitPromise = null;
         }
