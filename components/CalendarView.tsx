@@ -193,15 +193,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onUpdateTask,
     const [isDroppingOnSidebar, setIsDroppingOnSidebar] = useState(false);
     const [currentTime, setCurrentTime] = useState(new Date());
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; task: Task } | null>(null);
-    const [isSidebarOpen, setIsSidebarOpen] = useState(true); // Added for Mobile toggle
 
     useEffect(() => {
-        // Auto-switch to Day view on mobile initial load
-        if (window.innerWidth < 768) {
-            setView('day');
-            setIsSidebarOpen(false); // Default collapsed on mobile
-        }
-        
         const timerId = setInterval(() => setCurrentTime(new Date()), 60000); // Update every minute
         const handleClickOutside = () => setContextMenu(null);
         window.addEventListener('click', handleClickOutside);
@@ -401,7 +394,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onUpdateTask,
             {monthDays.map((day, index) => (
                 <div 
                     key={day ? day.toISOString() : `blank-${index}`} 
-                    className="border-b border-r border-gray-300 dark:border-gray-700 p-1 overflow-y-auto min-h-[80px] md:min-h-[100px]"
+                    className="border-b border-r border-gray-300 dark:border-gray-700 p-1 overflow-y-auto min-h-[100px]"
                     onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
                     onDrop={day ? (e) => handleDropOnCalendar(e, day, 9) : undefined}
                 >
@@ -423,7 +416,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onUpdateTask,
     );
 
     return (
-        <div className="flex flex-col md:flex-row h-full bg-white/30 dark:bg-gray-800/30 rounded-lg shadow-inner overflow-hidden">
+        <div className="flex h-full bg-white/30 dark:bg-gray-800/30 rounded-lg shadow-inner overflow-hidden">
             {contextMenu && (
                 <div
                     style={{ top: contextMenu.y, left: contextMenu.x }}
@@ -443,61 +436,44 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onUpdateTask,
                     ))}
                 </div>
             )}
-            
-            {/* Sidebar: Stack on mobile (collapsible), Side on desktop */}
             <div 
-                className={`
-                    w-full md:w-1/3 md:max-w-xs xl:w-1/4 border-b md:border-b-0 md:border-r border-gray-300 dark:border-gray-700 flex flex-col transition-all duration-300
-                    ${isDroppingOnSidebar ? 'bg-indigo-500/20' : ''}
-                    ${isSidebarOpen ? 'h-64 md:h-auto' : 'h-12 md:h-auto'} 
-                `}
+                className={`w-1/3 max-w-xs xl:w-1/4 border-r border-gray-300 dark:border-gray-700 flex flex-col transition-colors ${isDroppingOnSidebar ? 'bg-indigo-500/20' : ''}`}
                 onDragOver={(e) => { e.preventDefault(); setIsDroppingOnSidebar(true); }}
                 onDragLeave={() => setIsDroppingOnSidebar(false)}
                 onDrop={handleUnscheduleDrop}
             >
-                <div 
-                    className="p-4 border-b border-gray-300 dark:border-gray-700 flex-shrink-0 flex items-center justify-between cursor-pointer md:cursor-default"
-                    onClick={() => window.innerWidth < 768 && setIsSidebarOpen(!isSidebarOpen)}
-                >
-                    <h3 className="text-lg font-bold flex items-center gap-2">
-                        Unscheduled ({unscheduledTasks.length})
-                        <i className={`fas fa-chevron-down text-xs transition-transform md:hidden ${isSidebarOpen ? 'rotate-180' : ''}`}></i>
-                    </h3>
-                    {isDroppingOnSidebar && <p className="text-sm font-semibold text-indigo-500 text-center mt-1 hidden md:block">Drop here</p>}
+                <div className="p-4 border-b border-gray-300 dark:border-gray-700 flex-shrink-0">
+                    <h3 className="text-lg font-bold">Unscheduled ({unscheduledTasks.length})</h3>
+                    {isDroppingOnSidebar && <p className="text-sm font-semibold text-indigo-500 text-center mt-1">Drop to unschedule task</p>}
                 </div>
-                
-                {/* Content Container - Hidden when collapsed on mobile */}
-                <div className={`flex-1 flex flex-col min-h-0 ${!isSidebarOpen ? 'hidden md:flex' : 'flex'}`}>
-                    <div className="p-2 border-b border-gray-300 dark:border-gray-700">
-                        <input 
-                            type="text" 
-                            placeholder="Search tasks..." 
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full p-2 bg-gray-100 dark:bg-gray-700 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" 
-                        />
-                    </div>
-                    <div className="p-2 overflow-y-auto">
-                        {unscheduledTasks.length > 0 ? (
-                            unscheduledTasks.map(task => <UnscheduledTask key={task.id} task={task} onEditTask={onEditTask} />)
-                        ) : (
-                             <div className="text-center text-gray-500 dark:text-gray-400 mt-8 p-4">
-                                <i className="fas fa-check-circle text-3xl mb-2 text-green-500"></i>
-                                <p>No unscheduled tasks found!</p>
-                            </div>
-                        )}
-                    </div>
+                <div className="p-2 border-b border-gray-300 dark:border-gray-700">
+                    <input 
+                        type="text" 
+                        placeholder="Search tasks..." 
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full p-2 bg-gray-100 dark:bg-gray-700 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" 
+                    />
+                </div>
+                <div className="p-2 overflow-y-auto">
+                    {unscheduledTasks.length > 0 ? (
+                        unscheduledTasks.map(task => <UnscheduledTask key={task.id} task={task} onEditTask={onEditTask} />)
+                    ) : (
+                         <div className="text-center text-gray-500 dark:text-gray-400 mt-8 p-4">
+                            <i className="fas fa-check-circle text-3xl mb-2 text-green-500"></i>
+                            <p>No unscheduled tasks found!</p>
+                        </div>
+                    )}
                 </div>
             </div>
 
-            {/* Calendar Grid Area */}
-            <div className="w-full md:w-2/3 xl:w-3/4 flex flex-col flex-grow h-full min-h-0">
-                <div className="p-2 border-b border-gray-300 dark:border-gray-700 flex-shrink-0 flex flex-wrap items-center justify-between gap-2">
+            <div className="w-2/3 xl:w-3/4 flex flex-col">
+                <div className="p-2 border-b border-gray-300 dark:border-gray-700 flex-shrink-0 flex items-center justify-between">
                      <div className="flex items-center gap-2">
                         <button onClick={() => setCurrentDate(new Date())} className="px-3 py-1 text-sm rounded-md border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700">Today</button>
                         <button onClick={() => changeDate(-1)} className="px-2 py-1 text-sm rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">&lt;</button>
                         <button onClick={() => changeDate(1)} className="px-2 py-1 text-sm rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">&gt;</button>
-                        <h2 className="text-sm md:text-lg font-bold ml-2 md:ml-4">{getHeaderText()}</h2>
+                        <h2 className="text-lg font-bold ml-4">{getHeaderText()}</h2>
                     </div>
                     <div className="bg-gray-200 dark:bg-gray-700 p-0.5 rounded-lg flex items-center">
                         <button onClick={() => setView('day')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${view === 'day' ? 'bg-white dark:bg-gray-800 shadow' : 'text-gray-600 dark:text-gray-400'}`}>Day</button>
@@ -530,7 +506,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onUpdateTask,
                         <div className="flex flex-col flex-grow overflow-auto">
                              <div className="grid grid-cols-7 sticky top-0 bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm z-10 border-b border-gray-300 dark:border-gray-700">
                                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
-                                    <div key={day} className="text-center font-bold text-xs md:text-sm p-2">{day}</div>
+                                    <div key={day} className="text-center font-bold text-sm p-2">{day}</div>
                                ))}
                              </div>
                              {renderMonthView()}

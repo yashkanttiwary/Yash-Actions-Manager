@@ -1,3 +1,4 @@
+
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Task, Goal, Status } from '../types';
 import { TaskCard } from './TaskCard';
@@ -8,7 +9,6 @@ interface GoalColumnProps {
     allTasks: Task[]; // For context
     onTaskMove: (taskId: string, newGoalId: string) => void;
     onEditTask: (task: Task) => void;
-    onUpdateTask: (task: Task) => void; // Added prop
     onDeleteTask: (taskId: string) => void;
     onEditGoal: (goal: Goal) => void;
     onDeleteGoal: (goalId: string) => void;
@@ -48,7 +48,7 @@ const getStatusColor = (status: Status): string => {
 };
 
 export const GoalColumn: React.FC<GoalColumnProps> = ({ 
-    goal, tasks, allTasks, onTaskMove, onEditTask, onUpdateTask, onDeleteTask, onEditGoal, onDeleteGoal,
+    goal, tasks, allTasks, onTaskMove, onEditTask, onDeleteTask, onEditGoal, onDeleteGoal,
     activeTaskTimer, onToggleTimer, onSubtaskToggle, isCompactMode, isSpaceMode, onFocusGoal, isFocused
 }) => {
     const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -258,7 +258,6 @@ export const GoalColumn: React.FC<GoalColumnProps> = ({
                                 task={task}
                                 allTasks={allTasks}
                                 onEditTask={onEditTask}
-                                onUpdateTask={onUpdateTask}
                                 activeTaskTimer={activeTaskTimer}
                                 onToggleTimer={onToggleTimer}
                                 onOpenContextMenu={(e) => { e.preventDefault(); onEditTask(task); }} // Simple edit on right click for now

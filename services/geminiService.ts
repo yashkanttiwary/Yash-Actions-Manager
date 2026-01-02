@@ -16,61 +16,55 @@ const getApiKey = (userApiKey?: string): string => {
 };
 
 // Robust JSON Parsing Helper
-// Fixes "AI not giving output answer" by separating JSON data from conversational text
-const extractJsonAndText = (text: string) => {
-    if (!text) return { json: null, remainder: "" };
-
-    let json: any = null;
-    let cleanText = text;
-
-    // 1. Try Code Block extraction first (Most reliable)
-    const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    if (codeBlockMatch) {
-        try {
-            json = JSON.parse(codeBlockMatch[1]);
-            // Remove code block from text to get "remainder" (conversational part)
-            cleanText = text.replace(codeBlockMatch[0], '').trim();
-        } catch (e) {
-            // Failed to parse code block, continue
-        }
+// MED-002 FIX: Better extraction logic
+const safeParseJSON = (text: string) => {
+    if (!text) throw new Error("Empty response from AI");
+    
+    // 1. Try direct parse (Best Case)
+    try {
+        return JSON.parse(text);
+    } catch (e) {
+        // Continue to fallback strategies
     }
 
-    // 2. Try raw Braces search if code block failed
-    if (!json) {
-        const firstOpenBrace = text.indexOf('{');
-        const lastCloseBrace = text.lastIndexOf('}');
-        
-        if (firstOpenBrace !== -1 && lastCloseBrace !== -1 && lastCloseBrace > firstOpenBrace) {
-            const candidate = text.substring(firstOpenBrace, lastCloseBrace + 1);
-            try {
-                json = JSON.parse(candidate);
-                // Remove JSON from text to get remainder
-                const pre = text.substring(0, firstOpenBrace);
-                const post = text.substring(lastCloseBrace + 1);
-                cleanText = (pre + "\n" + post).trim();
-            } catch (e) {
-                console.warn("Failed to parse extracted JSON candidate");
-            }
+    // 2. Try extracting from markdown code block (Common AI pattern)
+    const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (match && match[1]) {
+        try {
+            return JSON.parse(match[1]);
+        } catch (e2) {
+            // Fallback
         }
     }
     
-    // 3. Fallback: Try parsing the whole text
-    if (!json) {
-        try {
-            json = JSON.parse(text);
-            cleanText = ""; // Entire text was JSON
-        } catch (e) {
-            // Not JSON
-        }
+    // 3. Robust Search for JSON object or array
+    // Find the first '{' or '['
+    const firstOpenBrace = text.indexOf('{');
+    const firstOpenBracket = text.indexOf('[');
+    
+    let start = -1;
+    let end = -1;
+    
+    // Determine if we are looking for object or array
+    if (firstOpenBrace !== -1 && (firstOpenBracket === -1 || firstOpenBrace < firstOpenBracket)) {
+        start = firstOpenBrace;
+        end = text.lastIndexOf('}');
+    } else if (firstOpenBracket !== -1) {
+        start = firstOpenBracket;
+        end = text.lastIndexOf(']');
     }
 
-    return { json, remainder: cleanText };
-};
-
-const safeParseJSON = (text: string) => {
-    const { json } = extractJsonAndText(text);
-    if (!json) throw new Error("Failed to parse AI response. The model output was not valid JSON.");
-    return json;
+    if (start !== -1 && end !== -1 && end > start) {
+         const jsonCandidate = text.substring(start, end + 1);
+         try {
+            return JSON.parse(jsonCandidate);
+        } catch (e3) {
+            console.error("Failed to parse extracted JSON candidate:", jsonCandidate);
+        }
+    }
+    
+    console.error("Critical JSON Parsing Failure. Raw Text:", text);
+    throw new Error("Failed to parse AI response. The model output was not valid JSON.");
 };
 
 // --- SCHEMA DEFINITIONS ---
@@ -116,8 +110,6 @@ const manageResponseSchema = {
                     priority: { type: Type.STRING },
                     dueDate: { type: Type.STRING },
                     goalId: { type: Type.STRING },
-                    isBecoming: { type: Type.BOOLEAN },
-                    becomingWarning: { type: Type.STRING }
                 },
                 required: ['id']
             }
@@ -129,7 +121,7 @@ const manageResponseSchema = {
         },
         summary: { 
             type: Type.STRING, 
-            description: "A rich markdown response. Use Bold for emphasis, Headers for structure, and bullet points." 
+            description: "A conversational response to the user. If performing actions, explain them. If asked a question or for a summary, provide the answer here." 
         }
     }
 };
@@ -182,39 +174,32 @@ const psychologySchema = {
     required: ['isBecoming', 'warning']
 };
 
-const MANAGE_SYSTEM_INSTRUCTION = `You are an elite Executive Productivity Architect and Database Manager.
-Your goal is to provide high-leverage, strategic, and psychologically astute assistance.
-
-**Role 1: The Strategist (Conversational Output)**
-- Use the 'summary' field for all communication.
-- **FORMATTING RULES**:
-  - Use **Bold** for key insights, metrics, task titles, and totals.
-  - Use \`### Headers\` to structure your analysis (e.g., ### 🛑 Bottlenecks, ### 🚀 Next Steps).
-  - Use bullet points for readability.
-  - Use > Blockquotes for philosophical or critical warnings.
-  - Be concise but high-density. Avoid fluff.
-  - When analyzing time, calculate totals. (e.g., "Total Estimate: **14.5 hours**").
-
-**Role 2: The Operator (Database Action)**
-- Modify the task database ONLY when explicitly requested or when a specific framework (like Triage) requires immediate changes.
-- **Add**: Populate 'added' array.
-- **Update**: Populate 'updated' array with exact 'id' and changed fields.
-- **Delete**: Populate 'deletedIds' array (ONLY if explicitly requested).
+const MANAGE_SYSTEM_INSTRUCTION = `You are an intelligent Task Assistant and Database Manager.
+You have two roles:
+1. **Conversational Assistant**: Answer questions about the user's tasks, summarize content, or provide advice. Use the 'summary' field for this.
+2. **Action Executor**: Modifying the task database based on user requests (Add, Update, Delete).
 
 **Context**:
 - Current Date: ${new Date().toISOString()}
+- You have access to the current list of tasks.
 
-**Advanced Frameworks (Triggered by user intent)**:
-1. **Strategic Audit**: Calculate capacity vs load. Identify "Fake Work" (low value, high effort). Group by Goal/Context.
-2. **Triage Mode**: Ruthlessly cut. If it's not Critical, ignore it. Output a specific sequence of actions.
-3. **Psychological Mirror (Krishnamurti)**:
-   - Distinguish **Functional Action** (Chronological necessity) vs **Becoming** (Psychological ambition/ego).
-   - If a task is "Becoming" (e.g., "Be a better leader"), flag it in 'updated' with \`isBecoming: true\` and a \`becomingWarning\`.
-   - In 'summary', explain the trap of psychological time.
+**RULES:**
+1. **Response Format**: ALWAYS return a JSON object.
+2. **Chat**: If the user asks "Summarize my tasks" or "What is due today?", put the answer in the 'summary' field. Do NOT create/update tasks unless asked.
+3. **Actions**:
+   - **Add**: Populate 'added' array.
+   - **Update**: Populate 'updated' array with exact 'id' and changed fields.
+   - **Delete**: Populate 'deletedIds' array (ONLY if explicitly requested).
+   - **Confirm**: When performing actions, use 'summary' to briefly describe what you are doing (e.g., "I've drafted a new task for...").
+4. **Data Safety**: Never delete unless explicitly told. Never return the full list in 'added' (only new ones).
 
-**Output Rule**: ALWAYS return strict JSON matching the schema.`;
+**Task Analysis**:
+- If the user says "Summarize this task" and refers to a specific one by context or name, find it in the provided list and summarize its details in 'summary'.
+- Use the provided task list to answer queries.
 
-const SUMMARY_SYSTEM_INSTRUCTION = `Summarize the board state in markdown. Be concise, motivating, and use bolding for key tasks.`;
+Output pure JSON matching the schema.`;
+
+const SUMMARY_SYSTEM_INSTRUCTION = `Summarize the board state in markdown. Be concise and motivating.`;
 
 const BREAKDOWN_SYSTEM_INSTRUCTION = `Break down a task title into 3-5 subtasks. Return JSON array of objects with 'title'.`;
 
@@ -255,7 +240,7 @@ The user is speaking a task. The transcription might be weak, contain typos, or 
 
 // --- GOOGLE IMPLEMENTATION ---
 
-const callGoogleAI = async (apiKey: string, model: string, systemPrompt: string, userPrompt: string, schema?: any, isJsonMode: boolean = false, allowFallback: boolean = true): Promise<string> => {
+const callGoogleAI = async (apiKey: string, model: string, systemPrompt: string, userPrompt: string, schema?: any, isJsonMode: boolean = false): Promise<string> => {
     const ai = new GoogleGenAI({ apiKey });
     
     const config: any = {
@@ -267,35 +252,13 @@ const callGoogleAI = async (apiKey: string, model: string, systemPrompt: string,
         if (schema) config.responseSchema = schema;
     }
 
-    try {
-        const response = await ai.models.generateContent({
-            model: model,
-            contents: userPrompt,
-            config: config
-        });
-        
-        return response.text || "";
-    } catch (error: any) {
-        // DETECT QUOTA ERRORS (429) OR OVERLOAD (503)
-        // Note: Google's library might wrap the error, so we check status, code, and message.
-        const isQuotaError = error.status === 429 || 
-                             error.code === 429 || 
-                             (error.message && (error.message.includes('429') || error.message.includes('quota') || error.message.includes('RESOURCE_EXHAUSTED')));
-        
-        // AUTOMATIC FALLBACK LOGIC
-        // If we hit a limit on the "Smart" model (Pro), silently fallback to the "Fast" model (Flash).
-        // Flash has significantly higher rate limits.
-        if (allowFallback && isQuotaError && model !== AI_MODELS.FAST) {
-            console.warn(`[AI Service] Model ${model} rate limited. Automatically falling back to ${AI_MODELS.FAST}...`);
-            return callGoogleAI(apiKey, AI_MODELS.FAST, systemPrompt, userPrompt, schema, isJsonMode, false);
-        }
-
-        console.error("AI Service Error:", error);
-        if (error.message && error.message.includes("404")) {
-             throw new Error("Model not found. Please check your API key or use a valid model.");
-        }
-        throw new Error(error.message || "Failed to communicate with AI.");
-    }
+    const response = await ai.models.generateContent({
+        model: model,
+        contents: userPrompt,
+        config: config
+    });
+    
+    return response.text || "";
 };
 
 // --- PUBLIC METHODS ---
@@ -312,7 +275,6 @@ const executeAIRequest = async (userApiKey: string | undefined, type: 'manage' |
             resultText = await callGoogleAI(apiKey, AI_MODELS.SMART, MANAGE_SYSTEM_INSTRUCTION, prompt, manageResponseSchema, true);
         } else if (type === 'summary') {
             const prompt = `Here is the current list of tasks:\n${JSON.stringify(payload.currentTasks, null, 2)}`;
-            // Summary uses FAST by default, so it's less likely to hit limits, but fallback protects it anyway
             resultText = await callGoogleAI(apiKey, AI_MODELS.FAST, SUMMARY_SYSTEM_INSTRUCTION, prompt);
         } else if (type === 'breakdown') {
             const prompt = `Task to break down: "${payload.taskTitle}"`;
@@ -333,7 +295,11 @@ const executeAIRequest = async (userApiKey: string | undefined, type: 'manage' |
         return resultText ? resultText.trim() : "";
 
     } catch (error: any) {
-        throw error;
+        console.error("AI Service Error:", error);
+        if (error.message && error.message.includes("404")) {
+             throw new Error("Model not found. Please check your API key or use a valid model.");
+        }
+        throw new Error(error.message || "Failed to communicate with AI.");
     }
 };
 
@@ -346,44 +312,11 @@ export const manageTasksWithAI = async (command: string, currentTasks: Task[], u
         status: t.status, 
         priority: t.priority,
         dueDate: t.dueDate, // Added Due Date
-        tags: t.tags,
-        timeEstimate: t.timeEstimate
+        tags: t.tags
     }));
     
-    const responseText = await executeAIRequest(userApiKey, 'manage', { command, currentTasks: enrichedTasks });
-    
-    // Robust Extraction: Get JSON AND potentially lost conversational text
-    const { json: rawDiff, remainder } = extractJsonAndText(responseText);
-
-    // If NO JSON at all, assume the entire response is a summary/chat message
-    if (!rawDiff) {
-        return {
-            summary: responseText,
-            added: [],
-            updated: [],
-            deletedIds: []
-        };
-    }
-
-    // SANITIZATION FIX:
-    // AI sometimes hallucinating empty objects in 'added' or 'updated' arrays.
-    // We strictly filter out any task actions that don't have essential fields.
-    // Also, if JSON 'summary' is empty, we fallback to the 'remainder' text found outside the JSON block.
-    
-    const cleanDiff: TaskDiff = {
-        summary: (rawDiff.summary && rawDiff.summary.trim()) ? rawDiff.summary : remainder,
-        added: Array.isArray(rawDiff.added) 
-            ? rawDiff.added.filter(t => t && typeof t === 'object' && t.title && t.title.trim() !== '') 
-            : [],
-        updated: Array.isArray(rawDiff.updated) 
-            ? rawDiff.updated.filter(t => t && typeof t === 'object' && t.id && t.id.trim() !== '') 
-            : [],
-        deletedIds: Array.isArray(rawDiff.deletedIds) 
-            ? rawDiff.deletedIds.filter(id => id && typeof id === 'string' && id.trim() !== '') 
-            : []
-    };
-
-    return cleanDiff;
+    const jsonText = await executeAIRequest(userApiKey, 'manage', { command, currentTasks: enrichedTasks });
+    return safeParseJSON(jsonText) as TaskDiff;
 };
 
 export const generateTaskSummary = async (currentTasks: Task[], userApiKey?: string): Promise<string> => {
@@ -392,8 +325,8 @@ export const generateTaskSummary = async (currentTasks: Task[], userApiKey?: str
 
 export const breakDownTask = async (taskTitle: string, userApiKey?: string): Promise<Subtask[]> => {
     const jsonText = await executeAIRequest(userApiKey, 'breakdown', { taskTitle });
-    const { json: steps } = extractJsonAndText(jsonText);
-    const list = Array.isArray(steps) ? steps : (steps?.steps || []);
+    const steps = safeParseJSON(jsonText);
+    const list = Array.isArray(steps) ? steps : (steps.steps || []);
     return list.map((step: any) => ({
         id: `sub-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
         title: step.title,

@@ -50,7 +50,6 @@ interface HeaderProps {
     syncStatus: 'idle' | 'syncing' | 'error' | 'success'; 
     onManualPull: () => Promise<void>;
     onManualPush: () => Promise<void>;
-    onForcePull?: () => Promise<void>; // New Prop for Hard Reset
     isCompactMode: boolean;
     onToggleCompactMode: () => void;
     isFitToScreen: boolean; 
@@ -79,14 +78,13 @@ export const Header: React.FC<HeaderProps> = ({
     gamification, settings, onUpdateSettings, currentViewMode, onViewModeChange, 
     googleAuthState, onGoogleSignIn, onGoogleSignOut, onOpenShortcutsModal, 
     focusMode, setFocusMode, onOpenSettings, connectionHealth, syncStatus,
-    onManualPull, onManualPush, onForcePull, isCompactMode, onToggleCompactMode, isFitToScreen, onToggleFitToScreen,
+    onManualPull, onManualPush, isCompactMode, onToggleCompactMode, isFitToScreen, onToggleFitToScreen,
     zoomLevel, setZoomLevel, audioControls, isTimelineVisible, onToggleTimeline,
     isMenuLocked, setIsMenuLocked, isRocketFlying, onRocketLaunch,
     isMenuHovered, onMenuHoverChange, activeFocusGoal, onFocusGoal, onExitFocus
 }) => {
     
     const [currentTime, setCurrentTime] = useState(new Date());
-    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); // Mobile 'More' Drawer
 
     useEffect(() => {
         initializeTimeSync();
@@ -221,13 +219,11 @@ export const Header: React.FC<HeaderProps> = ({
         ? getLegibleTextColor(activeFocusGoal.color, isSpaceVisualsActive || isDarkMode) 
         : undefined;
 
-    // --- DESKTOP UI (Original) ---
-    const desktopHeader = (
+    return (
         <header 
             className={`
                 fixed top-0 left-0 right-0 z-50 
                 transition-all duration-700 ease-in-out
-                hidden md:block
                 ${headerBgClass}
                 ${isMenuOpen ? 'translate-y-0 opacity-100' : '-translate-y-[calc(100%-48px)] opacity-95'}
             `}
@@ -244,8 +240,8 @@ export const Header: React.FC<HeaderProps> = ({
                 title={isMenuLocked ? "Unlock Menu" : "Lock Menu"}
             >
                 
-                {/* Left: Clock & Context Pill */}
-                <div className="flex items-center gap-4 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                {/* Left: Clock & Context Pill (Rocket Removed) */}
+                <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
                     <div className="flex flex-col leading-tight pl-2">
                         <div className={`text-[10px] font-bold ${textBaseClass} uppercase tracking-wider transition-colors duration-500`}>
                             {headerDateStr}
@@ -274,10 +270,10 @@ export const Header: React.FC<HeaderProps> = ({
                                 style={{ color: activeFocusGoal ? (pillTextColor || activeFocusGoal.color) : undefined }}
                             ></i>
                             <span 
-                                className={`text-xs font-bold truncate max-w-[120px] ${isSpaceVisualsActive ? 'text-white' : ''}`}
+                                className={`text-xs font-bold truncate max-w-[120px] hidden sm:block ${isSpaceVisualsActive ? 'text-white' : ''}`}
                                 style={{ color: pillTextColor }}
                             >
-                                {activeFocusGoal ? activeFocusGoal.title : 'Context'}
+                                {activeFocusGoal ? activeFocusGoal.title : 'All Contexts'}
                             </span>
                             <i className={`fas fa-chevron-down text-[10px] ml-1 transition-transform duration-200 ${isFocusMenuOpen ? 'rotate-180' : ''} ${isSpaceVisualsActive ? 'text-white/70' : 'text-gray-500'}`} style={{ color: pillTextColor }}></i>
                         </button>
@@ -294,7 +290,7 @@ export const Header: React.FC<HeaderProps> = ({
 
                         {/* Dropdown Menu */}
                         {isFocusMenuOpen && (
-                            <div className={`absolute top-full left-0 mt-2 w-60 rounded-xl shadow-2xl border backdrop-blur-xl z-[100] overflow-hidden ${
+                            <div className={`absolute top-full left-4 mt-2 w-60 rounded-xl shadow-2xl border backdrop-blur-xl z-[100] overflow-hidden ${
                                 isSpaceVisualsActive 
                                     ? 'bg-black/80 border-white/20 text-white' 
                                     : 'bg-white/95 dark:bg-gray-900/95 border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100'
@@ -336,12 +332,12 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
 
                 {/* Center: Pull Down Indicator */}
-                <div className="flex flex-col items-center opacity-50 group-hover:opacity-100 transition-opacity flex-grow justify-center">
+                <div className="flex flex-col items-center opacity-50 group-hover:opacity-100 transition-opacity">
                     <div className={`w-12 h-1 rounded-full mb-1 transition-colors ${isMenuLocked ? (isSpaceVisualsActive ? 'bg-cyan-400' : 'bg-indigo-500') : (isSpaceVisualsActive ? 'bg-white/50' : 'bg-gray-300 dark:bg-gray-600')}`}></div>
                 </div>
 
                 {/* Right: Essential Status (AI & Sync) & NOW TODAY BUTTON */}
-                <div className="flex items-center gap-3 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
                     
                     {currentViewMode !== 'goals' && currentViewMode !== 'focus' && (
                         <button
@@ -356,7 +352,7 @@ export const Header: React.FC<HeaderProps> = ({
                             title="Show tasks due today only"
                         >
                             <i className="far fa-calendar-check"></i>
-                            <span className="hidden lg:inline">Today</span>
+                            <span className="hidden sm:inline">Today</span>
                         </button>
                     )}
 
@@ -385,7 +381,6 @@ export const Header: React.FC<HeaderProps> = ({
                         onOpenSettings={onOpenSettings}
                         onManualPull={onManualPull}
                         onManualPush={onManualPush}
-                        onForcePull={onForcePull} // Pass down new handler
                     />
                 </div>
             </div>
@@ -397,7 +392,7 @@ export const Header: React.FC<HeaderProps> = ({
                     {/* Top Row: Title & Controls */}
                     <div className="flex flex-wrap items-center justify-between gap-y-2">
                         {activeFocusGoal ? (
-                            <h1 className={`text-xl font-bold tracking-wider flex items-center gap-2 ${isSpaceVisualsActive ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
+                            <h1 className={`text-xl font-bold tracking-wider hidden sm:block flex items-center gap-2 ${isSpaceVisualsActive ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
                                 <i className="fas fa-layer-group text-gray-500"></i>
                                 CONTEXT: <span style={{ color: titleTextColor }}>{activeFocusGoal.title}</span>
                                 <button 
@@ -408,25 +403,19 @@ export const Header: React.FC<HeaderProps> = ({
                                 </button>
                             </h1>
                         ) : (
-                            <h1 className={`text-xl font-bold tracking-wider ${isSpaceVisualsActive ? 'text-white' : ''}`}>Practical Order</h1>
+                            <h1 className={`text-xl font-bold tracking-wider hidden sm:block ${isSpaceVisualsActive ? 'text-white' : ''}`}>Practical Order</h1>
                         )}
                         
-                        <div className="flex items-center gap-3 flex-wrap gap-y-2 w-auto">
+                        <div className="flex items-center space-x-2 sm:space-x-3 flex-wrap gap-y-2">
                             
                             {/* View Toggles */}
                             <div className={`${isSpaceVisualsActive ? 'bg-white/10' : 'bg-gray-200 dark:bg-gray-700'} p-0.5 rounded-lg flex items-center`}>
-                                <button onClick={() => onViewModeChange('kanban')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all whitespace-nowrap ${currentViewMode === 'kanban' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>
-                                    Board
-                                </button>
-                                <button onClick={() => onViewModeChange('focus')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${currentViewMode === 'focus' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>
+                                <button onClick={() => onViewModeChange('kanban')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${currentViewMode === 'kanban' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>Board</button>
+                                <button onClick={() => onViewModeChange('focus')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 ${currentViewMode === 'focus' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>
                                     <i className="fas fa-eye text-[10px]"></i> Attention
                                 </button>
-                                <button onClick={() => onViewModeChange('goals')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all whitespace-nowrap ${currentViewMode === 'goals' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>
-                                    Contexts
-                                </button>
-                                <button onClick={() => onViewModeChange('calendar')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all whitespace-nowrap ${currentViewMode === 'calendar' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>
-                                    Calendar
-                                </button>
+                                <button onClick={() => onViewModeChange('goals')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${currentViewMode === 'goals' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>Contexts</button>
+                                <button onClick={() => onViewModeChange('calendar')} className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${currentViewMode === 'calendar' ? (isSpaceVisualsActive ? 'bg-white/30 text-white shadow' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-300/50')}`}>Calendar</button>
                             </div>
 
                             {/* Zoom */}
@@ -437,7 +426,7 @@ export const Header: React.FC<HeaderProps> = ({
                             </div>
 
                             {/* Compact/Fit */}
-                            <div className={`${isSpaceVisualsActive ? 'bg-white/10' : 'bg-gray-200 dark:bg-gray-700'} p-0.5 rounded-lg items-center gap-1 flex`}>
+                            <div className={`${isSpaceVisualsActive ? 'bg-white/10' : 'bg-gray-200 dark:bg-gray-700'} p-0.5 rounded-lg flex items-center gap-1`}>
                                 <button onClick={onToggleCompactMode} className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${isCompactMode ? (isSpaceVisualsActive ? 'bg-white/30 text-white' : 'bg-white dark:bg-gray-800 shadow') : (isSpaceVisualsActive ? 'text-white/60 hover:bg-white/10' : 'hover:bg-gray-300')}`}>
                                     <i className={`fas ${isCompactMode ? 'fa-expand' : 'fa-compress'}`}></i>
                                 </button>
@@ -452,7 +441,7 @@ export const Header: React.FC<HeaderProps> = ({
                             </button>
 
                             {/* Utility Buttons */}
-                            <div className="flex items-center gap-1 ml-0">
+                            <div className="flex items-center gap-1">
                                 <button onClick={onToggleTheme} className={`w-8 h-8 rounded-lg flex items-center justify-center ${isSpaceVisualsActive ? 'bg-white/10 hover:bg-white/20' : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300'} transition-colors`}>
                                     <i className={`fas ${getThemeIcon()}`}></i>
                                 </button>
@@ -476,8 +465,9 @@ export const Header: React.FC<HeaderProps> = ({
                         </div>
                     </div>
 
-                    {/* Gauge Row */}
-                    <div className={`grid grid-cols-1 ${settings.showPomodoroTimer ? 'grid-cols-2 lg:grid-cols-3' : 'grid-cols-1 max-w-sm'} gap-4 ${isSpaceVisualsActive ? 'opacity-80 hover:opacity-100 transition-opacity' : ''}`}>
+                    {/* Gauge Row: Only Time Estimate (Fact). No XP (Fiction). */}
+                    <div className={`grid grid-cols-1 ${settings.showPomodoroTimer ? 'md:grid-cols-2 lg:grid-cols-3' : 'md:grid-cols-1 max-w-sm'} gap-4 ${isSpaceVisualsActive ? 'opacity-80 hover:opacity-100 transition-opacity' : ''}`}>
+                        {/* Time Gauge (Factual) */}
                         <div className="w-full">
                             <LiquidGauge 
                                 type="fuel"
@@ -486,6 +476,8 @@ export const Header: React.FC<HeaderProps> = ({
                                 max={settings.dailyBudget}
                             />
                         </div>
+                        
+                        {/* Pomodoro Timer */}
                         {settings.showPomodoroTimer && (
                             <div className="w-full">
                                 <PomodoroTimer settings={settings} className="w-full h-full min-h-[50px]" />
@@ -495,234 +487,5 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
             </div>
         </header>
-    );
-
-    // --- MOBILE UI (New) ---
-    // Split into Top Bar (Essential) and Bottom Nav (View Switching)
-    const mobileHeader = (
-        <div className="md:hidden">
-            {/* Top Bar: Fixed */}
-            <div 
-                className={`fixed top-0 left-0 right-0 h-16 z-50 px-4 flex items-center justify-between backdrop-blur-md transition-colors duration-300 border-b ${
-                    isSpaceVisualsActive 
-                        ? 'bg-black/40 border-white/10 text-white' 
-                        : 'bg-white/90 dark:bg-gray-900/90 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-gray-100'
-                }`}
-            >
-                {/* Left: Time & Date (Compact) */}
-                <div className="flex flex-col leading-tight" onClick={() => setIsTodayView(!isTodayView)}>
-                    <div className="text-[10px] font-bold opacity-60 uppercase tracking-widest">{headerDateStr}</div>
-                    <div className={`text-lg font-black font-mono ${textAccentClass}`}>{headerTimeStr}</div>
-                </div>
-
-                {/* Center: Context Selector (Pill) */}
-                <div className="relative" ref={focusDropdownRef}>
-                    <button
-                        onClick={() => setIsFocusMenuOpen(!isFocusMenuOpen)}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-full border shadow-sm transition-all max-w-[140px] ${
-                            activeFocusGoal
-                                ? ''
-                                : (isSpaceVisualsActive ? 'bg-white/10 border-white/20' : 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700')
-                        }`}
-                        style={activeFocusGoal ? { 
-                            backgroundColor: activeFocusGoal.color + '25', 
-                            borderColor: activeFocusGoal.color + '40'
-                        } : {}}
-                    >
-                        <span className="text-xs font-bold truncate">
-                            {activeFocusGoal ? activeFocusGoal.title : 'All Contexts'}
-                        </span>
-                        <i className="fas fa-chevron-down text-[10px] opacity-50"></i>
-                    </button>
-
-                    {/* Mobile Dropdown */}
-                    {isFocusMenuOpen && (
-                        <div className={`absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 rounded-xl shadow-2xl border backdrop-blur-xl z-[100] overflow-hidden ${
-                            isSpaceVisualsActive 
-                                ? 'bg-slate-900/95 border-white/20 text-white' 
-                                : 'bg-white/95 dark:bg-gray-900/95 border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100'
-                        }`}>
-                            <div className="max-h-[300px] overflow-y-auto p-2 space-y-1">
-                                <button
-                                    onClick={() => { onFocusGoal(UNASSIGNED_GOAL_ID); setIsFocusMenuOpen(false); }}
-                                    className="w-full text-left px-3 py-3 rounded-lg flex items-center gap-3 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
-                                >
-                                    <div className="w-3 h-3 rounded-full bg-slate-500"></div>
-                                    <span className="font-bold text-sm">All Contexts</span>
-                                </button>
-                                {goals.map(goal => (
-                                    <button
-                                        key={goal.id}
-                                        onClick={() => { onFocusGoal(goal.id); setIsFocusMenuOpen(false); }}
-                                        className="w-full text-left px-3 py-3 rounded-lg flex items-center gap-3 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
-                                    >
-                                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: goal.color }}></div>
-                                        <span className="font-bold text-sm truncate">{goal.title}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                {/* Right: AI & Menu */}
-                <div className="flex items-center gap-3">
-                    <button
-                        onClick={onOpenAIAssistant}
-                        className={`w-9 h-9 rounded-full flex items-center justify-center shadow-sm ${isSpaceVisualsActive ? 'bg-indigo-500/20 text-indigo-300' : 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-400'}`}
-                    >
-                        <i className="fas fa-sparkles"></i>
-                    </button>
-                    <button
-                        onClick={() => setIsMobileMenuOpen(true)}
-                        className={`w-9 h-9 rounded-full flex items-center justify-center ${isSpaceVisualsActive ? 'hover:bg-white/10' : 'hover:bg-gray-100 dark:hover:bg-gray-800'}`}
-                    >
-                        <i className="fas fa-bars text-lg"></i>
-                    </button>
-                </div>
-            </div>
-
-            {/* Bottom Nav Bar: Fixed */}
-            <div className={`fixed bottom-0 left-0 right-0 h-[64px] z-50 border-t flex items-center justify-around px-2 backdrop-blur-xl ${
-                isSpaceVisualsActive 
-                    ? 'bg-black/60 border-white/10 text-white' 
-                    : 'bg-white/95 dark:bg-gray-900/95 border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400'
-            }`}>
-                {[
-                    { id: 'kanban', icon: 'fa-columns', label: 'Board' },
-                    { id: 'focus', icon: 'fa-eye', label: 'Focus' },
-                    { id: 'goals', icon: 'fa-layer-group', label: 'Contexts' },
-                    { id: 'calendar', icon: 'fa-calendar-alt', label: 'Plan' },
-                ].map((item) => (
-                    <button
-                        key={item.id}
-                        onClick={() => onViewModeChange(item.id as any)}
-                        className={`flex flex-col items-center justify-center w-full h-full gap-1 transition-colors ${
-                            currentViewMode === item.id 
-                                ? (isSpaceVisualsActive ? 'text-cyan-400' : 'text-indigo-600 dark:text-indigo-400') 
-                                : 'opacity-60 hover:opacity-100'
-                        }`}
-                    >
-                        <i className={`fas ${item.icon} text-lg mb-0.5`}></i>
-                        <span className="text-[10px] font-bold uppercase tracking-wide">{item.label}</span>
-                    </button>
-                ))}
-            </div>
-
-            {/* Mobile "More" Drawer (Slide-over) */}
-            {isMobileMenuOpen && (
-                <div className="fixed inset-0 z-[60] flex justify-end">
-                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}></div>
-                    <div className={`relative w-4/5 max-w-sm h-full shadow-2xl p-6 flex flex-col gap-6 overflow-y-auto animate-slideInRight ${
-                        isSpaceVisualsActive ? 'bg-slate-900 border-l border-white/10 text-white' : 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white'
-                    }`}>
-                        <div className="flex items-center justify-between mb-2">
-                            <h2 className="text-xl font-bold">Menu</h2>
-                            <button onClick={() => setIsMobileMenuOpen(false)} className="w-8 h-8 rounded-full flex items-center justify-center bg-gray-100 dark:bg-gray-800">
-                                <i className="fas fa-times"></i>
-                            </button>
-                        </div>
-
-                        {/* Quick Stats */}
-                        <div className="p-4 rounded-xl bg-gray-100 dark:bg-gray-800/50 flex flex-col gap-3">
-                            <LiquidGauge 
-                                type="fuel"
-                                label="Daily Capacity"
-                                value={todaysBudgetedTime}
-                                max={settings.dailyBudget}
-                            />
-                            {settings.showPomodoroTimer && (
-                                <PomodoroTimer settings={settings} className="w-full h-16" />
-                            )}
-                        </div>
-
-                        {/* Actions Grid */}
-                        <div className="grid grid-cols-2 gap-3">
-                            <button 
-                                onClick={onToggleTheme} 
-                                className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 flex flex-col items-center gap-2"
-                            >
-                                <i className={`fas ${getThemeIcon()} text-xl`}></i>
-                                <span className="text-xs font-bold">Theme</span>
-                            </button>
-                            <button 
-                                onClick={togglePomodoro} 
-                                className={`p-4 rounded-xl border flex flex-col items-center gap-2 ${settings.showPomodoroTimer ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-gray-50 dark:bg-gray-800 border-gray-100 dark:border-gray-700'}`}
-                            >
-                                <i className="fas fa-stopwatch text-xl"></i>
-                                <span className="text-xs font-bold">Timer</span>
-                            </button>
-                            <button 
-                                onClick={onResetLayout} 
-                                className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 flex flex-col items-center gap-2"
-                            >
-                                <i className="fas fa-undo text-xl"></i>
-                                <span className="text-xs font-bold">Reset</span>
-                            </button>
-                            <button 
-                                onClick={() => exportTasksToCSV(tasks)} 
-                                className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 flex flex-col items-center gap-2"
-                            >
-                                <i className="fas fa-file-export text-xl"></i>
-                                <span className="text-xs font-bold">Export</span>
-                            </button>
-                        </div>
-
-                        {/* Settings List */}
-                        <div className="flex flex-col gap-2 mt-auto">
-                            <button 
-                                onClick={() => { onOpenSettings('general'); setIsMobileMenuOpen(false); }}
-                                className="flex items-center gap-4 p-4 rounded-xl bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                            >
-                                <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 flex items-center justify-center">
-                                    <i className="fas fa-cog"></i>
-                                </div>
-                                <div className="text-left">
-                                    <div className="font-bold text-sm">Settings</div>
-                                    <div className="text-xs opacity-60">Preferences & Config</div>
-                                </div>
-                            </button>
-
-                            {/* Sync Status Button */}
-                            <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/50">
-                                <div className="flex items-center justify-between mb-3">
-                                    <span className="text-xs font-bold uppercase tracking-wider opacity-60">Sync Status</span>
-                                    <ConnectionHealthIndicator 
-                                        health={connectionHealth} 
-                                        onOpenSettings={onOpenSettings}
-                                        onManualPull={onManualPull}
-                                        onManualPush={onManualPush}
-                                        onForcePull={onForcePull} // Pass down new handler
-                                    />
-                                </div>
-                                {isSheetConnected && (
-                                    <div className="flex gap-2">
-                                        <button 
-                                            onClick={onManualPull} 
-                                            className="flex-1 py-2 text-xs font-bold bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center gap-2"
-                                        >
-                                            <i className="fas fa-cloud-download-alt"></i> Pull
-                                        </button>
-                                        <button 
-                                            onClick={onManualPush} 
-                                            className="flex-1 py-2 text-xs font-bold bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center gap-2"
-                                        >
-                                            <i className="fas fa-cloud-upload-alt"></i> Push
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-
-    return (
-        <>
-            {desktopHeader}
-            {mobileHeader}
-        </>
     );
 };

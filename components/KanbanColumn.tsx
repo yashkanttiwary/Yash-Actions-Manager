@@ -15,7 +15,6 @@ interface KanbanColumnProps {
     onAddTask: (status: Status) => void;
     onQuickAddTask: (title: string) => void; 
     onSmartAddTask: (transcript: string) => Promise<void>;
-    onUpdateTask: (task: Task) => void; // Passed down
     isCollapsed: boolean;
     onToggleCollapse: () => void;
     sortOption: SortOption;
@@ -29,7 +28,7 @@ interface KanbanColumnProps {
     onBreakDownTask?: (taskId: string) => Promise<void>; 
     isCompactMode: boolean;
     onTaskSizeChange?: () => void; 
-    width?: number | string; 
+    width?: number; 
     height?: number; 
     onResize?: (width: number, height: number) => void;
     zoomLevel?: number;
@@ -52,7 +51,7 @@ const LIMIT_IN_PROGRESS = 3;
 const LIMIT_DEFAULT = 5;
 
 export const KanbanColumn: React.FC<KanbanColumnProps> = ({ 
-    status, tasks, allTasks, goals, onTaskMove, onEditTask, onAddTask, onQuickAddTask, onSmartAddTask, onUpdateTask,
+    status, tasks, allTasks, goals, onTaskMove, onEditTask, onAddTask, onQuickAddTask, onSmartAddTask,
     isCollapsed, onToggleCollapse, sortOption, onSortChange, onMouseDown, 
     activeTaskTimer, onToggleTimer, onOpenContextMenu, onDeleteTask, onSubtaskToggle, onBreakDownTask,
     isCompactMode, onTaskSizeChange, width, height, onResize, zoomLevel = 1, isSpaceMode = false
@@ -273,16 +272,16 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
         checkScrollIndicator();
     };
     
-    const currentWidth = isCollapsed ? '80px' : (width !== undefined ? (typeof width === 'number' ? `${width}px` : width) : '320px');
+    const currentWidth = isCollapsed ? 80 : (width || 320);
     const currentHeight = height ? height : 'auto';
     const isCustomHeight = !!height;
     
     return (
         <div 
             ref={colRef}
-            className={`flex-shrink-0 rounded-xl flex flex-col ${containerClasses} ${isResizing ? 'transition-none select-none' : 'transition-all duration-300 ease-in-out'} relative h-full`}
+            className={`flex-shrink-0 rounded-xl flex flex-col ${containerClasses} ${isResizing ? 'transition-none select-none' : 'transition-all duration-300 ease-in-out'} relative`}
             style={{ 
-                width: currentWidth, 
+                width: `${currentWidth}px`, 
                 height: typeof currentHeight === 'number' ? `${currentHeight}px` : undefined,
             }}
         >
@@ -291,7 +290,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                 onMouseDown={onMouseDown}
             >
                 <h2
-                    className="font-bold text-base md:text-lg cursor-grab select-none text-white"
+                    className="font-bold text-lg cursor-grab select-none text-white"
                     style={{ 
                         writingMode: isCollapsed ? 'vertical-rl' : 'initial', 
                         transform: isCollapsed ? 'rotate(180deg)' : 'none',
@@ -326,7 +325,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                                         type="text" 
                                         value={quickAddTitle}
                                         onChange={handleInputChange}
-                                        placeholder={isProcessing ? "Thinking..." : isListening ? "Listening..." : "Add task..."}
+                                        placeholder={isProcessing ? "AI Thinking..." : isListening ? "Listening... (Click Stop to Process)" : "Add quick task..."}
                                         className={`w-full px-3 py-1.5 pr-8 text-sm rounded-md border transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500
                                             ${isListening 
                                                 ? 'border-red-500 bg-red-50 dark:bg-red-900/30 text-red-900 dark:text-red-200 ring-2 ring-red-500/50' 
@@ -427,7 +426,6 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                                     allTasks={allTasks}
                                     goals={goals} // Pass goals down
                                     onEditTask={onEditTask}
-                                    onUpdateTask={onUpdateTask}
                                     activeTaskTimer={activeTaskTimer}
                                     onToggleTimer={onToggleTimer}
                                     onOpenContextMenu={onOpenContextMenu}

@@ -9,7 +9,6 @@ interface GoalBoardProps {
     goals: Goal[];
     onTaskMove: (taskId: string, newGoalId: string) => void;
     onEditTask: (task: Task) => void;
-    onUpdateTask: (task: Task) => void; // Added prop
     onDeleteTask: (taskId: string) => void;
     onAddGoal: (goal: Omit<Goal, 'id' | 'createdDate'>) => void;
     onEditGoal: (goal: Goal) => void;
@@ -26,7 +25,7 @@ interface GoalBoardProps {
 }
 
 export const GoalBoard: React.FC<GoalBoardProps> = ({
-    tasks, goals, onTaskMove, onEditTask, onUpdateTask, onDeleteTask, onAddGoal, onEditGoal, onDeleteGoal,
+    tasks, goals, onTaskMove, onEditTask, onDeleteTask, onAddGoal, onEditGoal, onDeleteGoal,
     activeTaskTimer, onToggleTimer, onSubtaskToggle, isCompactMode, isSpaceMode, zoomLevel,
     onFocusGoal, currentFocusId
 }) => {
@@ -102,8 +101,8 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
 
     return (
         <>
-            {/* Status Legend - Fixed at Bottom Right - Hide on Mobile to save space */}
-            <div className={`fixed bottom-6 right-6 z-40 transition-all duration-500 hidden md:block ${isSpaceMode ? 'text-white' : ''}`}>
+            {/* Status Legend - Fixed at Bottom Right */}
+            <div className={`fixed bottom-6 right-6 z-40 transition-all duration-500 ${isSpaceMode ? 'text-white' : ''}`}>
                 <div className={`
                     p-4 rounded-xl shadow-xl backdrop-blur-md border animate-fadeIn
                     ${isSpaceMode 
@@ -144,66 +143,60 @@ export const GoalBoard: React.FC<GoalBoardProps> = ({
                 className="w-full h-full overflow-x-auto overflow-y-hidden"
                 onDragOver={handleDragOver}
                 style={{ 
-                    // Apply zoom only on desktop. Mobile uses native scaling.
-                    transform: window.innerWidth > 768 ? `scale(${zoomLevel})` : 'none', 
+                    transform: `scale(${zoomLevel})`, 
                     transformOrigin: 'top left',
-                    width: window.innerWidth > 768 ? `${100 / zoomLevel}%` : '100%',
-                    height: window.innerWidth > 768 ? `${100 / zoomLevel}%` : '100%'
+                    width: `${100 / zoomLevel}%`,
+                    height: `${100 / zoomLevel}%`
                 }}
             >
-                <div className={`flex h-full p-4 gap-4 md:gap-6 pb-20 md:pb-8 min-w-max md:min-w-0 ${window.innerWidth < 768 ? 'snap-x snap-mandatory px-[calc(50vw-42.5vw)]' : ''}`}>
+                <div className="flex h-full p-4 gap-6 min-w-max pb-8">
                     
                     {/* Unassigned Column - Always First */}
-                    <div className="snap-center flex-shrink-0" style={{ width: window.innerWidth < 768 ? '85vw' : '20rem' }}>
+                    <GoalColumn
+                        key="unassigned"
+                        goal={unassignedGoal}
+                        tasks={unassignedTasks}
+                        allTasks={tasks}
+                        onTaskMove={(tid) => onTaskMove(tid, undefined!)} // Sending undefined removes goalId
+                        onEditTask={onEditTask}
+                        onDeleteTask={onDeleteTask}
+                        onEditGoal={() => {}} // Can't edit unassigned
+                        onDeleteGoal={() => {}} // Can't delete unassigned
+                        activeTaskTimer={activeTaskTimer}
+                        onToggleTimer={onToggleTimer}
+                        onSubtaskToggle={onSubtaskToggle}
+                        isCompactMode={isCompactMode}
+                        isSpaceMode={isSpaceMode}
+                        onFocusGoal={onFocusGoal}
+                        isFocused={currentFocusId === UNASSIGNED_GOAL_ID}
+                    />
+
+                    {/* Actual Context Columns */}
+                    {goals.map(goal => (
                         <GoalColumn
-                            key="unassigned"
-                            goal={unassignedGoal}
-                            tasks={unassignedTasks}
+                            key={goal.id}
+                            goal={goal}
+                            tasks={tasks.filter(t => t.goalId === goal.id)}
                             allTasks={tasks}
-                            onTaskMove={(tid) => onTaskMove(tid, undefined!)} // Sending undefined removes goalId
+                            onTaskMove={(tid) => onTaskMove(tid, goal.id)}
                             onEditTask={onEditTask}
-                            onUpdateTask={onUpdateTask}
                             onDeleteTask={onDeleteTask}
-                            onEditGoal={() => {}} // Can't edit unassigned
-                            onDeleteGoal={() => {}} // Can't delete unassigned
+                            onEditGoal={onEditGoal}
+                            onDeleteGoal={onDeleteGoal}
                             activeTaskTimer={activeTaskTimer}
                             onToggleTimer={onToggleTimer}
                             onSubtaskToggle={onSubtaskToggle}
                             isCompactMode={isCompactMode}
                             isSpaceMode={isSpaceMode}
                             onFocusGoal={onFocusGoal}
-                            isFocused={currentFocusId === UNASSIGNED_GOAL_ID}
+                            isFocused={currentFocusId === goal.id}
                         />
-                    </div>
-
-                    {/* Actual Context Columns */}
-                    {goals.map(goal => (
-                        <div key={goal.id} className="snap-center flex-shrink-0" style={{ width: window.innerWidth < 768 ? '85vw' : '20rem' }}>
-                            <GoalColumn
-                                goal={goal}
-                                tasks={tasks.filter(t => t.goalId === goal.id)}
-                                allTasks={tasks}
-                                onTaskMove={(tid) => onTaskMove(tid, goal.id)}
-                                onEditTask={onEditTask}
-                                onUpdateTask={onUpdateTask}
-                                onDeleteTask={onDeleteTask}
-                                onEditGoal={onEditGoal}
-                                onDeleteGoal={onDeleteGoal}
-                                activeTaskTimer={activeTaskTimer}
-                                onToggleTimer={onToggleTimer}
-                                onSubtaskToggle={onSubtaskToggle}
-                                isCompactMode={isCompactMode}
-                                isSpaceMode={isSpaceMode}
-                                onFocusGoal={onFocusGoal}
-                                isFocused={currentFocusId === goal.id}
-                            />
-                        </div>
                     ))}
 
                     {/* Add Context Button / Form */}
-                    <div className="snap-center flex-shrink-0" style={{ width: window.innerWidth < 768 ? '85vw' : '20rem' }}>
+                    <div className="flex-shrink-0 w-80">
                         {isCreating ? (
-                            <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-lg border border-indigo-200 dark:border-indigo-800 animate-fadeIn h-full flex flex-col justify-center">
+                            <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-lg border border-indigo-200 dark:border-indigo-800 animate-fadeIn">
                                 <h3 className="font-bold mb-3 text-gray-800 dark:text-white">New Context</h3>
                                 <form onSubmit={handleCreateSubmit}>
                                     <div className="mb-3">

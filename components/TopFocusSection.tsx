@@ -73,8 +73,7 @@ export const TopFocusSection: React.FC<TopFocusSectionProps> = ({ tasks, onUnpin
                 </div>
             </div>
 
-            {/* Mobile: Horizontal Scroll (Carousel) | Desktop: Wrap (Grid) */}
-            <div className="flex-grow w-full md:w-auto flex flex-nowrap md:flex-wrap gap-3 items-center overflow-x-auto md:overflow-visible pb-2 md:pb-0 px-1 md:px-0 snap-x min-h-[40px] scrollbar-hide">
+            <div className="flex-grow flex flex-wrap gap-3 items-center min-h-[40px]">
                 {pinnedTasks.length === 0 ? (
                     <span className={`text-sm italic flex items-center gap-2 ${isSpaceMode ? 'text-slate-500' : 'text-gray-400'}`}>
                         {isDragOver ? (
@@ -92,7 +91,7 @@ export const TopFocusSection: React.FC<TopFocusSectionProps> = ({ tasks, onUnpin
                             key={task.id}
                             draggable
                             onDragStart={(e) => e.dataTransfer.setData('taskId', task.id)}
-                            className={`group relative flex items-center gap-2 pl-3 pr-2 py-2 md:py-1.5 rounded-lg border cursor-pointer transition-all duration-200 flex-shrink-0 snap-start
+                            className={`group relative flex items-center gap-2 pl-2 pr-1 py-1.5 rounded-lg border cursor-pointer transition-all duration-200
                                 ${isSpaceMode 
                                     ? 'bg-black/40 border-slate-700 hover:border-indigo-500/50 hover:bg-slate-800/60' 
                                     : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-700 hover:shadow-md'
@@ -100,7 +99,6 @@ export const TopFocusSection: React.FC<TopFocusSectionProps> = ({ tasks, onUnpin
                             `}
                             onClick={() => onEditTask(task)}
                             title={`Status: ${task.status}`}
-                            style={{ maxWidth: '85vw' }} // Ensure it doesn't overflow screen width on mobile
                         >
                             {/* Status Indicator */}
                             <div 
@@ -108,14 +106,14 @@ export const TopFocusSection: React.FC<TopFocusSectionProps> = ({ tasks, onUnpin
                                 style={{ backgroundColor: getStatusColor(task.status, isSpaceMode) }}
                             />
                             
-                            <span className={`text-sm md:text-xs font-semibold truncate ${task.status === 'Done' ? 'line-through opacity-60' : ''} ${isSpaceMode ? 'text-slate-200' : 'text-gray-700 dark:text-gray-200'}`} style={{ maxWidth: '200px' }}>
+                            <span className={`text-xs font-semibold truncate max-w-[150px] ${task.status === 'Done' ? 'line-through opacity-60' : ''} ${isSpaceMode ? 'text-slate-200' : 'text-gray-700 dark:text-gray-200'}`}>
                                 {task.title}
                             </span>
 
                             {/* Unpin Button */}
                             <button
                                 onClick={(e) => { e.stopPropagation(); onUnpin(task.id); }}
-                                className={`ml-2 w-6 h-6 flex items-center justify-center rounded-md hover:bg-red-100 hover:text-red-500 dark:hover:bg-red-900/30 transition-colors ${isSpaceMode ? 'text-slate-500' : 'text-gray-400'}`}
+                                className={`ml-1 w-5 h-5 flex items-center justify-center rounded-md hover:bg-red-100 hover:text-red-500 dark:hover:bg-red-900/30 transition-colors ${isSpaceMode ? 'text-slate-500' : 'text-gray-400'}`}
                                 title="Unpin"
                             >
                                 <i className="fas fa-times text-xs"></i>

@@ -821,13 +821,13 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                             
                                             {/* CONDITIONAL RENDER: Show Connected State or Input Field */}
                                             {sheetStatus === 'success' ? (
-                                                <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between animate-fadeIn gap-4 sm:gap-0">
-                                                    <div className="flex items-center gap-3 w-full sm:w-auto">
-                                                         <div className="flex-shrink-0 w-10 h-10 rounded-full bg-green-100 dark:bg-green-800 flex items-center justify-center text-green-600 dark:text-green-300">
+                                                <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl flex items-center justify-between animate-fadeIn">
+                                                    <div className="flex items-center gap-3">
+                                                         <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-800 flex items-center justify-center text-green-600 dark:text-green-300">
                                                             <i className="fas fa-link"></i>
                                                          </div>
-                                                         <div className="min-w-0">
-                                                             <h4 className="font-bold text-gray-900 dark:text-white truncate">Connected via Script</h4>
+                                                         <div>
+                                                             <h4 className="font-bold text-gray-900 dark:text-white">Connected via Script</h4>
                                                              <p className="text-xs text-gray-500 dark:text-gray-400 font-mono truncate max-w-[200px] md:max-w-[300px]">
                                                                 {settings.googleAppsScriptUrl ? settings.googleAppsScriptUrl.substring(0, 40) + '...' : 'URL Saved'}
                                                              </p>
@@ -836,7 +836,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                                     <button 
                                                         type="button"
                                                         onClick={handleDisconnect}
-                                                        className="w-full sm:w-auto px-4 py-2 bg-white dark:bg-gray-800 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-sm font-bold rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors shadow-sm"
+                                                        className="px-4 py-2 bg-white dark:bg-gray-800 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-sm font-bold rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors shadow-sm"
                                                     >
                                                         Disconnect
                                                     </button>
@@ -945,13 +945,13 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                     
                                     {/* CONDITIONAL RENDER FOR API MODE */}
                                     {sheetStatus === 'success' ? (
-                                        <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between animate-fadeIn gap-4 sm:gap-0">
-                                            <div className="flex items-center gap-3 w-full sm:w-auto">
-                                                 <div className="flex-shrink-0 w-10 h-10 rounded-full bg-green-100 dark:bg-green-800 flex items-center justify-center text-green-600 dark:text-green-300">
+                                        <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl flex items-center justify-between animate-fadeIn">
+                                            <div className="flex items-center gap-3">
+                                                 <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-800 flex items-center justify-center text-green-600 dark:text-green-300">
                                                     <i className="fas fa-check-circle"></i>
                                                  </div>
-                                                 <div className="min-w-0">
-                                                     <h4 className="font-bold text-gray-900 dark:text-white truncate">API Connected</h4>
+                                                 <div>
+                                                     <h4 className="font-bold text-gray-900 dark:text-white">API Connected</h4>
                                                      <p className="text-xs text-gray-500 dark:text-gray-400 font-mono truncate max-w-[200px]">
                                                         ID: {settings.googleSheetId}
                                                      </p>
@@ -960,7 +960,7 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
                                             <button 
                                                 type="button"
                                                 onClick={handleDisconnect}
-                                                className="w-full sm:w-auto px-4 py-2 bg-white dark:bg-gray-800 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-sm font-bold rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors shadow-sm"
+                                                className="px-4 py-2 bg-white dark:bg-gray-800 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-sm font-bold rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors shadow-sm"
                                             >
                                                 Disconnect
                                             </button>

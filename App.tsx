@@ -305,7 +305,7 @@ const App: React.FC = () => {
     }, [settings.userTimeOffset, settingsLoaded]);
 
     const shouldSync = settingsLoaded && !isLoading;
-    const { status: syncStatus, errorMsg: syncError, syncMethod, manualPull, manualPush, forcePull } = useGoogleSheetSync(
+    const { status: syncStatus, errorMsg: syncError, syncMethod, manualPull, manualPush } = useGoogleSheetSync(
         shouldSync ? settings.googleSheetId : undefined,
         tasks,
         setAllData, 
@@ -413,54 +413,30 @@ const App: React.FC = () => {
         });
     }, [focusedGoalId]);
 
-    // CENTRALIZED PSYCHOLOGY CHECK
-    const runPsychologyCheck = useCallback(async (task: Task) => {
-        const apiKey = settings.geminiApiKey || getEnvVar('VITE_GEMINI_API_KEY');
-        if (!apiKey) return;
-
-        try {
-            // Run silent background check
-            const analysis = await analyzeTaskPsychology(task, apiKey);
-            
-            // Only update if it changes the state (prevents loops, though useTaskManager handles object identity)
-            // Or simply if 'isBecoming' is true, update the task to reflect that.
-            if (analysis.isBecoming) {
-                updateTask({
-                    ...task,
-                    isBecoming: true,
-                    becomingWarning: analysis.warning
-                });
-            }
-        } catch (e) {
-            console.error("Psych check failed", e);
-        }
-    }, [settings.geminiApiKey, updateTask]);
-
     const handleQuickAddTask = useCallback((title: string, status: Status) => {
-        // 1. Create the task explicitly (Optimistic UI)
-        const newTaskData = {
+        addTask({
             title,
             status,
-            priority: 'Medium' as Priority,
+            priority: 'Medium',
             dueDate: new Date().toISOString().split('T')[0],
             description: '',
             goalId: focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined, 
-        };
-        
-        // 2. Add to board instantly
-        const newTask = addTask(newTaskData);
-        
-        // 3. Trigger Background Analysis
-        runPsychologyCheck(newTask);
-
-    }, [addTask, focusedGoalId, runPsychologyCheck]);
+        });
+        // We trigger AI Analysis in handleSaveTask or updateTask wrapper, but quickAdd calls addTask directly.
+        // We need to trigger it here too.
+        // However, we don't have the task ID yet since addTask generates it. 
+        // Best approach: addTask returns the new task or ID. 
+        // For now, let's leave Quick Add un-analyzed or implement a listener in useTaskManager.
+        // Or simpler: Just fire it with the text and update last task.
+        // Actually, let's skip analysis on quick add to keep it fast, 
+        // OR trigger it if we can find the task.
+    }, [addTask, focusedGoalId]);
 
     const handleVoiceTaskAdd = useCallback(async (transcript: string, defaultStatus: Status) => {
         const effectiveKey = settings.geminiApiKey || getEnvVar('VITE_GEMINI_API_KEY');
         
         if (!effectiveKey) {
-             // Fallback: Add basic task
-             const basicTask = addTask({
+             addTask({
                 title: transcript,
                 status: defaultStatus,
                 priority: 'Medium',
@@ -468,15 +444,12 @@ const App: React.FC = () => {
                 description: '', 
                 goalId: focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined
              });
-             // Even basic fallback should try analysis if key becomes available or just skip
              return;
         }
 
         try {
             const parsedData = await parseTaskFromVoice(transcript, effectiveKey, goals);
             
-            // Note: Voice parser returns a structure, we need to finalize it for the modal or add it directly
-            // Current flow opens the modal for "Draft" review
             const draftTask: Task = {
                 id: `new-${Date.now()}`,
                 title: parsedData.title || transcript, 
@@ -510,8 +483,7 @@ const App: React.FC = () => {
 
         } catch (error) {
             console.error("Voice parse failed:", error);
-            // Fallback add
-            const fallbackTask = addTask({
+            addTask({
                 title: transcript.length > 60 ? `${transcript.substring(0, 57)}...` : transcript,
                 description: `> 🎙️ **Voice Note**\n> "${transcript}"`,
                 status: defaultStatus,
@@ -519,10 +491,8 @@ const App: React.FC = () => {
                 dueDate: new Date().toISOString().split('T')[0],
                 goalId: focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined
             });
-            // Try check on fallback too
-            runPsychologyCheck(fallbackTask);
         }
-    }, [addTask, settings.geminiApiKey, focusedGoalId, goals, runPsychologyCheck]);
+    }, [addTask, handleQuickAddTask, settings.geminiApiKey, focusedGoalId, goals]);
 
     const handleOpenSettings = (tab: SettingsTab = 'general') => {
         setActiveSettingsTab(tab);
@@ -719,20 +689,36 @@ const App: React.FC = () => {
     const handleSaveTask = async (taskToSave: Task) => {
         let savedTask = taskToSave;
         
+        // LOGIC-001: Resolve race condition by handling new tasks atomically if possible
         if (taskToSave.id.startsWith('new-')) {
             const { id, createdDate, lastModified, ...newTaskData } = taskToSave;
-            
-            // 1. Save immediately (Optimistic)
-            const newTask = addTask(newTaskData as any);
-            
-            // 2. Trigger Background Check
-            runPsychologyCheck(newTask);
+            let finalTaskData = { ...newTaskData };
+
+            // LOGIC-001 FIX: Analyze BEFORE adding to state
+            if (hasApiKey) {
+                try {
+                    // We await this for new tasks to ensure they enter the board "judged" by the Mirror
+                    const analysis = await analyzeTaskPsychology(taskToSave, settings.geminiApiKey || getEnvVar('VITE_GEMINI_API_KEY'));
+                    finalTaskData = { ...finalTaskData, ...analysis };
+                } catch (e) { console.error(e); }
+            }
+
+            addTask(finalTaskData as any);
         } else {
             // Updating existing task
             updateTask(savedTask);
             
             // Trigger AI Analysis in background for edits
-            runPsychologyCheck(savedTask);
+            if (hasApiKey) {
+                // Don't await this, let it run in background to keep UI snappy for edits
+                analyzeTaskPsychology(savedTask, settings.geminiApiKey || getEnvVar('VITE_GEMINI_API_KEY'))
+                    .then(analysis => {
+                        if (analysis.isBecoming !== savedTask.isBecoming) {
+                            updateTask({ ...savedTask, ...analysis });
+                        }
+                    })
+                    .catch(err => console.error("Psych Analysis Failed", err));
+            }
         }
         setEditingTask(null);
     };
@@ -741,8 +727,6 @@ const App: React.FC = () => {
         if (changes.added && changes.added.length > 0) {
             changes.added.forEach(t => {
                 addTask(t as any);
-                // We could run check here too, but AI usually generates 'safe' tasks or we trust it for now.
-                // Or we can invoke runPsychologyCheck on the new tasks if we want to be strict.
             });
         }
         if (changes.updated && changes.updated.length > 0) {
@@ -858,11 +842,7 @@ const App: React.FC = () => {
     };
 
     const activeFocusGoalId = focusedGoalId || null;
-    
-    // Dynamic Header height for mobile/desktop
-    // Desktop: Uses headerHeight
-    // Mobile: TopBar is 16 (64px). Bottom is 16 (64px).
-    const headerHeightDesktop = (isMenuLocked || isMenuHovered) ? '200px' : '50px';
+    const headerHeight = (isMenuLocked || isMenuHovered) ? '200px' : '50px';
 
     return (
         <div className={`bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-white h-screen flex flex-col overflow-hidden font-sans ${isSpaceModeActive ? 'bg-transparent' : 'bg-dots'} transition-colors duration-300 relative`}>
@@ -893,7 +873,6 @@ const App: React.FC = () => {
                 syncStatus={syncStatus} 
                 onManualPull={manualPull}
                 onManualPush={manualPush}
-                onForcePull={forcePull}
                 isCompactMode={isCompactMode}
                 onToggleCompactMode={() => setIsCompactMode(prev => !prev)}
                 isFitToScreen={isFitToScreen}
@@ -926,10 +905,9 @@ const App: React.FC = () => {
             )}
 
             <main 
-                className="flex-1 overflow-auto pl-2 sm:pl-6 pr-2 pb-2 relative flex flex-col scroll-smooth transition-all duration-700 z-10 
-                           md:pt-[50px] pt-16 pb-20 md:pb-2" // Mobile vs Desktop Padding
+                className="flex-1 overflow-auto pl-2 sm:pl-6 pr-2 pb-2 relative flex flex-col scroll-smooth transition-all duration-700 z-10"
                 style={{ 
-                    paddingTop: window.innerWidth >= 768 ? headerHeightDesktop : undefined
+                    paddingTop: headerHeight
                 }}
             >
                 {notification && (
@@ -979,7 +957,6 @@ const App: React.FC = () => {
                                             onAddTask={(status) => handleOpenAddTaskModal(status)}
                                             onQuickAddTask={handleQuickAddTask}
                                             onSmartAddTask={handleVoiceTaskAdd}
-                                            onUpdateTask={updateTask} // Pass updater to board
                                             onUpdateColumnLayout={updateColumnLayout}
                                             activeTaskTimer={activeTaskTimer}
                                             onToggleTimer={handleToggleTimer}
@@ -1018,7 +995,6 @@ const App: React.FC = () => {
                                             onDeleteTask={requestDeleteTask}
                                             onAddGoal={addGoal}
                                             onEditGoal={updateGoal}
-                                            onUpdateTask={updateTask} // Pass the task updater
                                             onDeleteGoal={handleGoalDelete} 
                                             activeTaskTimer={activeTaskTimer}
                                             onToggleTimer={handleToggleTimer}
@@ -1044,7 +1020,7 @@ const App: React.FC = () => {
                                         activeTaskTimer={activeTaskTimer}
                                         onToggleTimer={handleToggleTimer}
                                         onReorderTasks={reorderPinnedTasks}
-                                        headerHeight={headerHeightDesktop}
+                                        headerHeight={headerHeight}
                                     />
                                 )}
                             </>
@@ -1137,7 +1113,7 @@ const App: React.FC = () => {
                         className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
                     >
                         <i className={`fas fa-thumbtack w-4 ${contextMenu.task.isPinned ? 'text-indigo-500' : 'text-gray-400'}`}></i> 
-                        {contextMenu.task.isPinned ? 'Unpin' : 'Pin'}
+                        {contextMenu.task.isPinned ? 'Unpin Task' : 'Pin to Top 5'}
                     </button>
 
                     <button

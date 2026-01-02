@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ConnectionHealth, SettingsTab } from '../types';
@@ -8,7 +7,6 @@ interface ConnectionHealthIndicatorProps {
     onOpenSettings: (tab: SettingsTab) => void;
     onManualPull?: () => Promise<void>;
     onManualPush?: () => Promise<void>;
-    onForcePull?: () => Promise<void>; // New Prop
 }
 
 type ItemStatus = 'ok' | 'error' | 'warning' | 'loading' | 'neutral';
@@ -76,7 +74,7 @@ const HealthItem: React.FC<{
     );
 };
 
-export const ConnectionHealthIndicator: React.FC<ConnectionHealthIndicatorProps> = ({ health, onOpenSettings, onManualPull, onManualPush, onForcePull }) => {
+export const ConnectionHealthIndicator: React.FC<ConnectionHealthIndicatorProps> = ({ health, onOpenSettings, onManualPull, onManualPush }) => {
     const [isOpen, setIsOpen] = useState(false);
 
     // --- LOGIC: Determine Overall System Status ---
@@ -160,46 +158,30 @@ export const ConnectionHealthIndicator: React.FC<ConnectionHealthIndicatorProps>
                 {/* List */}
                 <div className="p-5 space-y-3 max-h-[60vh] overflow-y-auto">
                     
-                    {/* Manual Sync Controls */}
+                    {/* Manual Sync Controls - New Section */}
                     {health.sheet.status === 'connected' && (onManualPull || onManualPush) && (
                         <div className="p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100 dark:border-indigo-800/30 mb-3 animate-fadeIn">
                              <h4 className="text-xs font-bold text-indigo-800 dark:text-indigo-300 mb-2 uppercase tracking-wide flex items-center justify-between">
                                 <span>Manual Sync</span>
                                 <i className="fas fa-sync text-indigo-400"></i>
                              </h4>
-                             <div className="flex flex-col gap-2">
-                                <div className="flex gap-2">
-                                    {onManualPull && (
-                                        <button 
-                                            onClick={() => { onManualPull(); setIsOpen(false); }}
-                                            className="flex-1 py-2 px-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-bold text-gray-700 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors flex items-center justify-center gap-2 group"
-                                            title="Pull latest data from Sheet (Merges with local data)"
-                                        >
-                                            <i className="fas fa-cloud-download-alt text-gray-400 group-hover:text-indigo-500 transition-colors"></i> Merge Pull
-                                        </button>
-                                    )}
-                                    {onManualPush && (
-                                        <button 
-                                            onClick={() => { onManualPush(); setIsOpen(false); }}
-                                            className="flex-1 py-2 px-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-bold text-gray-700 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-green-600 dark:hover:text-green-400 transition-colors flex items-center justify-center gap-2 group"
-                                            title="Push local data to Sheet (Overwrites remote)"
-                                        >
-                                            <i className="fas fa-cloud-upload-alt text-gray-400 group-hover:text-green-500 transition-colors"></i> Push
-                                        </button>
-                                    )}
-                                </div>
-                                {onForcePull && (
+                             <div className="flex gap-2">
+                                {onManualPull && (
                                     <button 
-                                        onClick={() => { 
-                                            if (confirm("Are you sure? This will delete any local tasks that are not on the Sheet. Use this to fix ghost/zombie tasks.")) {
-                                                onForcePull(); 
-                                                setIsOpen(false); 
-                                            }
-                                        }}
-                                        className="w-full py-1.5 px-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-[10px] font-bold text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors flex items-center justify-center gap-2 mt-1"
-                                        title="Fix Sync Issues: Replace local data entirely with cloud data"
+                                        onClick={() => { onManualPull(); setIsOpen(false); }}
+                                        className="flex-1 py-2 px-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-bold text-gray-700 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors flex items-center justify-center gap-2 group"
+                                        title="Pull latest data from Sheet (Restores remote state)"
                                     >
-                                        <i className="fas fa-bomb"></i> Hard Reset (Overwrite Local)
+                                        <i className="fas fa-cloud-download-alt text-gray-400 group-hover:text-indigo-500 transition-colors"></i> Pull
+                                    </button>
+                                )}
+                                {onManualPush && (
+                                    <button 
+                                        onClick={() => { onManualPush(); setIsOpen(false); }}
+                                        className="flex-1 py-2 px-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-bold text-gray-700 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-green-600 dark:hover:text-green-400 transition-colors flex items-center justify-center gap-2 group"
+                                        title="Push local data to Sheet (Overwrites remote)"
+                                    >
+                                        <i className="fas fa-cloud-upload-alt text-gray-400 group-hover:text-green-500 transition-colors"></i> Push
                                     </button>
                                 )}
                              </div>
