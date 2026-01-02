@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 interface ShortcutsModalProps {
@@ -20,7 +19,7 @@ const shortcuts = [
 
 export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ onClose }) => {
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[100] p-4" onClick={onClose}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4" onClick={onClose}>
             <div className="bg-white dark:bg-gray-800/80 rounded-2xl shadow-2xl w-full max-w-lg p-6 sm:p-8" onClick={e => e.stopPropagation()}>
                 <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-gray-100 flex items-center">
                     <i className="far fa-keyboard mr-3"></i> Keyboard Shortcuts

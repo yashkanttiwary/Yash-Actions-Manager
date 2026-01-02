@@ -22,14 +22,12 @@ import { checkCalendarConnection } from './services/googleCalendarService';
 import { resumeAudioContext } from './utils/audio';
 import { storage } from './utils/storage';
 import { useBackgroundAudio } from './hooks/useBackgroundAudio';
-import { useSettings } from './hooks/useSettings'; 
+import { useSettings } from './hooks/useSettings'; // H-01: New Hook
 import { setUserTimeOffset } from './services/timeService';
 import { ConfirmModal } from './components/ConfirmModal';
 import { getEnvVar } from './utils/env';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { StarField } from './components/StarField';
-import { TrashModal } from './components/TrashModal';
-import { WelcomeModal } from './components/WelcomeModal';
 
 interface GoogleAuthState {
     gapiLoaded: boolean;
@@ -38,6 +36,26 @@ interface GoogleAuthState {
     error?: Error;
     disabled?: boolean;
 }
+
+const ConnectSheetPlaceholder: React.FC<{ onConnect: () => void }> = ({ onConnect }) => (
+    <div className="flex flex-col items-center justify-center h-full text-center p-8 animate-fadeIn">
+        <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-xl border-2 border-dashed border-gray-300 dark:border-gray-700 max-w-md w-full">
+            <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center mx-auto mb-6">
+                <i className="fas fa-table text-4xl"></i>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Practical Order</h2>
+            <p className="text-gray-600 dark:text-gray-400 mb-8">
+                Connect a sheet to maintain factual records of necessary actions.
+            </p>
+            <button 
+                onClick={onConnect}
+                className="w-full py-3 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-indigo-500/30 flex items-center justify-center gap-2"
+            >
+                <i className="fas fa-link"></i> Connect Database
+            </button>
+        </div>
+    </div>
+);
 
 const App: React.FC = () => {
     const [theme, setTheme] = useState('light');
@@ -54,17 +72,12 @@ const App: React.FC = () => {
 
     const isSpaceModeActive = useMemo(() => theme === 'space', [theme]);
 
+    // H-01 & H-02: Replaced local useState with robust useSettings hook
     const { settings, updateSettings, loaded: settingsLoaded } = useSettings();
 
     const isSheetConfigured = useMemo(() => {
         return !!(settings.googleSheetId || settings.googleAppsScriptUrl);
     }, [settings.googleSheetId, settings.googleAppsScriptUrl]);
-
-    // Setup State
-    const [hasSkippedSetup, setHasSkippedSetup] = useState(false);
-    // Show welcome if not configured AND user hasn't explicitly skipped it this session
-    // AND settings have actually loaded
-    const showWelcome = settingsLoaded && !isSheetConfigured && !hasSkippedSetup;
 
     const hasApiKey = useMemo(() => {
         return !!settings.geminiApiKey || !!getEnvVar('VITE_GEMINI_API_KEY');
@@ -72,17 +85,12 @@ const App: React.FC = () => {
 
     const {
         tasks,
-        allTasks, // FIX: Use this for Sync
-        deletedTasks, // Use this for Trash UI
         goals, 
         columns,
         columnLayouts,
         addTask,
         updateTask,
         deleteTask,
-        restoreTask,
-        permanentlyDeleteTask,
-        emptyTrash,
         moveTask,
         setAllTasks,
         setAllData, 
@@ -96,7 +104,7 @@ const App: React.FC = () => {
         resetColumnLayouts,
         isLoading,
         error
-    } = useTaskManager(settingsLoaded); // Always load tasks locally
+    } = useTaskManager(settingsLoaded && isSheetConfigured);
 
     const audioControls = useBackgroundAudio(settings.audio);
 
@@ -105,9 +113,8 @@ const App: React.FC = () => {
     const [resolvingBlockerTask, setResolvingBlockerTask] = useState<{ task: Task; newStatus: Status; newIndex: number } | null>(null);
     const [isTodayView, setIsTodayView] = useState<boolean>(false);
     const [showAIModal, setShowAIModal] = useState(false);
-    const [showTrashModal, setShowTrashModal] = useState(false);
     
-    const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'warning'; action?: { label: string; onClick: () => void } } | null>(null);
+    const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
     const [showIntegrationsModal, setShowIntegrationsModal] = useState(false);
     const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>('general');
@@ -174,6 +181,7 @@ const App: React.FC = () => {
     }, [notification]);
 
     useEffect(() => {
+        // H-01: Delay init until settings loaded
         if (!settingsLoaded) return; 
 
         const initialize = async () => {
@@ -230,6 +238,7 @@ const App: React.FC = () => {
                 const savedFocusedGoalId = await storage.get('focusedGoalId');
                 if (savedFocusedGoalId) setFocusedGoalId(savedFocusedGoalId);
 
+                // Load View State
                 const savedViewMode = await storage.get('viewMode');
                 if (savedViewMode) setViewMode(savedViewMode as any);
 
@@ -238,6 +247,9 @@ const App: React.FC = () => {
 
                 const savedFocusMode = await storage.get('focusMode');
                 if (savedFocusMode) setFocusMode(savedFocusMode as any);
+
+                // H-01: Removed settings loading logic here as it's now in the hook
+            
             } catch (e) {
                 console.error("Error loading persisted data", e);
             }
@@ -256,10 +268,13 @@ const App: React.FC = () => {
         storage.set('theme', theme);
     }, [theme]);
 
+    // Persist UI State
     useEffect(() => {
         if (!settingsLoaded) return;
+        
         storage.set('viewMode', viewMode);
         storage.set('isTodayView', String(isTodayView));
+        
         if (focusMode !== 'None') {
             storage.set('focusMode', focusMode);
         } else {
@@ -283,24 +298,23 @@ const App: React.FC = () => {
     }, [focusedGoalId, settingsLoaded]);
 
     useEffect(() => {
+        // H-01: Update time offset when settings change
         if (settingsLoaded) {
             setUserTimeOffset(settings.userTimeOffset);
         }
     }, [settings.userTimeOffset, settingsLoaded]);
 
-    const shouldSync = settingsLoaded && isSheetConfigured && !isLoading;
-    
-    // FIX SYNC BUG: Pass 'allTasks' instead of 'tasks' to ensure deletions are synced
+    const shouldSync = settingsLoaded && !isLoading;
     const { status: syncStatus, errorMsg: syncError, syncMethod, manualPull, manualPush } = useGoogleSheetSync(
         shouldSync ? settings.googleSheetId : undefined,
-        allTasks, // <--- CRITICAL FIX: Pass all tasks including deleted ones
+        tasks,
         setAllData, 
         googleAuth.isSignedIn,
         shouldSync ? settings.googleAppsScriptUrl : undefined,
         gamification,
         settings,
         setGamification,
-        (s) => updateSettings(s),
+        (s) => updateSettings(s), // H-01: Use hook's updater
         goals 
     );
 
@@ -399,12 +413,17 @@ const App: React.FC = () => {
         });
     }, [focusedGoalId]);
 
+    // CENTRALIZED PSYCHOLOGY CHECK
     const runPsychologyCheck = useCallback(async (task: Task) => {
         const apiKey = settings.geminiApiKey || getEnvVar('VITE_GEMINI_API_KEY');
         if (!apiKey) return;
 
         try {
+            // Run silent background check
             const analysis = await analyzeTaskPsychology(task, apiKey);
+            
+            // Only update if it changes the state (prevents loops, though useTaskManager handles object identity)
+            // Or simply if 'isBecoming' is true, update the task to reflect that.
             if (analysis.isBecoming) {
                 updateTask({
                     ...task,
@@ -418,6 +437,7 @@ const App: React.FC = () => {
     }, [settings.geminiApiKey, updateTask]);
 
     const handleQuickAddTask = useCallback((title: string, status: Status) => {
+        // 1. Create the task explicitly (Optimistic UI)
         const newTaskData = {
             title,
             status,
@@ -426,14 +446,20 @@ const App: React.FC = () => {
             description: '',
             goalId: focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined, 
         };
+        
+        // 2. Add to board instantly
         const newTask = addTask(newTaskData);
+        
+        // 3. Trigger Background Analysis
         runPsychologyCheck(newTask);
+
     }, [addTask, focusedGoalId, runPsychologyCheck]);
 
     const handleVoiceTaskAdd = useCallback(async (transcript: string, defaultStatus: Status) => {
         const effectiveKey = settings.geminiApiKey || getEnvVar('VITE_GEMINI_API_KEY');
         
         if (!effectiveKey) {
+             // Fallback: Add basic task
              const basicTask = addTask({
                 title: transcript,
                 status: defaultStatus,
@@ -442,11 +468,15 @@ const App: React.FC = () => {
                 description: '', 
                 goalId: focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined
              });
+             // Even basic fallback should try analysis if key becomes available or just skip
              return;
         }
 
         try {
             const parsedData = await parseTaskFromVoice(transcript, effectiveKey, goals);
+            
+            // Note: Voice parser returns a structure, we need to finalize it for the modal or add it directly
+            // Current flow opens the modal for "Draft" review
             const draftTask: Task = {
                 id: `new-${Date.now()}`,
                 title: parsedData.title || transcript, 
@@ -475,9 +505,12 @@ const App: React.FC = () => {
                 actualTimeSpent: 0,
                 isPinned: false
             };
+
             setEditingTask(draftTask);
+
         } catch (error) {
             console.error("Voice parse failed:", error);
+            // Fallback add
             const fallbackTask = addTask({
                 title: transcript.length > 60 ? `${transcript.substring(0, 57)}...` : transcript,
                 description: `> 🎙️ **Voice Note**\n> "${transcript}"`,
@@ -486,6 +519,7 @@ const App: React.FC = () => {
                 dueDate: new Date().toISOString().split('T')[0],
                 goalId: focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined
             });
+            // Try check on fallback too
             runPsychologyCheck(fallbackTask);
         }
     }, [addTask, settings.geminiApiKey, focusedGoalId, goals, runPsychologyCheck]);
@@ -502,6 +536,7 @@ const App: React.FC = () => {
         const updatedSubtasks = task.subtasks.map(st => 
             st.id === subtaskId ? { ...st, isCompleted: !st.isCompleted } : st
         );
+        
         updateTask({ ...task, subtasks: updatedSubtasks });
     }, [tasks, updateTask]);
 
@@ -512,12 +547,14 @@ const App: React.FC = () => {
         try {
             const steps = await breakDownTask(task.title, settings.geminiApiKey);
             const currentSubtasks = task.subtasks || [];
+            
             const newSubtasks = [...currentSubtasks];
             steps.forEach(step => {
                 if (!newSubtasks.some(s => s.title === step.title)) {
                     newSubtasks.push(step);
                 }
             });
+
             updateTask({ ...task, subtasks: newSubtasks });
         } catch (error) {
             console.error("Failed to break down task:", error);
@@ -537,6 +574,8 @@ const App: React.FC = () => {
         setShowAIModal,
         setIsTodayView,
         setViewMode: (newMode) => {
+            // Need a safer cast/check here since Keyboard shortcuts hook expects 2 values but we have 4
+            // For now, toggle between kanban and calendar for shortcut 'V'
             if (typeof newMode === 'function') {
                 setViewMode(prev => (prev === 'kanban' ? 'calendar' : 'kanban'));
             } else {
@@ -554,9 +593,8 @@ const App: React.FC = () => {
             else if (showShortcutsModal) setShowShortcutsModal(false);
             else if (showIntegrationsModal) setShowIntegrationsModal(false);
             else if (confirmModalState.isOpen) setConfirmModalState(prev => ({...prev, isOpen: false}));
-            else if (showTrashModal) setShowTrashModal(false);
         },
-        isAnyModalOpen: !!(contextMenu || editingTask || blockingTask || resolvingBlockerTask || showAIModal || showShortcutsModal || showIntegrationsModal || confirmModalState.isOpen || showTrashModal)
+        isAnyModalOpen: !!(contextMenu || editingTask || blockingTask || resolvingBlockerTask || showAIModal || showShortcutsModal || showIntegrationsModal || confirmModalState.isOpen)
     });
 
     const toggleTheme = () => {
@@ -607,6 +645,7 @@ const App: React.FC = () => {
              task.actualTimeSpent = (task.actualTimeSpent || 0) + Math.round(duration / 1000),
              task.currentSessionStartTime = null;
         }
+
         moveTask(task.id, newStatus, newIndex);
     }, [moveTask]);
 
@@ -617,7 +656,7 @@ const App: React.FC = () => {
 
         if (task.isBlockedByDependencies && newStatus === 'In Progress') {
             const blockerTasks = task.dependencies?.map(depId => tasks.find(t => t.id === depId)?.title).filter(Boolean).join(', ');
-            setNotification({ message: `Blocked by: ${blockerTasks}`, type: 'error' });
+            alert(`This task is blocked by dependencies: ${blockerTasks}`);
             return;
         }
 
@@ -676,14 +715,23 @@ const App: React.FC = () => {
         setEditingTask(task);
     };
 
+    // TRIGGERS AI PSYCHOLOGY ANALYSIS ON SAVE
     const handleSaveTask = async (taskToSave: Task) => {
         let savedTask = taskToSave;
+        
         if (taskToSave.id.startsWith('new-')) {
             const { id, createdDate, lastModified, ...newTaskData } = taskToSave;
+            
+            // 1. Save immediately (Optimistic)
             const newTask = addTask(newTaskData as any);
+            
+            // 2. Trigger Background Check
             runPsychologyCheck(newTask);
         } else {
+            // Updating existing task
             updateTask(savedTask);
+            
+            // Trigger AI Analysis in background for edits
             runPsychologyCheck(savedTask);
         }
         setEditingTask(null);
@@ -691,7 +739,11 @@ const App: React.FC = () => {
     
     const handleApplyAIChanges = async (changes: TaskDiff) => {
         if (changes.added && changes.added.length > 0) {
-            changes.added.forEach(t => addTask(t as any));
+            changes.added.forEach(t => {
+                addTask(t as any);
+                // We could run check here too, but AI usually generates 'safe' tasks or we trust it for now.
+                // Or we can invoke runPsychologyCheck on the new tasks if we want to be strict.
+            });
         }
         if (changes.updated && changes.updated.length > 0) {
             changes.updated.forEach(partialTask => {
@@ -702,7 +754,9 @@ const App: React.FC = () => {
             });
         }
         if (changes.deletedIds && changes.deletedIds.length > 0) {
-            changes.deletedIds.forEach(id => deleteTask(id));
+            changes.deletedIds.forEach(id => {
+                deleteTask(id);
+            });
         }
         setNotification({ message: "Changes applied.", type: 'success' });
     };
@@ -788,26 +842,26 @@ const App: React.FC = () => {
         setConfirmModalState({
             isOpen: true,
             title: "Delete Task?",
-            message: `Are you sure you want to delete "${task.title}"?`,
+            message: `Are you sure you want to permanently delete "${task.title}"?`,
             isDestructive: true,
             onConfirm: () => {
                 deleteTask(taskId);
                 setConfirmModalState(prev => ({...prev, isOpen: false}));
-                setEditingTask(null);
-                setNotification({ 
-                    message: "Task moved to trash", 
-                    type: 'success', 
-                    action: { label: "UNDO", onClick: () => restoreTask(taskId) } 
-                });
+                setEditingTask(null); 
             }
         });
-    }, [tasks, deleteTask, restoreTask]);
+    }, [tasks, deleteTask]);
 
     const handleDeleteFromContextMenu = (task: Task) => {
         requestDeleteTask(task.id);
         setContextMenu(null);
     };
 
+    const activeFocusGoalId = focusedGoalId || null;
+    
+    // Dynamic Header height for mobile/desktop
+    // Desktop: Uses headerHeight
+    // Mobile: TopBar is 16 (64px). Bottom is 16 (64px).
     const headerHeightDesktop = (isMenuLocked || isMenuHovered) ? '200px' : '50px';
 
     return (
@@ -825,7 +879,7 @@ const App: React.FC = () => {
                 onResetLayout={resetColumnLayouts}
                 gamification={gamification}
                 settings={settings}
-                onUpdateSettings={updateSettings}
+                onUpdateSettings={updateSettings} // H-01: Pass hook updater
                 currentViewMode={viewMode}
                 onViewModeChange={setViewMode}
                 googleAuthState={googleAuth}
@@ -859,6 +913,7 @@ const App: React.FC = () => {
                 onExitFocus={() => setFocusedGoalId(null)}
             />
 
+            {/* M-02: Audio Suspension Warning Overlay */}
             {audioControls.isSuspended && (
                 <div 
                     className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[60] bg-indigo-600 text-white px-4 py-2 rounded-full shadow-lg cursor-pointer animate-bounce flex items-center gap-2"
@@ -869,56 +924,25 @@ const App: React.FC = () => {
                 </div>
             )}
 
-            {/* Trash Button - Only visible if items in trash */}
-            {deletedTasks.length > 0 && (
-                <button 
-                    onClick={() => setShowTrashModal(true)}
-                    className="fixed bottom-24 right-6 z-50 bg-gray-800 text-white dark:bg-gray-700 w-12 h-12 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform md:bottom-6 md:right-auto md:left-6"
-                    title="Open Trash"
-                >
-                    <i className="fas fa-trash-alt"></i>
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">{deletedTasks.length}</span>
-                </button>
-            )}
-
             <main 
                 className="flex-1 overflow-auto pl-2 sm:pl-6 pr-2 pb-2 relative flex flex-col scroll-smooth transition-all duration-700 z-10 
-                           md:pt-[50px] pt-16 pb-20 md:pb-2"
+                           md:pt-[50px] pt-16 pb-20 md:pb-2" // Mobile vs Desktop Padding
                 style={{ 
                     paddingTop: window.innerWidth >= 768 ? headerHeightDesktop : undefined
                 }}
             >
                 {notification && (
                     <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top-2 fade-in duration-300">
-                        <div className={`px-4 py-2 rounded-lg shadow-xl text-sm font-bold flex items-center gap-2 ${notification.type === 'error' ? 'bg-red-500 text-white' : 'bg-green-600 text-white'}`}>
+                        <div className={`px-4 py-2 rounded-lg shadow-xl text-sm font-bold flex items-center gap-2 ${notification.type === 'error' ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}`}>
                             <i className={`fas ${notification.type === 'error' ? 'fa-exclamation-circle' : 'fa-check-circle'}`}></i>
                             {notification.message}
-                            {notification.action && (
-                                <button 
-                                    onClick={notification.action.onClick}
-                                    className="ml-2 bg-white text-green-600 px-2 py-0.5 rounded text-xs font-extrabold uppercase hover:bg-green-50"
-                                >
-                                    {notification.action.label}
-                                </button>
-                            )}
                         </div>
                     </div>
                 )}
 
-                {showWelcome && (
-                    <WelcomeModal 
-                        onConnect={(url) => updateSettings({ googleAppsScriptUrl: url })}
-                        onSkip={() => setHasSkippedSetup(true)}
-                    />
-                )}
-
-                {!showWelcome && !isSheetConfigured && hasSkippedSetup && tasks.length === 0 && (
-                     <div className="text-center mt-20 opacity-50">
-                        <p>No tasks yet. Press 'N' to create one!</p>
-                     </div>
-                )}
-
-                {(!showWelcome && (isSheetConfigured || hasSkippedSetup)) && (
+                {!isSheetConfigured ? (
+                    <ConnectSheetPlaceholder onConnect={() => handleOpenSettings('sheets')} />
+                ) : (
                     <>
                         {isLoading && (
                             <div className="flex justify-center items-center h-full">
@@ -930,6 +954,7 @@ const App: React.FC = () => {
                         
                         {!isLoading && !error && (
                             <>
+                                {/* Only show timeline in Kanban view */}
                                 {viewMode === 'kanban' && (
                                     <TimelineGantt 
                                         tasks={filteredTasks} 
@@ -953,7 +978,7 @@ const App: React.FC = () => {
                                             onAddTask={(status) => handleOpenAddTaskModal(status)}
                                             onQuickAddTask={handleQuickAddTask}
                                             onSmartAddTask={handleVoiceTaskAdd}
-                                            onUpdateTask={updateTask}
+                                            onUpdateTask={updateTask} // Pass updater to board
                                             onUpdateColumnLayout={updateColumnLayout}
                                             activeTaskTimer={activeTaskTimer}
                                             onToggleTimer={handleToggleTimer}
@@ -992,7 +1017,7 @@ const App: React.FC = () => {
                                             onDeleteTask={requestDeleteTask}
                                             onAddGoal={addGoal}
                                             onEditGoal={updateGoal}
-                                            onUpdateTask={updateTask}
+                                            onUpdateTask={updateTask} // Pass the task updater
                                             onDeleteGoal={handleGoalDelete} 
                                             activeTaskTimer={activeTaskTimer}
                                             onToggleTimer={handleToggleTimer}
@@ -1053,11 +1078,13 @@ const App: React.FC = () => {
             )}
              {showAIModal && (
                 <AIAssistantModal
-                    onClose={() => setShowAIModal(false)}
+                    onClose={() => {
+                        setShowAIModal(false);
+                    }}
                     onApplyChanges={handleApplyAIChanges}
                     tasks={tasks}
                     apiKey={hasApiKey ? (settings.geminiApiKey || getEnvVar('VITE_GEMINI_API_KEY')) : undefined}
-                    onSaveApiKey={(key) => updateSettings({ geminiApiKey: key })}
+                    onSaveApiKey={(key) => updateSettings({ geminiApiKey: key })} // H-01: Use hook
                 />
             )}
             {showShortcutsModal && (
@@ -1066,21 +1093,12 @@ const App: React.FC = () => {
             {showIntegrationsModal && (
                 <IntegrationsModal
                     settings={settings}
-                    onUpdateSettings={updateSettings}
+                    onUpdateSettings={updateSettings} // H-01: Use hook
                     onClose={() => setShowIntegrationsModal(false)}
                     googleAuthState={googleAuth}
                     onGoogleSignIn={handleGoogleSignIn}
                     onGoogleSignOut={handleGoogleSignOut}
                     initialTab={activeSettingsTab}
-                />
-            )}
-            {showTrashModal && (
-                <TrashModal 
-                    deletedTasks={deletedTasks}
-                    onRestore={restoreTask}
-                    onDeleteForever={permanentlyDeleteTask}
-                    onEmptyTrash={() => { emptyTrash(); setShowTrashModal(false); }}
-                    onClose={() => setShowTrashModal(false)}
                 />
             )}
             

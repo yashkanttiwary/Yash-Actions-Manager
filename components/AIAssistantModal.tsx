@@ -337,108 +337,28 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
 
     if (!apiKey) {
         return (
-            <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[100] p-4" onClick={onClose}>
-                <div 
-                    className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200" 
-                    onClick={e => e.stopPropagation()}
-                >
-                    {/* Header Image/Icon */}
-                    <div className="bg-indigo-600 p-6 flex justify-center items-center rounded-t-2xl relative overflow-hidden flex-shrink-0">
-                        <div className="absolute inset-0 bg-gradient-to-tr from-purple-600 to-indigo-500 opacity-80"></div>
-                        {/* Decorative Circles */}
-                        <div className="absolute top-[-20%] right-[-20%] w-32 h-32 bg-white/20 rounded-full blur-xl"></div>
-                        <div className="absolute bottom-[-10%] left-[-10%] w-20 h-20 bg-white/20 rounded-full blur-lg"></div>
-                        
-                        <div className="relative z-10 w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center border border-white/30 shadow-lg">
-                            <i className="fas fa-magic text-4xl text-white drop-shadow-md"></i>
-                        </div>
-                        
-                        <button 
-                            onClick={onClose}
-                            className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10"
-                        >
-                            <i className="fas fa-times text-xl"></i>
-                        </button>
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4" onClick={onClose}>
+                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 max-w-md w-full text-center" onClick={e => e.stopPropagation()}>
+                    <div className="w-16 h-16 bg-indigo-100 dark:bg-indigo-900/50 rounded-full flex items-center justify-center mx-auto mb-4 text-indigo-600">
+                        <i className="fas fa-key text-2xl"></i>
                     </div>
-
-                    <div className="p-6 md:p-8 space-y-6">
-                        <div className="text-center">
-                            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Turn on the Magic</h2>
-                            <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed">
-                                To let the AI help you, it needs a special ticket called an <strong>API Key</strong>. It's free and easy!
-                            </p>
-                        </div>
-
-                        {/* Step-by-Step Guide (ELI5) */}
-                        <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-xl p-4 border border-indigo-100 dark:border-indigo-800/50 space-y-3">
-                            <div className="flex items-start gap-3">
-                                <div className="w-6 h-6 rounded-full bg-indigo-200 dark:bg-indigo-800 flex items-center justify-center text-indigo-700 dark:text-indigo-300 text-xs font-bold flex-shrink-0 mt-0.5">1</div>
-                                <div className="text-sm text-gray-700 dark:text-gray-300">
-                                    <a 
-                                        href="https://aistudio.google.com/app/apikey" 
-                                        target="_blank" 
-                                        rel="noreferrer"
-                                        className="text-indigo-600 dark:text-indigo-400 font-bold hover:underline flex items-center gap-1 group"
-                                    >
-                                        Click here to visit Google <i className="fas fa-external-link-alt text-[10px] group-hover:translate-x-0.5 transition-transform"></i>
-                                    </a>
-                                </div>
-                            </div>
-                            <div className="flex items-start gap-3">
-                                <div className="w-6 h-6 rounded-full bg-indigo-200 dark:bg-indigo-800 flex items-center justify-center text-indigo-700 dark:text-indigo-300 text-xs font-bold flex-shrink-0 mt-0.5">2</div>
-                                <div className="text-sm text-gray-700 dark:text-gray-300">
-                                    Click the big blue <strong>"Create API Key"</strong> button.
-                                </div>
-                            </div>
-                            <div className="flex items-start gap-3">
-                                <div className="w-6 h-6 rounded-full bg-indigo-200 dark:bg-indigo-800 flex items-center justify-center text-indigo-700 dark:text-indigo-300 text-xs font-bold flex-shrink-0 mt-0.5">3</div>
-                                <div className="text-sm text-gray-700 dark:text-gray-300">
-                                    Copy the long code and paste it below!
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Input Area */}
-                        <div className="space-y-3">
-                            <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1">
-                                Paste Your Key Here
-                            </label>
-                            <div className="relative">
-                                <input 
-                                    type="text" 
-                                    value={tempKey} 
-                                    onChange={e => setTempKey(e.target.value)}
-                                    placeholder="AIzaSy..." 
-                                    className="w-full p-4 bg-gray-100 dark:bg-gray-900 rounded-xl border-2 border-transparent focus:border-indigo-500 focus:bg-white dark:focus:bg-black focus:outline-none transition-all text-gray-900 dark:text-white font-mono text-sm shadow-inner"
-                                />
-                                <div className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
-                                    <i className="fas fa-key"></i>
-                                </div>
-                            </div>
-                        </div>
-
-                        <button 
-                            onClick={() => onSaveApiKey(tempKey)} 
-                            disabled={!tempKey.trim()}
-                            className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg hover:shadow-indigo-500/30 transition-all transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
-                        >
-                            Connect My Assistant 🚀
-                        </button>
-                        
-                        <div className="text-center bg-gray-100 dark:bg-gray-800/50 p-2 rounded-lg border border-gray-200 dark:border-gray-700">
-                            <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center justify-center gap-1.5">
-                                <i className="fas fa-lock text-green-500"></i>
-                                Your key is stored locally on your device. It is safe, private, and never shared.
-                            </p>
-                        </div>
-                    </div>
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Setup AI Companion</h2>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Enter your Google Gemini API Key to enable chat features.</p>
+                    <input 
+                        type="password" 
+                        value={tempKey} 
+                        onChange={e => setTempKey(e.target.value)}
+                        placeholder="AIzaSy..." 
+                        className="w-full p-3 bg-gray-100 dark:bg-gray-900 rounded-lg border border-gray-300 dark:border-gray-700 mb-4 focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                    <button onClick={() => onSaveApiKey(tempKey)} className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700">Connect</button>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="fixed inset-0 bg-white/30 dark:bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] sm:p-4" onClick={onClose}>
+        <div className="fixed inset-0 bg-white/30 dark:bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 sm:p-4" onClick={onClose}>
             <div 
                 className="bg-white dark:bg-gray-900 w-full sm:max-w-[500px] h-full sm:h-[650px] sm:max-h-[85vh] sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-white/20 dark:border-gray-700 animate-in zoom-in-95 duration-200 relative" 
                 onClick={e => e.stopPropagation()}

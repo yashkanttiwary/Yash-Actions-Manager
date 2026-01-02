@@ -3,7 +3,6 @@ import React, { useState, useRef, useLayoutEffect, useCallback, useMemo } from '
 import { KanbanColumn } from './KanbanColumn';
 import { DependencyLines } from './DependencyLines';
 import { Task, Status, SortOption, Priority, ColumnLayout, Goal } from '../types';
-import { COLUMN_STATUSES, PRIORITY_ORDER } from '../constants';
 import { TopFocusSection } from './TopFocusSection';
 
 interface KanbanBoardProps {
@@ -39,6 +38,8 @@ interface LineCoordinate {
   isBlocked: boolean;
 }
 
+const priorityOrder: Record<Priority, number> = { 'Critical': 4, 'High': 3, 'Medium': 2, 'Low': 1 };
+
 const getValidDate = (dateStr: string): number => {
     const d = new Date(dateStr).getTime();
     return isNaN(d) ? 0 : d;
@@ -48,8 +49,7 @@ const sortTasks = (tasks: Task[], option: SortOption): Task[] => {
     const tasksToSort = [...tasks];
     switch (option) {
         case 'Priority':
-            // Use Centralized PRIORITY_ORDER
-            return tasksToSort.sort((a, b) => (PRIORITY_ORDER[b.priority] || 0) - (PRIORITY_ORDER[a.priority] || 0));
+            return tasksToSort.sort((a, b) => (priorityOrder[b.priority] || 0) - (priorityOrder[a.priority] || 0));
         case 'Due Date':
             return tasksToSort.sort((a, b) => {
                 const dateA = getValidDate(a.dueDate);
