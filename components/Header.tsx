@@ -120,7 +120,7 @@ export const Header: React.FC<HeaderProps> = ({
 
             return tasks
                 .filter(task => {
-                    if (task.status === 'Done' || task.status === "Won't Complete" || task.status === 'Hold') return false;
+                    if (task.status === 'Done' || task.status === "Won't Do" || task.status === 'Hold') return false;
                     if (task.status === 'To Do' || task.status === 'In Progress') return true;
                     if (task.scheduledStartDateTime) {
                         const taskScheduleStr = formatter.format(new Date(task.scheduledStartDateTime));

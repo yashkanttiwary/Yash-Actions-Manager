@@ -512,7 +512,7 @@ export const TimelineGantt: React.FC<TimelineGanttProps> = ({ tasks, onEditTask,
         const rawTasks: any[] = [];
 
         tasks.forEach(task => {
-            if (task.status === 'Done' || task.status === "Won't Complete") return;
+            if (task.status === 'Done' || task.status === "Won't Do") return;
 
             let startMs = task.scheduledStartDateTime 
                 ? new Date(task.scheduledStartDateTime).getTime() 

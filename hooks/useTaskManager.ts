@@ -198,6 +198,7 @@ export const useTaskManager = (enableLoading: boolean = true) => {
             ...taskData,
         };
         setTasks(prevTasks => [...prevTasks, newTask]);
+        return newTask;
     }, []);
 
     const updateTask = useCallback((updatedTask: Task) => {

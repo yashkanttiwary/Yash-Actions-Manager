@@ -469,6 +469,7 @@ const App: React.FC = () => {
                 goalId: focusedGoalId && focusedGoalId !== UNASSIGNED_GOAL_ID ? focusedGoalId : undefined
              });
              // Even basic fallback should try analysis if key becomes available or just skip
+             runPsychologyCheck(basicTask);
              return;
         }
 
@@ -893,7 +894,6 @@ const App: React.FC = () => {
                 syncStatus={syncStatus} 
                 onManualPull={manualPull}
                 onManualPush={manualPush}
-                onForcePull={forcePull}
                 isCompactMode={isCompactMode}
                 onToggleCompactMode={() => setIsCompactMode(prev => !prev)}
                 isFitToScreen={isFitToScreen}
@@ -979,7 +979,6 @@ const App: React.FC = () => {
                                             onAddTask={(status) => handleOpenAddTaskModal(status)}
                                             onQuickAddTask={handleQuickAddTask}
                                             onSmartAddTask={handleVoiceTaskAdd}
-                                            onUpdateTask={updateTask} // Pass updater to board
                                             onUpdateColumnLayout={updateColumnLayout}
                                             activeTaskTimer={activeTaskTimer}
                                             onToggleTimer={handleToggleTimer}
@@ -1018,7 +1017,6 @@ const App: React.FC = () => {
                                             onDeleteTask={requestDeleteTask}
                                             onAddGoal={addGoal}
                                             onEditGoal={updateGoal}
-                                            onUpdateTask={updateTask} // Pass the task updater
                                             onDeleteGoal={handleGoalDelete} 
                                             activeTaskTimer={activeTaskTimer}
                                             onToggleTimer={handleToggleTimer}

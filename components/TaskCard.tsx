@@ -79,9 +79,11 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
         setIsExpanded(expanded);
     }, []);
 
+    const isDone = task.status === 'Done';
+
     // K-Teaching: "Let the list be a mirror, not a judge."
     // Removed "Overdue" red styling. Changed to neutral "Date Passed".
-    const isDatePassed = new Date(task.dueDate) < new Date() && task.status !== 'Done';
+    const isDatePassed = new Date(task.dueDate) < new Date() && !isDone;
     
     const isActiveTimer = !!task.currentSessionStartTime;
     const isBlockedByDep = task.isBlockedByDependencies;
@@ -261,7 +263,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                              <i className="fas fa-biohazard text-red-500 text-xs flex-shrink-0 animate-pulse" title="Becoming Trap: This implies future psychological accumulation."></i>
                          )}
 
-                         <span className={`text-sm font-medium text-gray-800 dark:text-gray-100 truncate ${isBecoming ? 'italic text-red-900 dark:text-red-200' : ''}`}>
+                         <span className={`text-sm font-medium text-gray-800 dark:text-gray-100 truncate ${isBecoming ? 'italic text-red-900 dark:text-red-200' : ''} ${isDone ? 'line-through text-gray-500 dark:text-gray-500' : ''}`}>
                              {task.title}
                          </span>
                     </div>
@@ -339,7 +341,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
             <div className="relative z-10">
                 {/* Header */}
                 <div className="flex justify-between items-start gap-2">
-                    <h3 className={`font-bold text-gray-800 dark:text-gray-100 flex-1 flex items-center gap-2 min-w-0 text-base ${isBecoming ? 'italic text-red-700 dark:text-red-300' : ''}`}>
+                    <h3 className={`font-bold text-gray-800 dark:text-gray-100 flex-1 flex items-center gap-2 min-w-0 text-base ${isBecoming ? 'italic text-red-700 dark:text-red-300' : ''} ${isDone ? 'line-through text-gray-500 dark:text-gray-500' : ''}`}>
                          {isBlockedByDep ? (
                              <i className="fas fa-lock text-xs text-amber-500 flex-shrink-0" title={blockerTooltip}></i>
                          ) : (
@@ -396,7 +398,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, allTasks, goals = [], 
                 )}
                 
                 {task.description && (
-                    <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 line-clamp-3">
+                    <p className={`mt-2 text-sm text-gray-600 dark:text-gray-400 line-clamp-3 ${isDone ? 'opacity-70' : ''}`}>
                         {task.description}
                     </p>
                 )}
